@@ -54,6 +54,7 @@ fun WorkoutLogScreen(
     val active by viewModel.activeSession.collectAsState()
     var editMode by remember { mutableStateOf(false) }
     var blockedDialog by remember { mutableStateOf(false) }
+    var routineToDelete by remember { mutableStateOf<RoutineWithExercises?>(null) }
 
     if (blockedDialog) {
         AlertDialog(
@@ -70,6 +71,23 @@ fun WorkoutLogScreen(
             },
             dismissButton = {
                 TextButton(onClick = { blockedDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    routineToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { routineToDelete = null },
+            title = { Text("Delete routine?") },
+            text = { Text("\"${target.routine.name}\" and its exercises will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteRoutine(target.routine.id)
+                    routineToDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { routineToDelete = null }) { Text("Cancel") }
             }
         )
     }
@@ -148,7 +166,7 @@ fun WorkoutLogScreen(
                             }
                         }
                     },
-                    onDelete = { viewModel.deleteRoutine(item.routine.id) }
+                    onDelete = { routineToDelete = item }
                 )
             }
         }

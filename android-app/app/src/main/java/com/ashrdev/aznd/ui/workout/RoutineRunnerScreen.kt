@@ -64,12 +64,19 @@ fun RoutineRunnerScreen(
     val active by viewModel.activeSession.collectAsState()
     var pendingPhotoUri by remember { mutableStateOf<String?>(null) }
     var showDiscard by remember { mutableStateOf(false) }
+    var showReplacePhoto by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) viewModel.attachPhoto(pendingPhotoUri)
         pendingPhotoUri = null
+    }
+
+    fun launchCamera() {
+        val uri = PhotoStore.newPhotoUri(context)
+        pendingPhotoUri = uri.toString()
+        cameraLauncher.launch(uri)
     }
 
     val session = active
@@ -95,6 +102,23 @@ fun RoutineRunnerScreen(
         )
     }
 
+    if (showReplacePhoto) {
+        AlertDialog(
+            onDismissRequest = { showReplacePhoto = false },
+            title = { Text("Replace photo?") },
+            text = { Text("This session already has a photo. Taking a new one will replace it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showReplacePhoto = false
+                    launchCamera()
+                }) { Text("Replace") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReplacePhoto = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -106,9 +130,8 @@ fun RoutineRunnerScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        val uri = PhotoStore.newPhotoUri(context)
-                        pendingPhotoUri = uri.toString()
-                        cameraLauncher.launch(uri)
+                        if (session.session.photoUri != null) showReplacePhoto = true
+                        else launchCamera()
                     }) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = "Add photo")
                     }
@@ -158,7 +181,6 @@ fun RoutineRunnerScreen(
         }
     }
 }
-
 @Composable
 private fun ActiveSetRow(
     set: ActiveSetEntity,
