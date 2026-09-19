@@ -4,6 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -16,6 +19,7 @@ import com.ashrdev.aznd.ui.navigation.Screen
 import com.ashrdev.aznd.ui.theme.AzndTheme
 import com.ashrdev.aznd.ui.workout.RoutineEditorScreen
 import com.ashrdev.aznd.ui.workout.RoutineRunnerScreen
+import com.ashrdev.aznd.ui.workout.RoutineViewScreen
 import com.ashrdev.aznd.ui.workout.SessionDetailScreen
 import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
 import com.ashrdev.aznd.ui.workout.WorkoutLogScreen
@@ -32,15 +36,22 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val workoutViewModel: WorkoutViewModel =
                     viewModel(factory = WorkoutViewModelFactory(dao))
-                NavHost(navController = navController, startDestination = Screen.Home.route) {
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.Home.route,
+                    enterTransition = { fadeIn(animationSpec = tween(30)) },
+                    exitTransition = { fadeOut(animationSpec = tween(30)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(30)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(30)) }
+                ) {
                     composable(Screen.Home.route) {
                         HomeScreen(onNavigate = { route -> navController.navigate(route) })
                     }
                     composable(Screen.WorkoutLog.route) {
                         WorkoutLogScreen(
                             viewModel = workoutViewModel,
-                            onEditRoutine = { id ->
-                                navController.navigate(Screen.RoutineEditor.createRoute(id))
+                            onOpenRoutine = { id ->
+                                navController.navigate(Screen.RoutineView.createRoute(id))
                             },
                             onAddRoutine = {
                                 navController.navigate(Screen.RoutineEditor.createRoute(null))
@@ -48,6 +59,19 @@ class MainActivity : ComponentActivity() {
                             onOpenHistory = { navController.navigate(Screen.History.route) },
                             onOpenSession = { navController.navigate(Screen.RoutineRunner.route) },
                             onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = Screen.RoutineView.route,
+                        arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
+                        RoutineViewScreen(
+                            routineId = routineId,
+                            viewModel = workoutViewModel,
+                            onBack = { navController.popBackStack() },
+                            onEdit = { id -> navController.navigate(Screen.RoutineEditor.createRoute(id)) },
+                            onOpenSession = { navController.navigate(Screen.RoutineRunner.route) }
                         )
                     }
                     composable(Screen.RoutineRunner.route) {
@@ -94,7 +118,8 @@ class MainActivity : ComponentActivity() {
                         RoutineEditorScreen(
                             routineId = routineId,
                             viewModel = workoutViewModel,
-                            onDone = { navController.popBackStack() }
+                            onDone = { navController.popBackStack() },
+                            onDeleted = { navController.popBackStack(Screen.WorkoutLog.route, false) }
                         )
                     }
                 }

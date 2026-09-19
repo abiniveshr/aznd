@@ -5,6 +5,9 @@ sealed class Screen(val route: String) {
     object WorkoutLog : Screen("workout_log")
     object History : Screen("history")
     object RoutineRunner : Screen("routine_runner")
+    object RoutineView : Screen("routine_view/{routineId}") {
+        fun createRoute(routineId: Long) = "routine_view/$routineId"
+    }
     object RoutineEditor : Screen("routine_editor?routineId={routineId}") {
         fun createRoute(routineId: Long?) = "routine_editor?routineId=${routineId ?: -1}"
     }

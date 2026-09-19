@@ -12,12 +12,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,11 +53,13 @@ private data class EditableExercise(
 fun RoutineEditorScreen(
     routineId: Long?,
     viewModel: WorkoutViewModel,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onDeleted: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var exercises by remember { mutableStateOf(listOf<EditableExercise>()) }
     var loaded by remember { mutableStateOf(routineId == null) }
+    var showDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(routineId) {
         if (routineId != null) {
@@ -79,6 +80,24 @@ fun RoutineEditorScreen(
 
     if (!loaded) return
 
+    if (showDelete) {
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("Delete routine?") },
+            text = { Text("\"$name\" and its exercises will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDelete = false
+                    viewModel.deleteRoutine(routineId!!)
+                    onDeleted()
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDelete = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -89,6 +108,11 @@ fun RoutineEditorScreen(
                     }
                 },
                 actions = {
+                    if (routineId != null) {
+                        IconButton(onClick = { showDelete = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete routine")
+                        }
+                    }
                     TextButton(onClick = {
                         val payload = exercises.mapIndexed { exIndex, ex ->
                             ExerciseWithSets(
@@ -98,11 +122,7 @@ fun RoutineEditorScreen(
                                     orderIndex = exIndex
                                 ),
                                 sets = ex.sets.mapIndexed { i, mode ->
-                                    ExerciseSetEntity(
-                                        exerciseId = 0,
-                                        mode = mode,
-                                        orderIndex = i
-                                    )
+                                    ExerciseSetEntity(exerciseId = 0, mode = mode, orderIndex = i)
                                 }
                             )
                         }
@@ -113,13 +133,6 @@ fun RoutineEditorScreen(
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                exercises = exercises + EditableExercise("", emptyList())
-            }) {
-                Icon(Icons.Default.Add, contentDescription = "Add exercise")
-            }
         }
     ) { innerPadding ->
         LazyColumn(
@@ -147,6 +160,14 @@ fun RoutineEditorScreen(
                         exercises = exercises.toMutableList().also { it.removeAt(index) }
                     }
                 )
+            }
+            item {
+                OutlinedButton(
+                    onClick = { exercises = exercises + EditableExercise("", emptyList()) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add exercise")
+                }
             }
         }
     }

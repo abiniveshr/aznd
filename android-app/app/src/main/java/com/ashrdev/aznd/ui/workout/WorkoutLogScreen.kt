@@ -2,30 +2,31 @@ package com.ashrdev.aznd.ui.workout
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,7 +45,7 @@ import com.ashrdev.aznd.data.workout.RoutineWithExercises
 @Composable
 fun WorkoutLogScreen(
     viewModel: WorkoutViewModel,
-    onEditRoutine: (Long) -> Unit,
+    onOpenRoutine: (Long) -> Unit,
     onAddRoutine: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSession: () -> Unit,
@@ -52,9 +53,7 @@ fun WorkoutLogScreen(
 ) {
     val routines by viewModel.routines.collectAsState()
     val active by viewModel.activeSession.collectAsState()
-    var editMode by remember { mutableStateOf(false) }
     var blockedDialog by remember { mutableStateOf(false) }
-    var routineToDelete by remember { mutableStateOf<RoutineWithExercises?>(null) }
 
     if (blockedDialog) {
         AlertDialog(
@@ -75,27 +74,10 @@ fun WorkoutLogScreen(
         )
     }
 
-    routineToDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { routineToDelete = null },
-            title = { Text("Delete routine?") },
-            text = { Text("\"${target.routine.name}\" and its exercises will be deleted. This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteRoutine(target.routine.id)
-                    routineToDelete = null
-                }) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { routineToDelete = null }) { Text("Cancel") }
-            }
-        )
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (editMode) "Edit Routines" else "Workouts") },
+                title = { Text("Workouts") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -105,21 +87,8 @@ fun WorkoutLogScreen(
                     IconButton(onClick = onOpenHistory) {
                         Icon(Icons.Default.History, contentDescription = "History")
                     }
-                    IconButton(onClick = { editMode = !editMode }) {
-                        Icon(
-                            imageVector = if (editMode) Icons.Default.Check else Icons.Default.Edit,
-                            contentDescription = "Toggle edit mode"
-                        )
-                    }
                 }
             )
-        },
-        floatingActionButton = {
-            if (editMode) {
-                FloatingActionButton(onClick = onAddRoutine) {
-                    Icon(Icons.Default.Add, contentDescription = "Add routine")
-                }
-            }
         }
     ) { innerPadding ->
         LazyColumn(
@@ -155,19 +124,23 @@ fun WorkoutLogScreen(
             items(routines, key = { it.routine.id }) { item ->
                 RoutineCard(
                     item = item,
-                    editMode = editMode,
-                    onClick = {
-                        when {
-                            editMode -> onEditRoutine(item.routine.id)
-                            active != null -> blockedDialog = true
-                            else -> {
-                                viewModel.startSession(item)
-                                onOpenSession()
-                            }
+                    onOpen = { onOpenRoutine(item.routine.id) },
+                    onPlay = {
+                        if (active != null) blockedDialog = true
+                        else {
+                            viewModel.startSession(item)
+                            onOpenSession()
                         }
-                    },
-                    onDelete = { routineToDelete = item }
+                    }
                 )
+            }
+            item {
+                OutlinedButton(
+                    onClick = onAddRoutine,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add routine")
+                }
             }
         }
     }
@@ -176,14 +149,13 @@ fun WorkoutLogScreen(
 @Composable
 private fun RoutineCard(
     item: RoutineWithExercises,
-    editMode: Boolean,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
+    onOpen: () -> Unit,
+    onPlay: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onOpen)
     ) {
         Row(
             modifier = Modifier
@@ -199,9 +171,14 @@ private fun RoutineCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (editMode) {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete routine")
+            Surface(
+                onClick = onPlay,
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Start routine")
                 }
             }
         }

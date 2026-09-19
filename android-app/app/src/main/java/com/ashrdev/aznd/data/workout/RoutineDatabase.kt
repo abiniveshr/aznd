@@ -10,7 +10,10 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.TypeConverters
 import androidx.room.Update
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 @Dao
 interface RoutineDao {
@@ -31,6 +34,9 @@ interface RoutineDao {
 
     @Query("DELETE FROM routines WHERE id = :routineId")
     suspend fun deleteRoutine(routineId: Long)
+
+    @Query("SELECT COUNT(*) FROM routines")
+    suspend fun routineCount(): Int
 
     @Transaction
     @Query("SELECT * FROM routines ORDER BY name")
@@ -129,6 +135,7 @@ interface RoutineDao {
                     mode = s.mode,
                     value = s.valueText.toIntOrNull() ?: 0,
                     weight = s.weightText.toDoubleOrNull() ?: 0.0,
+                    rpe = s.rpeText.toDoubleOrNull()?.coerceIn(0.0, 10.0),
                     orderIndex = i
                 )
             }
@@ -148,7 +155,7 @@ interface RoutineDao {
         ActiveSessionEntity::class,
         ActiveSetEntity::class
     ],
-    version = 4
+    version = 7
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -163,8 +170,37 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aznd.db"
-                ).fallbackToDestructiveMigration(true).build().also { INSTANCE = it }
+                ).fallbackToDestructiveMigration(true)
+                    .build()
+                    .also { db ->
+                        INSTANCE = db
+                        CoroutineScope(Dispatchers.IO).launch {
+                            if (db.routineDao().routineCount() == 0) {
+                                seedSampleRoutine(db.routineDao())
+                            }
+                        }
+                    }
             }
+        }
+
+        private suspend fun seedSampleRoutine(dao: RoutineDao) {
+            dao.saveRoutine(
+                RoutineEntity(name = "Workout 1"),
+                listOf(
+                    ExerciseWithSets(
+                        exercise = ExerciseEntity(routineId = 0, name = "Exercise 1", orderIndex = 0),
+                        sets = List(3) { i ->
+                            ExerciseSetEntity(exerciseId = 0, mode = SetMode.REPS, orderIndex = i)
+                        }
+                    ),
+                    ExerciseWithSets(
+                        exercise = ExerciseEntity(routineId = 0, name = "Exercise 2", orderIndex = 1),
+                        sets = List(3) { i ->
+                            ExerciseSetEntity(exerciseId = 0, mode = SetMode.REPS, orderIndex = i)
+                        }
+                    )
+                )
+            )
         }
     }
 }

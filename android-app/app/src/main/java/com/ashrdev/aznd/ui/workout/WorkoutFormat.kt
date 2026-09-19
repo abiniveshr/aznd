@@ -29,12 +29,16 @@ fun formatDuration(totalSeconds: Int): String {
 fun formatWeight(weight: Double): String =
     if (weight % 1.0 == 0.0) "${weight.toInt()} kg" else "$weight kg"
 
+fun formatRpe(rpe: Double): String =
+    if (rpe % 1.0 == 0.0) rpe.toInt().toString() else rpe.toString()
+
 fun formatSetValue(mode: SetMode, value: Int): String =
     if (mode == SetMode.REPS) "$value reps" else formatDuration(value)
 
 fun formatSet(set: LoggedSetEntity): String {
     val base = formatSetValue(set.mode, set.value)
-    return if (set.weight > 0.0) "$base @ ${formatWeight(set.weight)}" else base
+    val withWeight = if (set.weight > 0.0) "$base @ ${formatWeight(set.weight)}" else base
+    return if (set.rpe != null) "$withWeight (RPE ${formatRpe(set.rpe)})" else withWeight
 }
 
 fun formatExerciseBlock(exerciseName: String, sets: List<LoggedSetEntity>): String = buildString {

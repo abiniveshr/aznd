@@ -77,6 +77,7 @@ data class LoggedSetEntity(
     val mode: SetMode,
     val value: Int,
     val weight: Double,
+    val rpe: Double? = null,
     val orderIndex: Int
 )
 
@@ -107,7 +108,8 @@ data class ActiveSetEntity(
     val setIndex: Int,
     val mode: SetMode,
     val valueText: String,
-    val weightText: String
+    val weightText: String,
+    val rpeText: String = ""
 )
 
 data class ExerciseWithSets(

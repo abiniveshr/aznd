@@ -1,14 +1,12 @@
 package com.ashrdev.aznd.ui.workout
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.window.Dialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,12 +41,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ashrdev.aznd.data.workout.ActiveSetEntity
 import com.ashrdev.aznd.data.workout.SetMode
@@ -170,7 +171,7 @@ fun RoutineRunnerScreen(
                     Text(sets.first().exerciseName, style = MaterialTheme.typography.titleMedium)
                 }
                 sets.forEach { set ->
-                    item {
+                    item(key = set.id) {
                         ActiveSetRow(
                             set = set,
                             onChange = { viewModel.updateActiveSet(it) }
@@ -181,54 +182,88 @@ fun RoutineRunnerScreen(
         }
     }
 }
+
 @Composable
 private fun ActiveSetRow(
     set: ActiveSetEntity,
     onChange: (ActiveSetEntity) -> Unit
 ) {
+    var valueText by remember(set.id) { mutableStateOf(set.valueText) }
+    var weightText by remember(set.id) { mutableStateOf(set.weightText) }
+    var rpeText by remember(set.id) { mutableStateOf(set.rpeText) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text("Set ${set.setIndex + 1}", style = MaterialTheme.typography.labelLarge)
+
             if (set.mode == SetMode.TIME) {
                 TimeInput(
                     stateKey = set.id,
-                    totalSeconds = set.valueText.toIntOrNull() ?: 0,
-                    onTotalChange = { onChange(set.copy(valueText = if (it == 0) "" else it.toString())) },
+                    totalSeconds = valueText.toIntOrNull() ?: 0,
+                    onTotalChange = {
+                        valueText = if (it == 0) "" else it.toString()
+                        onChange(set.copy(valueText = valueText, weightText = weightText, rpeText = rpeText))
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
+            } else {
                 OutlinedTextField(
-                    value = set.weightText,
-                    onValueChange = { onChange(set.copy(weightText = it)) },
-                    label = { Text("kg") },
+                    value = valueText,
+                    onValueChange = { input ->
+                        valueText = input.filter { it.isDigit() }
+                        onChange(set.copy(valueText = valueText, weightText = weightText, rpeText = rpeText))
+                    },
+                    label = { Text("Reps") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = set.valueText,
-                        onValueChange = { input ->
-                            onChange(set.copy(valueText = input.filter { it.isDigit() }))
-                        },
-                        label = { Text("Reps") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedTextField(
-                        value = set.weightText,
-                        onValueChange = { onChange(set.copy(weightText = it)) },
-                        label = { Text("kg") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = weightText,
+                    onValueChange = { input ->
+                        weightText = input
+                        onChange(set.copy(valueText = valueText, weightText = weightText, rpeText = rpeText))
+                    },
+                    label = { Text("kg") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = rpeText,
+                    onValueChange = { input ->
+                        val filtered = input.filter { it.isDigit() || it == '.' }
+                        if (filtered.count { it == '.' } <= 1) {
+                            rpeText = filtered
+                            onChange(set.copy(valueText = valueText, weightText = weightText, rpeText = rpeText))
+                        }
+                    },
+                    label = { Text("RPE") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { focus ->
+                            if (!focus.isFocused) {
+                                val clamped = rpeText.toDoubleOrNull()?.coerceIn(0.0, 10.0)
+                                if (clamped != null) {
+                                    val text = if (clamped % 1.0 == 0.0) clamped.toInt().toString()
+                                    else clamped.toString()
+                                    if (text != rpeText) {
+                                        rpeText = text
+                                        onChange(set.copy(valueText = valueText, weightText = weightText, rpeText = rpeText))
+                                    }
+                                }
+                            }
+                        }
+                )
             }
         }
     }
