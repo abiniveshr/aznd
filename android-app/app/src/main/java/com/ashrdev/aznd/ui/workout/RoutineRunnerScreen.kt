@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ashrdev.aznd.data.workout.ActiveSetEntity
+import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SetMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +68,7 @@ fun RoutineRunnerScreen(
     var pendingPhotoUri by remember { mutableStateOf<String?>(null) }
     var showDiscard by remember { mutableStateOf(false) }
     var showReplacePhoto by remember { mutableStateOf(false) }
+    var previousByExercise by remember { mutableStateOf<Map<String, List<LoggedSetEntity>>>(emptyMap()) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -85,6 +88,14 @@ fun RoutineRunnerScreen(
         if (session == null) onBack()
     }
     if (session == null) return
+
+    LaunchedEffect(session.session.routineId) {
+        previousByExercise = viewModel.getPreviousSession(session.session.routineId)
+            ?.sets
+            ?.sortedBy { it.orderIndex }
+            ?.groupBy { it.exerciseName }
+            ?: emptyMap()
+    }
 
     if (showDiscard) {
         AlertDialog(
@@ -121,6 +132,7 @@ fun RoutineRunnerScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text(session.session.routineName) },
@@ -174,6 +186,7 @@ fun RoutineRunnerScreen(
                     item(key = set.id) {
                         ActiveSetRow(
                             set = set,
+                            previousSet = previousByExercise[set.exerciseName]?.getOrNull(set.setIndex),
                             onChange = { viewModel.updateActiveSet(it) }
                         )
                     }
@@ -186,6 +199,7 @@ fun RoutineRunnerScreen(
 @Composable
 private fun ActiveSetRow(
     set: ActiveSetEntity,
+    previousSet: LoggedSetEntity?,
     onChange: (ActiveSetEntity) -> Unit
 ) {
     var valueText by remember(set.id) { mutableStateOf(set.valueText) }
@@ -198,6 +212,12 @@ private fun ActiveSetRow(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text("Set ${set.setIndex + 1}", style = MaterialTheme.typography.labelLarge)
+            if (previousSet != null) {
+                Text(
+                    "Previous: ${formatSet(previousSet)}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
 
             if (set.mode == SetMode.TIME) {
                 TimeInput(

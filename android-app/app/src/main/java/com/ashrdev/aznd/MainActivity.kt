@@ -17,6 +17,8 @@ import com.ashrdev.aznd.data.workout.AppDatabase
 import com.ashrdev.aznd.ui.home.HomeScreen
 import com.ashrdev.aznd.ui.navigation.Screen
 import com.ashrdev.aznd.ui.theme.AzndTheme
+import com.ashrdev.aznd.ui.workout.ExerciseViewScreen
+import com.ashrdev.aznd.ui.workout.HistoryScreen
 import com.ashrdev.aznd.ui.workout.RoutineEditorScreen
 import com.ashrdev.aznd.ui.workout.RoutineRunnerScreen
 import com.ashrdev.aznd.ui.workout.RoutineViewScreen
@@ -53,11 +55,37 @@ class MainActivity : ComponentActivity() {
                             onOpenRoutine = { id ->
                                 navController.navigate(Screen.RoutineView.createRoute(id))
                             },
+                            onEditRoutine = { id ->
+                                navController.navigate(Screen.RoutineEditor.createRoute(id))
+                            },
                             onAddRoutine = {
                                 navController.navigate(Screen.RoutineEditor.createRoute(null))
                             },
                             onOpenHistory = { navController.navigate(Screen.History.route) },
                             onOpenSession = { navController.navigate(Screen.RoutineRunner.route) },
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(Screen.History.route) {
+                        HistoryScreen(
+                            viewModel = workoutViewModel,
+                            onOpenRoutine = { id ->
+                                navController.navigate(Screen.RoutineHistory.createRoute(id))
+                            },
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = Screen.RoutineHistory.route,
+                        arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
+                        SessionHistoryScreen(
+                            routineId = routineId,
+                            viewModel = workoutViewModel,
+                            onOpenSession = { id ->
+                                navController.navigate(Screen.SessionDetail.createRoute(id))
+                            },
                             onBack = { navController.popBackStack() }
                         )
                     }
@@ -71,7 +99,26 @@ class MainActivity : ComponentActivity() {
                             viewModel = workoutViewModel,
                             onBack = { navController.popBackStack() },
                             onEdit = { id -> navController.navigate(Screen.RoutineEditor.createRoute(id)) },
-                            onOpenSession = { navController.navigate(Screen.RoutineRunner.route) }
+                            onOpenSession = { navController.navigate(Screen.RoutineRunner.route) },
+                            onViewExercise = { rId, exId ->
+                                navController.navigate(Screen.ExerciseView.createRoute(rId, exId))
+                            }
+                        )
+                    }
+                    composable(
+                        route = Screen.ExerciseView.route,
+                        arguments = listOf(
+                            navArgument("routineId") { type = NavType.LongType },
+                            navArgument("exerciseId") { type = NavType.LongType }
+                        )
+                    ) { backStackEntry ->
+                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
+                        val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
+                        ExerciseViewScreen(
+                            routineId = routineId,
+                            exerciseId = exerciseId,
+                            viewModel = workoutViewModel,
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable(Screen.RoutineRunner.route) {
@@ -83,15 +130,6 @@ class MainActivity : ComponentActivity() {
                                     popUpTo(Screen.WorkoutLog.route)
                                 }
                             }
-                        )
-                    }
-                    composable(Screen.History.route) {
-                        SessionHistoryScreen(
-                            viewModel = workoutViewModel,
-                            onOpenSession = { id ->
-                                navController.navigate(Screen.SessionDetail.createRoute(id))
-                            },
-                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable(

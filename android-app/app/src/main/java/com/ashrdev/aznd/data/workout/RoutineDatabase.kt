@@ -14,11 +14,49 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import com.ashrdev.aznd.data.workout.RoutineEntity
+import com.ashrdev.aznd.data.workout.ExerciseEntity
+import com.ashrdev.aznd.data.workout.ExerciseSetEntity
+import com.ashrdev.aznd.data.workout.SessionEntity
+import com.ashrdev.aznd.data.workout.LoggedSetEntity
+import com.ashrdev.aznd.data.workout.ActiveSessionEntity
+import com.ashrdev.aznd.data.workout.ActiveSetEntity
+import com.ashrdev.aznd.data.workout.Converters
+import com.ashrdev.aznd.data.workout.WorkoutHistorySummary
+import com.ashrdev.aznd.data.workout.SessionWithSets
+import com.ashrdev.aznd.data.workout.ExerciseSetPoint
+import com.ashrdev.aznd.data.workout.RoutineWithExercises
+import com.ashrdev.aznd.data.workout.ActiveSessionWithSets
+import com.ashrdev.aznd.data.workout.ExerciseWithSets
+import com.ashrdev.aznd.data.workout.SetMode
 
 @Dao
 interface RoutineDao {
     @Insert
     suspend fun insertRoutine(routine: RoutineEntity): Long
+    
+    @Query("SELECT DISTINCT routineId, routineName FROM sessions ORDER BY routineName")
+    fun getWorkoutHistorySummaries(): Flow<List<WorkoutHistorySummary>>
+
+    @Transaction
+    @Query("SELECT * FROM sessions WHERE routineId = :routineId ORDER BY startedAt DESC LIMIT 1")
+    suspend fun getLatestSessionForRoutine(routineId: Long): SessionWithSets?
+    
+    @Transaction
+    @Query("SELECT * FROM sessions WHERE routineId = :routineId ORDER BY startedAt DESC")
+    fun getSessionsForRoutine(routineId: Long): Flow<List<SessionWithSets>>
+
+    @Query("""
+        SELECT sessions.id AS sessionId, sessions.startedAt AS startedAt,
+               logged_sets.value AS value, logged_sets.weight AS weight, logged_sets.rpe AS rpe
+        FROM logged_sets
+        INNER JOIN sessions ON logged_sets.sessionId = sessions.id
+        WHERE logged_sets.exerciseName = :exerciseName
+          AND sessions.routineId = :routineId
+          AND logged_sets.mode = 'REPS'
+        ORDER BY sessions.startedAt ASC
+    """)
+    suspend fun getExerciseHistory(routineId: Long, exerciseName: String): List<ExerciseSetPoint>
 
     @Update
     suspend fun updateRoutine(routine: RoutineEntity)
@@ -101,7 +139,9 @@ interface RoutineDao {
                 ews.exercise.copy(id = 0, routineId = routineId, orderIndex = exIndex)
             )
             insertExerciseSets(
-                ews.sets.mapIndexed { i, s -> s.copy(id = 0, exerciseId = exerciseId, orderIndex = i) }
+                ews.sets.mapIndexed { i, s ->
+                    s.copy(id = 0, exerciseId = exerciseId, orderIndex = i)
+                }
             )
         }
         return routineId
@@ -188,15 +228,31 @@ abstract class AppDatabase : RoomDatabase() {
                 RoutineEntity(name = "Workout 1"),
                 listOf(
                     ExerciseWithSets(
-                        exercise = ExerciseEntity(routineId = 0, name = "Exercise 1", orderIndex = 0),
+                        exercise = ExerciseEntity(
+                            routineId = 0,
+                            name = "Exercise 1",
+                            orderIndex = 0
+                        ),
                         sets = List(3) { i ->
-                            ExerciseSetEntity(exerciseId = 0, mode = SetMode.REPS, orderIndex = i)
+                            ExerciseSetEntity(
+                                exerciseId = 0,
+                                mode = SetMode.REPS,
+                                orderIndex = i
+                            )
                         }
                     ),
                     ExerciseWithSets(
-                        exercise = ExerciseEntity(routineId = 0, name = "Exercise 2", orderIndex = 1),
+                        exercise = ExerciseEntity(
+                            routineId = 0,
+                            name = "Exercise 2",
+                            orderIndex = 1
+                        ),
                         sets = List(3) { i ->
-                            ExerciseSetEntity(exerciseId = 0, mode = SetMode.REPS, orderIndex = i)
+                            ExerciseSetEntity(
+                                exerciseId = 0,
+                                mode = SetMode.REPS,
+                                orderIndex = i
+                            )
                         }
                     )
                 )

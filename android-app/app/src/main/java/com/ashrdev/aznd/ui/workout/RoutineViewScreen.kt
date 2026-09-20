@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.workout
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,7 +42,8 @@ fun RoutineViewScreen(
     viewModel: WorkoutViewModel,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
-    onOpenSession: () -> Unit
+    onOpenSession: () -> Unit,
+    onViewExercise: (Long, Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
     var routine by remember { mutableStateOf<RoutineWithExercises?>(null) }
@@ -120,7 +122,11 @@ fun RoutineViewScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(item.exercises, key = { it.exercise.id }) { ews ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onViewExercise(item.routine.id, ews.exercise.id) }
+                ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(ews.exercise.name, style = MaterialTheme.typography.titleMedium)
                         Text(

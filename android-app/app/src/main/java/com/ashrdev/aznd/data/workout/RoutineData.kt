@@ -136,6 +136,19 @@ data class ActiveSessionWithSets(
     val sets: List<ActiveSetEntity>
 )
 
+data class WorkoutHistorySummary(
+    val routineId: Long,
+    val routineName: String
+)
+
+data class ExerciseSetPoint(
+    val sessionId: Long,
+    val startedAt: Long,
+    val value: Int,
+    val weight: Double,
+    val rpe: Double?
+)
+
 class Converters {
     @TypeConverter
     fun fromSetMode(mode: SetMode): String = mode.name

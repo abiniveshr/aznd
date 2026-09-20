@@ -9,24 +9,26 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,6 +48,7 @@ import com.ashrdev.aznd.data.workout.RoutineWithExercises
 fun WorkoutLogScreen(
     viewModel: WorkoutViewModel,
     onOpenRoutine: (Long) -> Unit,
+    onEditRoutine: (Long) -> Unit,
     onAddRoutine: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSession: () -> Unit,
@@ -54,6 +57,7 @@ fun WorkoutLogScreen(
     val routines by viewModel.routines.collectAsState()
     val active by viewModel.activeSession.collectAsState()
     var blockedDialog by remember { mutableStateOf(false) }
+    var routineToDelete by remember { mutableStateOf<RoutineWithExercises?>(null) }
 
     if (blockedDialog) {
         AlertDialog(
@@ -74,6 +78,23 @@ fun WorkoutLogScreen(
         )
     }
 
+    routineToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { routineToDelete = null },
+            title = { Text("Delete routine?") },
+            text = { Text("\"${target.routine.name}\" and its exercises will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteRoutine(target.routine.id)
+                    routineToDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { routineToDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -86,6 +107,9 @@ fun WorkoutLogScreen(
                 actions = {
                     IconButton(onClick = onOpenHistory) {
                         Icon(Icons.Default.History, contentDescription = "History")
+                    }
+                    IconButton(onClick = onAddRoutine) {
+                        Icon(Icons.Default.Add, contentDescription = "Add routine")
                     }
                 }
             )
@@ -124,23 +148,17 @@ fun WorkoutLogScreen(
             items(routines, key = { it.routine.id }) { item ->
                 RoutineCard(
                     item = item,
-                    onOpen = { onOpenRoutine(item.routine.id) },
-                    onPlay = {
+                    onStart = {
                         if (active != null) blockedDialog = true
                         else {
                             viewModel.startSession(item)
                             onOpenSession()
                         }
-                    }
+                    },
+                    onView = { onOpenRoutine(item.routine.id) },
+                    onEdit = { onEditRoutine(item.routine.id) },
+                    onRequestDelete = { routineToDelete = item }
                 )
-            }
-            item {
-                OutlinedButton(
-                    onClick = onAddRoutine,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Add routine")
-                }
             }
         }
     }
@@ -149,13 +167,17 @@ fun WorkoutLogScreen(
 @Composable
 private fun RoutineCard(
     item: RoutineWithExercises,
-    onOpen: () -> Unit,
-    onPlay: () -> Unit
+    onStart: () -> Unit,
+    onView: () -> Unit,
+    onEdit: () -> Unit,
+    onRequestDelete: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .clickable(onClick = onStart)
     ) {
         Row(
             modifier = Modifier
@@ -171,14 +193,38 @@ private fun RoutineCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            Surface(
-                onClick = onPlay,
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Start routine")
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Routine options")
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("View workout") },
+                        leadingIcon = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onView()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onRequestDelete()
+                        }
+                    )
                 }
             }
         }

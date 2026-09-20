@@ -38,11 +38,12 @@ import com.ashrdev.aznd.data.workout.SessionWithSets
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionHistoryScreen(
+    routineId: Long,
     viewModel: WorkoutViewModel,
     onOpenSession: (Long) -> Unit,
     onBack: () -> Unit
 ) {
-    val sessions by viewModel.sessions.collectAsState()
+    val sessions by viewModel.sessionsForRoutine(routineId).collectAsState(initial = emptyList())
     var sessionToDelete by remember { mutableStateOf<SessionWithSets?>(null) }
 
     sessionToDelete?.let { target ->
@@ -65,7 +66,7 @@ fun SessionHistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("History") },
+                title = { Text(sessions.firstOrNull()?.session?.routineName ?: "History") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -122,11 +123,7 @@ private fun HistoryCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(item.session.routineName, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    formatTimestamp(item.session.startedAt),
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text(formatTimestamp(item.session.startedAt), style = MaterialTheme.typography.titleMedium)
                 val elapsed = ((item.session.finishedAt - item.session.startedAt) / 1000L).toInt()
                 Text(
                     "${item.sets.size} sets · ${formatDuration(elapsed)}",
