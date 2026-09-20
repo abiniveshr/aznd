@@ -32,6 +32,9 @@ import com.ashrdev.aznd.data.workout.SetMode
 
 @Dao
 interface RoutineDao {
+    @Query("DELETE FROM sessions WHERE routineId = :routineId")
+    suspend fun deleteSessionsForRoutine(routineId: Long)
+    
     @Insert
     suspend fun insertRoutine(routine: RoutineEntity): Long
     

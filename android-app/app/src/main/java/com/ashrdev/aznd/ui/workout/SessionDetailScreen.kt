@@ -190,12 +190,6 @@ private fun ExerciseGroupCard(
                         }
                     }
                 }
-            } else {
-                Text(
-                    sets.joinToString("   ") { formatSet(it) },
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
             }
         }
     }

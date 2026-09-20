@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material3.AlertDialog
@@ -41,6 +42,7 @@ fun SessionHistoryScreen(
     routineId: Long,
     viewModel: WorkoutViewModel,
     onOpenSession: (Long) -> Unit,
+    onOpenStats: (Long) -> Unit,
     onBack: () -> Unit
 ) {
     val sessions by viewModel.sessionsForRoutine(routineId).collectAsState(initial = emptyList())
@@ -70,6 +72,11 @@ fun SessionHistoryScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { onOpenStats(routineId) }) {
+                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Detailed statistics")
                     }
                 }
             )
@@ -135,7 +142,7 @@ private fun HistoryCard(
                     Icon(Icons.Default.Photo, contentDescription = "Has photo")
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete session")
+                    Icon(Icons.Default.Delete, contentDescription = "Delete session", tint = MaterialTheme.colorScheme.error)
                 }
             }
         }

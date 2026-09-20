@@ -77,29 +77,25 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
         }
     }
 
-    fun startSession(routine: RoutineWithExercises) {
+    fun startSession(routine: RoutineWithExercises, onStarted: () -> Unit = {}) {
         viewModelScope.launch {
-            val sets =
-                mutableListOf<com.ashrdev.aznd.data.workout.ActiveSetEntity>()
-
+            val sets = mutableListOf<com.ashrdev.aznd.data.workout.ActiveSetEntity>()
             routine.exercises
                 .sortedBy { it.exercise.orderIndex }
                 .forEachIndexed { exIndex, ews ->
                     ews.sets
                         .sortedBy { it.orderIndex }
                         .forEachIndexed { setIndex, s ->
-                            sets +=
-                                com.ashrdev.aznd.data.workout.ActiveSetEntity(
-                                    exerciseName = ews.exercise.name,
-                                    exerciseIndex = exIndex,
-                                    setIndex = setIndex,
-                                    mode = s.mode,
-                                    valueText = "",
-                                    weightText = ""
-                                )
+                            sets += com.ashrdev.aznd.data.workout.ActiveSetEntity(
+                                exerciseName = ews.exercise.name,
+                                exerciseIndex = exIndex,
+                                setIndex = setIndex,
+                                mode = s.mode,
+                                valueText = "",
+                                weightText = ""
+                            )
                         }
                 }
-
             dao.startActiveSession(
                 com.ashrdev.aznd.data.workout.ActiveSessionEntity(
                     routineId = routine.routine.id,
@@ -108,7 +104,12 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
                 ),
                 sets
             )
+            onStarted()
         }
+    }
+    
+    fun deleteHistoryForRoutine(routineId: Long) {
+        viewModelScope.launch { dao.deleteSessionsForRoutine(routineId) }
     }
 
     fun updateActiveSet(

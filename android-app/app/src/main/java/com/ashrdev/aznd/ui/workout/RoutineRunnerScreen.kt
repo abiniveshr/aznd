@@ -149,7 +149,7 @@ fun RoutineRunnerScreen(
                         Icon(Icons.Default.PhotoCamera, contentDescription = "Add photo")
                     }
                     IconButton(onClick = { showDiscard = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Discard session")
+                        Icon(Icons.Default.Delete, contentDescription = "Discard session", tint = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { viewModel.finishSession(onFinished) }) {
                         Text("Finish")

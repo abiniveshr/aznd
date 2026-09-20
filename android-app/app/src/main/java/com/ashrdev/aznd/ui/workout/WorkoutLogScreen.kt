@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,27 +55,7 @@ fun WorkoutLogScreen(
 ) {
     val routines by viewModel.routines.collectAsState()
     val active by viewModel.activeSession.collectAsState()
-    var blockedDialog by remember { mutableStateOf(false) }
     var routineToDelete by remember { mutableStateOf<RoutineWithExercises?>(null) }
-
-    if (blockedDialog) {
-        AlertDialog(
-            onDismissRequest = { blockedDialog = false },
-            title = { Text("Session already running") },
-            text = {
-                Text("You have an unfinished ${active?.session?.routineName.orEmpty()} session. Finish or discard it before starting another.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    blockedDialog = false
-                    onOpenSession()
-                }) { Text("Go to session") }
-            },
-            dismissButton = {
-                TextButton(onClick = { blockedDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
 
     routineToDelete?.let { target ->
         AlertDialog(
@@ -145,20 +124,22 @@ fun WorkoutLogScreen(
                     }
                 }
             }
-            items(routines, key = { it.routine.id }) { item ->
-                RoutineCard(
-                    item = item,
-                    onStart = {
-                        if (active != null) blockedDialog = true
-                        else {
-                            viewModel.startSession(item)
-                            onOpenSession()
-                        }
-                    },
-                    onView = { onOpenRoutine(item.routine.id) },
-                    onEdit = { onEditRoutine(item.routine.id) },
-                    onRequestDelete = { routineToDelete = item }
-                )
+            if (routines.isEmpty()) {
+                item {
+                    Text(
+                        "No routines yet — tap + to add one.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else {
+                items(routines, key = { it.routine.id }) { item ->
+                    RoutineCard(
+                        item = item,
+                        onOpen = { onOpenRoutine(item.routine.id) },
+                        onEdit = { onEditRoutine(item.routine.id) },
+                        onRequestDelete = { routineToDelete = item }
+                    )
+                }
             }
         }
     }
@@ -167,8 +148,7 @@ fun WorkoutLogScreen(
 @Composable
 private fun RoutineCard(
     item: RoutineWithExercises,
-    onStart: () -> Unit,
-    onView: () -> Unit,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
@@ -177,7 +157,7 @@ private fun RoutineCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onStart)
+            .clickable(onClick = onOpen)
     ) {
         Row(
             modifier = Modifier
@@ -202,14 +182,6 @@ private fun RoutineCard(
                     onDismissRequest = { menuExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("View workout") },
-                        leadingIcon = { Icon(Icons.Default.Visibility, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onView()
-                        }
-                    )
-                    DropdownMenuItem(
                         text = { Text("Edit") },
                         leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                         onClick = {
@@ -219,7 +191,13 @@ private fun RoutineCard(
                     )
                     DropdownMenuItem(
                         text = { Text("Delete") },
-                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
                         onClick = {
                             menuExpanded = false
                             onRequestDelete()

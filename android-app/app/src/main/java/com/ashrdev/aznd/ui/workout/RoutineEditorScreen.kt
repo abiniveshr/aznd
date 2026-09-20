@@ -106,13 +106,13 @@ fun RoutineEditorScreen(
                 title = { Text(if (routineId == null) "New Routine" else "Edit Routine") },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel")
+                    Icon(Icons.Default.Close, contentDescription = "Cancel")
                     }
                 },
                 actions = {
                     if (routineId != null) {
                         IconButton(onClick = { showDelete = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete routine")
+                            Icon(Icons.Default.Delete, contentDescription = "Delete routine", tint = MaterialTheme.colorScheme.error)
                         }
                     }
                     TextButton(onClick = {
@@ -195,7 +195,7 @@ private fun ExerciseCard(
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete exercise")
+                    Icon(Icons.Default.Delete, contentDescription = "Delete routine", tint = MaterialTheme.colorScheme.error)
                 }
             }
             exercise.sets.forEachIndexed { setIndex, mode ->

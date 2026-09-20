@@ -96,7 +96,7 @@ fun ExerciseViewScreen(
                             SessionShare.share(
                                 context = context,
                                 subject = "$exerciseName progress",
-                                body = "$exerciseName · ${if (range == ChartRange.LIFETIME) "lifetime" else "last 5 sessions"}\nEstimated 1RM: ${formatE1rm(displayedPoints.last().e1rm)}",
+                                body = "$exerciseName · ${if (range == ChartRange.LIFETIME) "lifetime" else "last 5 sessions"}\nEstimated 1 Rep Max = ${formatE1rm(displayedPoints.last().e1rm)}",
                                 photoUri = uri
                             )
                         }) {
@@ -140,14 +140,21 @@ fun ExerciseViewScreen(
                 if (range == ChartRange.LAST_5) {
                     itemsIndexed(displayedPoints) { _, point ->
                         Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Text(
-                                    "${formatTimestamp(point.startedAt)} · e1RM ${formatE1rm(point.e1rm)}",
+                                    formatTimestamp(point.startedAt),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "${point.topSetReps} reps @ ${formatWeight(point.topSetWeight)}",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
-                                    "Top set: ${formatTopSet(point)}",
-                                    style = MaterialTheme.typography.bodySmall
+                                    "Estimated 1 Rep Max = ${formatE1rm(point.e1rm)}",
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
                             }
                         }
@@ -161,18 +168,20 @@ fun ExerciseViewScreen(
                     )
                 }
             }
-            itemsIndexed(setModes) { index, mode ->
-                val prev = previousSets.getOrNull(index)
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "Set ${index + 1} · ${if (mode == SetMode.REPS) "Reps" else "Time"}",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            if (prev != null) "Previous: ${formatSet(prev)}" else "No previous data",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+            if (range == ChartRange.LIFETIME) {
+                itemsIndexed(setModes) { index, mode ->
+                    val prev = previousSets.getOrNull(index)
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Set ${index + 1} · ${if (mode == SetMode.REPS) "Reps" else "Time"}",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                if (prev != null) "Previous: ${formatSet(prev)}" else "No previous data",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
             }

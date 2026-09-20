@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -101,19 +102,32 @@ fun RoutineViewScreen(
             Button(
                 onClick = {
                     if (active != null) blockedDialog = true
-                    else {
-                        viewModel.startSession(item)
-                        onOpenSession()
-                    }
+                    else viewModel.startSession(item) { onOpenSession() }
                 },
+                enabled = item.exercises.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
+                    .height(64.dp)
             ) {
-                Text("Start")
+                Text("Start", style = MaterialTheme.typography.titleMedium)
             }
         }
     ) { innerPadding ->
+        if (item.exercises.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    "No exercises yet — tap Edit to add some.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

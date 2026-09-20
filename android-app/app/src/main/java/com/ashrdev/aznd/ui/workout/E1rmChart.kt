@@ -33,7 +33,7 @@ private fun drawE1rmChart(
 
     val paddingLeft = 70f
     val paddingBottom = 50f
-    val paddingTop = 20f
+    val paddingTop = 46f
     val paddingRight = 20f
     val chartWidth = width - paddingLeft - paddingRight
     val chartHeight = height - paddingTop - paddingBottom
@@ -47,11 +47,14 @@ private fun drawE1rmChart(
 
     val gridPaint = Paint().apply { color = gridColor; strokeWidth = 2f; alpha = 120 }
     val textPaint = Paint().apply { color = textColor; textSize = 26f; isAntiAlias = true }
+    val labelPaint = Paint().apply { color = textColor; textSize = 28f; isAntiAlias = true; isFakeBoldText = true }
     val linePaint = Paint().apply {
         color = lineColor; strokeWidth = 6f; style = Paint.Style.STROKE; isAntiAlias = true
         strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
     }
     val dotPaint = Paint().apply { color = lineColor; isAntiAlias = true }
+
+    canvas.drawText("Estimated 1RM (kg)", paddingLeft, 30f, labelPaint)
 
     val gridLines = 4
     for (g in 0..gridLines) {

@@ -21,6 +21,7 @@ import com.ashrdev.aznd.ui.workout.ExerciseViewScreen
 import com.ashrdev.aznd.ui.workout.HistoryScreen
 import com.ashrdev.aznd.ui.workout.RoutineEditorScreen
 import com.ashrdev.aznd.ui.workout.RoutineRunnerScreen
+import com.ashrdev.aznd.ui.workout.RoutineStatsScreen
 import com.ashrdev.aznd.ui.workout.RoutineViewScreen
 import com.ashrdev.aznd.ui.workout.SessionDetailScreen
 import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
@@ -86,7 +87,24 @@ class MainActivity : ComponentActivity() {
                             onOpenSession = { id ->
                                 navController.navigate(Screen.SessionDetail.createRoute(id))
                             },
+                            onOpenStats = { id ->
+                                navController.navigate(Screen.RoutineStats.createRoute(id))
+                            },
                             onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = Screen.RoutineStats.route,
+                        arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
+                        RoutineStatsScreen(
+                            routineId = routineId,
+                            viewModel = workoutViewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenExercise = { rId, exId ->
+                                navController.navigate(Screen.ExerciseView.createRoute(rId, exId))
+                            }
                         )
                     }
                     composable(
