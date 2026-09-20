@@ -57,8 +57,13 @@ fun RoutineEditorScreen(
     onDone: () -> Unit,
     onDeleted: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var exercises by remember { mutableStateOf(listOf<EditableExercise>()) }
+        var name by remember { mutableStateOf("") }
+    var exercises by remember {
+        mutableStateOf(
+            if (routineId == null) listOf(EditableExercise("", listOf(SetMode.REPS)))
+            else listOf()
+        )
+    }
     var loaded by remember { mutableStateOf(routineId == null) }
     var showDelete by remember { mutableStateOf(false) }
 

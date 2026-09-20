@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -44,7 +45,8 @@ fun RoutineViewScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onOpenSession: () -> Unit,
-    onViewExercise: (Long, Long) -> Unit
+    onViewExercise: (Long, Long) -> Unit,
+    onOpenStats: (Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
     var routine by remember { mutableStateOf<RoutineWithExercises?>(null) }
@@ -92,6 +94,9 @@ fun RoutineViewScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { onOpenStats(item.routine.id) }) {
+                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Statistics")
+                    }
                     IconButton(onClick = { onEdit(item.routine.id) }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit routine")
                     }

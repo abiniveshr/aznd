@@ -120,7 +120,8 @@ class MainActivity : ComponentActivity() {
                             onOpenSession = { navController.navigate(Screen.RoutineRunner.route) },
                             onViewExercise = { rId, exId ->
                                 navController.navigate(Screen.ExerciseView.createRoute(rId, exId))
-                            }
+                            },
+                            onOpenStats = { id -> navController.navigate(Screen.RoutineStats.createRoute(id)) }
                         )
                     }
                     composable(
@@ -136,7 +137,8 @@ class MainActivity : ComponentActivity() {
                             routineId = routineId,
                             exerciseId = exerciseId,
                             viewModel = workoutViewModel,
-                            onBack = { navController.popBackStack() }
+                            onBack = { navController.popBackStack() },
+                            onOpenSession = { id -> navController.navigate(Screen.SessionDetail.createRoute(id)) }
                         )
                     }
                     composable(Screen.RoutineRunner.route) {

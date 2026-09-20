@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.workout
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,7 +45,8 @@ fun ExerciseViewScreen(
     routineId: Long,
     exerciseId: Long,
     viewModel: WorkoutViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenSession: (Long) -> Unit
 ) {
     val context = LocalContext.current
     var exerciseName by remember { mutableStateOf("") }
@@ -139,7 +141,11 @@ fun ExerciseViewScreen(
                 }
                 if (range == ChartRange.LAST_5) {
                     itemsIndexed(displayedPoints) { _, point ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenSession(point.sessionId) }
+                        ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
