@@ -1,15 +1,46 @@
 package com.ashrdev.aznd.data.streaks
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(
-    tableName = "streak_days",
-    indices = [Index(value = ["date"], unique = true)]
-)
-data class StreakDayEntity(
+@Entity(tableName = "streaks")
+data class StreakEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val startDate: String
+)
+
+@Entity(
+    tableName = "streak_breaks",
+    foreignKeys = [ForeignKey(
+        entity = StreakEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["streakId"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["streakId", "date"], unique = true)]
+)
+data class StreakBreakEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val streakId: Long,
+    val date: String
+)
+
+@Entity(
+    tableName = "streak_saved_days",
+    foreignKeys = [ForeignKey(
+        entity = StreakEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["streakId"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["streakId", "date"], unique = true)]
+)
+data class StreakSavedDayEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val streakId: Long,
     val date: String,
     val remark: String = "",
     val photoUri: String? = null,

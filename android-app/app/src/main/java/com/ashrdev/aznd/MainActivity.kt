@@ -13,9 +13,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.ashrdev.aznd.data.workout.AppDatabase
+import com.ashrdev.aznd.data.AppDatabase
 import com.ashrdev.aznd.ui.home.HomeScreen
 import com.ashrdev.aznd.ui.navigation.Screen
+import com.ashrdev.aznd.ui.streaks.SavedDayDetailScreen
+import com.ashrdev.aznd.ui.streaks.SavedDaysForStreakScreen
+import com.ashrdev.aznd.ui.streaks.SavedDaysScreen
+import com.ashrdev.aznd.ui.streaks.StreakDetailScreen
+import com.ashrdev.aznd.ui.streaks.StreakEditorScreen
+import com.ashrdev.aznd.ui.streaks.StreakViewModel
+import com.ashrdev.aznd.ui.streaks.StreakViewModelFactory
+import com.ashrdev.aznd.ui.streaks.StreaksScreen
 import com.ashrdev.aznd.ui.theme.AzndTheme
 import com.ashrdev.aznd.ui.workout.ExerciseViewScreen
 import com.ashrdev.aznd.ui.workout.HistoryScreen
@@ -28,17 +36,21 @@ import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
 import com.ashrdev.aznd.ui.workout.WorkoutLogScreen
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutViewModelFactory
-
+import androidx.compose.ui.unit.dp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val dao = AppDatabase.getInstance(this).routineDao()
+        val database = AppDatabase.getInstance(this)
+        val dao = database.routineDao()
+        val streakDao = database.streakDao()
         setContent {
             AzndTheme {
                 val navController = rememberNavController()
                 val workoutViewModel: WorkoutViewModel =
                     viewModel(factory = WorkoutViewModelFactory(dao))
+                val streakViewModel: StreakViewModel =
+                    viewModel(factory = StreakViewModelFactory(streakDao))
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Home.route,
@@ -178,6 +190,74 @@ class MainActivity : ComponentActivity() {
                             viewModel = workoutViewModel,
                             onDone = { navController.popBackStack() },
                             onDeleted = { navController.popBackStack(Screen.WorkoutLog.route, false) }
+                        )
+                    }
+                    composable(Screen.Streaks.route) {
+                        StreaksScreen(
+                            viewModel = streakViewModel,
+                            onOpenStreak = { id -> navController.navigate(Screen.StreakDetail.createRoute(id)) },
+                            onAddStreak = { navController.navigate(Screen.StreakEditor.route) },
+                            onOpenSavedDays = { navController.navigate(Screen.SavedDays.route) },
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(Screen.StreakEditor.route) {
+                        StreakEditorScreen(
+                            viewModel = streakViewModel,
+                            onDone = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = Screen.StreakDetail.route,
+                        arguments = listOf(navArgument("streakId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
+                        StreakDetailScreen(
+                            streakId = streakId,
+                            viewModel = streakViewModel,
+                            onBack = { navController.popBackStack() },
+                            onSaveDay = { sId, date ->
+                                navController.navigate(Screen.SavedDayDetail.createRoute(sId, date))
+                            }
+                        )
+                    }
+                    composable(Screen.SavedDays.route) {
+                        SavedDaysScreen(
+                            viewModel = streakViewModel,
+                            onOpenStreak = { id ->
+                                navController.navigate(Screen.SavedDaysForStreak.createRoute(id))
+                            },
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = Screen.SavedDaysForStreak.route,
+                        arguments = listOf(navArgument("streakId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
+                        SavedDaysForStreakScreen(
+                            streakId = streakId,
+                            viewModel = streakViewModel,
+                            onOpenDay = { sId, date ->
+                                navController.navigate(Screen.SavedDayDetail.createRoute(sId, date))
+                            },
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = Screen.SavedDayDetail.route,
+                        arguments = listOf(
+                            navArgument("streakId") { type = NavType.LongType },
+                            navArgument("date") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
+                        val date = backStackEntry.arguments?.getString("date") ?: ""
+                        SavedDayDetailScreen(
+                            streakId = streakId,
+                            date = date,
+                            viewModel = streakViewModel,
+                            onDone = { navController.popBackStack() }
                         )
                     }
                 }
