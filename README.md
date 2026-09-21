@@ -57,3 +57,23 @@ progress:
 -attempted to process the data, realized i might need additional data sets for indian foods as the nutrition5k data set only has western fastfoods.
 -indian-food-and-nutrition-2025 (kaggle) has data for nutrition but lacks images for classification / volume estimation. i will have to train the model with pictures from another dataset and feed the output to nutrition calculator
 -khana has images for classification / volume estimation.
+
+17/08/2026
+-designed logo and banner art
+-started work on workout tracker app
+-implemented basic workout routine logic
+
+18/08/2026
+-added picture feature to save with workouts
+-added share feature
+
+19/08/2026
+-improvement in UI and User experiences
+-added previous session statistics on running workout screen for progressive overload
+
+20/08/2026
+-added statistics and graph for individual set and handled what to do on deletion
+-laid the framework for a streak tracker
+
+21/08/2026
+-completed streak manager app with day-saving, pictures and graphical calendar views
