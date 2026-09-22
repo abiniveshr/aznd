@@ -32,8 +32,14 @@ class StreakViewModel(private val dao: StreakDao) : ViewModel() {
 
     suspend fun getStreak(id: Long): StreakEntity? = dao.getStreak(id)
 
-    fun createStreak(name: String, startDate: String) {
-        viewModelScope.launch { dao.insertStreak(StreakEntity(name = name, startDate = startDate)) }
+    fun createStreak(name: String, startDate: String, photoUri: String?) {
+        viewModelScope.launch {
+            dao.insertStreak(StreakEntity(name = name, startDate = startDate, photoUri = photoUri))
+        }
+    }
+
+    fun updateStreakPhoto(streakId: Long, photoUri: String?) {
+        viewModelScope.launch { dao.updateStreakPhoto(streakId, photoUri) }
     }
 
     fun deleteStreak(id: Long) {
@@ -58,8 +64,17 @@ class StreakViewModel(private val dao: StreakDao) : ViewModel() {
 
     fun saveDay(streakId: Long, date: String, remark: String, photoUri: String?) {
         viewModelScope.launch {
+            val streak = dao.getStreak(streakId) ?: return@launch
+            val breaks = dao.getBreaksForStreakOnce(streakId).toSet()
+            val count = computeCurrentStreak(streak.startDate, breaks, date)
             dao.upsertSavedDay(
-                StreakSavedDayEntity(streakId = streakId, date = date, remark = remark, photoUri = photoUri)
+                StreakSavedDayEntity(
+                    streakId = streakId,
+                    date = date,
+                    remark = remark,
+                    photoUri = photoUri,
+                    streakCountAtSave = count
+                )
             )
         }
     }

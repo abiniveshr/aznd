@@ -9,7 +9,8 @@ import androidx.room.PrimaryKey
 data class StreakEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val startDate: String
+    val startDate: String,
+    val photoUri: String? = null
 )
 
 @Entity(
@@ -44,5 +45,6 @@ data class StreakSavedDayEntity(
     val date: String,
     val remark: String = "",
     val photoUri: String? = null,
+    val streakCountAtSave: Int = 0,
     val savedAt: Long = System.currentTimeMillis()
 )

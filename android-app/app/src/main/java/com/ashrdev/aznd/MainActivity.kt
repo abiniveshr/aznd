@@ -36,7 +36,7 @@ import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
 import com.ashrdev.aznd.ui.workout.WorkoutLogScreen
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutViewModelFactory
-import androidx.compose.ui.unit.dp
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

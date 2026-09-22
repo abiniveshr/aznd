@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.common.rememberImagePicker
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +37,14 @@ fun StreakEditorScreen(
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var startDate by remember { mutableStateOf(todayKey()) }
+    var photoUri by remember { mutableStateOf<String?>(null) }
+
+    val imagePicker = rememberImagePicker(
+        aspect = 16f to 9f,
+        outputWidth = 1200,
+        outputHeight = 675,
+        onImagePicked = { uri -> photoUri = uri.toString() }
+    )
 
     Scaffold(
         topBar = {
@@ -49,7 +58,7 @@ fun StreakEditorScreen(
                 actions = {
                     TextButton(onClick = {
                         if (name.isNotBlank()) {
-                            viewModel.createStreak(name.trim(), startDate)
+                            viewModel.createStreak(name.trim(), startDate, photoUri)
                             onDone()
                         }
                     }) {
@@ -66,6 +75,10 @@ fun StreakEditorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            photoUri?.let { uri -> StreakBanner(uri) }
+            OutlinedButton(onClick = { imagePicker.launch() }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (photoUri != null) "Replace photo" else "Add photo (optional)")
+            }
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },

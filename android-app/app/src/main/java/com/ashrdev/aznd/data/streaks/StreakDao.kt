@@ -14,8 +14,14 @@ interface StreakDao {
     @Query("SELECT * FROM streaks WHERE id = :id")
     suspend fun getStreak(id: Long): StreakEntity?
 
+    @Query("SELECT COUNT(*) FROM streaks")
+    suspend fun streakCount(): Int
+
     @Insert
     suspend fun insertStreak(streak: StreakEntity): Long
+
+    @Query("UPDATE streaks SET photoUri = :uri WHERE id = :id")
+    suspend fun updateStreakPhoto(id: Long, uri: String?)
 
     @Query("DELETE FROM streaks WHERE id = :id")
     suspend fun deleteStreak(id: Long)

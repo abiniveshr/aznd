@@ -1,7 +1,5 @@
 package com.ashrdev.aznd.ui.streaks
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -35,9 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.net.toUri
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.ui.workout.PhotoStore
+import androidx.core.net.toUri
+import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.workout.SessionPhotoCard
 import com.ashrdev.aznd.ui.workout.SessionShare
 
@@ -55,30 +53,22 @@ fun SavedDayDetailScreen(
     var streakName by remember { mutableStateOf("") }
     var remark by remember { mutableStateOf("") }
     var photoUri by remember { mutableStateOf<String?>(null) }
+    var streakCount by remember { mutableStateOf(0) }
     var isExisting by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
-    var pendingPhotoUri by remember { mutableStateOf<String?>(null) }
     var showReplacePhoto by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) photoUri = pendingPhotoUri
-        pendingPhotoUri = null
-    }
-
-    fun launchCamera() {
-        val uri = PhotoStore.newPhotoUri(context)
-        pendingPhotoUri = uri.toString()
-        cameraLauncher.launch(uri)
-    }
+    val imagePicker = rememberImagePicker(
+        onImagePicked = { uri -> photoUri = uri.toString() }
+    )
 
     LaunchedEffect(streakId, date) {
         streakName = viewModel.getStreak(streakId)?.name ?: ""
         viewModel.getSavedDay(streakId, date)?.let { existing ->
             remark = existing.remark
             photoUri = existing.photoUri
+            streakCount = existing.streakCountAtSave
             isExisting = true
         }
         loaded = true
@@ -90,11 +80,11 @@ fun SavedDayDetailScreen(
         AlertDialog(
             onDismissRequest = { showReplacePhoto = false },
             title = { Text("Replace photo?") },
-            text = { Text("This day already has a photo. Taking a new one will replace it.") },
+            text = { Text("This day already has a photo. Choosing a new one will replace it.") },
             confirmButton = {
                 TextButton(onClick = {
                     showReplacePhoto = false
-                    launchCamera()
+                    imagePicker.launch()
                 }) { Text("Replace") }
             },
             dismissButton = {
@@ -137,7 +127,7 @@ fun SavedDayDetailScreen(
                             SessionShare.share(
                                 context = context,
                                 subject = "$streakName · ${displayDate(date)}",
-                                body = "$streakName\n${displayDate(date)}\n\n$remark\n\nlogged with aznd",
+                                body = "$streakName · Day $streakCount\n${displayDate(date)}\n\n$remark\n\nlogged with aznd",
                                 photoUri = photoUri?.toUri()
                             )
                         }) {
@@ -164,6 +154,14 @@ fun SavedDayDetailScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (isExisting) {
+                item {
+                    Text(
+                        "Streak length: $streakCount day${if (streakCount == 1) "" else "s"}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
             item {
                 OutlinedTextField(
                     value = remark,
@@ -179,7 +177,7 @@ fun SavedDayDetailScreen(
                 OutlinedButton(
                     onClick = {
                         if (photoUri != null) showReplacePhoto = true
-                        else launchCamera()
+                        else imagePicker.launch()
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {

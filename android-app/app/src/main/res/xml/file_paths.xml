@@ -2,4 +2,5 @@
 <paths>
     <files-path name="session_photos" path="session_photos/" />
     <cache-path name="shared" path="shared/" />
+    <files-path name="streak_images" path="streak_images/" />
 </paths>

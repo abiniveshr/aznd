@@ -23,6 +23,9 @@ import com.ashrdev.aznd.data.workout.RoutineDao
 import com.ashrdev.aznd.data.workout.RoutineEntity
 import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.SetMode
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Database(
     entities = [
@@ -37,7 +40,7 @@ import com.ashrdev.aznd.data.workout.SetMode
         StreakBreakEntity::class,
         StreakSavedDayEntity::class
     ],
-    version = 9
+    version = 10
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -61,10 +64,18 @@ abstract class AppDatabase : RoomDatabase() {
                             if (db.routineDao().routineCount() == 0) {
                                 seedSampleRoutine(db.routineDao())
                             }
+                            if (db.streakDao().streakCount() == 0) {
+                                db.streakDao().insertStreak(
+                                    StreakEntity(name = "My Streak", startDate = todayKeyForSeed())
+                                )
+                            }
                         }
                     }
             }
         }
+
+        private fun todayKeyForSeed(): String =
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
         private suspend fun seedSampleRoutine(dao: RoutineDao) {
             dao.saveRoutine(

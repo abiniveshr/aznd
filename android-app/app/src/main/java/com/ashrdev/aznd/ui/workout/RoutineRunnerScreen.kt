@@ -1,7 +1,5 @@
 package com.ashrdev.aznd.ui.workout
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,6 +53,7 @@ import androidx.core.net.toUri
 import com.ashrdev.aznd.data.workout.ActiveSetEntity
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SetMode
+import com.ashrdev.aznd.ui.common.rememberImagePicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,25 +62,14 @@ fun RoutineRunnerScreen(
     onBack: () -> Unit,
     onFinished: (Long) -> Unit
 ) {
-    val context = LocalContext.current
     val active by viewModel.activeSession.collectAsState()
-    var pendingPhotoUri by remember { mutableStateOf<String?>(null) }
     var showDiscard by remember { mutableStateOf(false) }
     var showReplacePhoto by remember { mutableStateOf(false) }
     var previousByExercise by remember { mutableStateOf<Map<String, List<LoggedSetEntity>>>(emptyMap()) }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) viewModel.attachPhoto(pendingPhotoUri)
-        pendingPhotoUri = null
-    }
-
-    fun launchCamera() {
-        val uri = PhotoStore.newPhotoUri(context)
-        pendingPhotoUri = uri.toString()
-        cameraLauncher.launch(uri)
-    }
+    val imagePicker = rememberImagePicker(
+        onImagePicked = { uri -> viewModel.attachPhoto(uri.toString()) }
+    )
 
     val session = active
     LaunchedEffect(session) {
@@ -118,11 +106,11 @@ fun RoutineRunnerScreen(
         AlertDialog(
             onDismissRequest = { showReplacePhoto = false },
             title = { Text("Replace photo?") },
-            text = { Text("This session already has a photo. Taking a new one will replace it.") },
+            text = { Text("This session already has a photo. Choosing a new one will replace it.") },
             confirmButton = {
                 TextButton(onClick = {
                     showReplacePhoto = false
-                    launchCamera()
+                    imagePicker.launch()
                 }) { Text("Replace") }
             },
             dismissButton = {
@@ -144,12 +132,12 @@ fun RoutineRunnerScreen(
                 actions = {
                     IconButton(onClick = {
                         if (session.session.photoUri != null) showReplacePhoto = true
-                        else launchCamera()
+                        else imagePicker.launch()
                     }) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = "Add photo")
                     }
                     IconButton(onClick = { showDiscard = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Discard session", tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.Default.Delete, contentDescription = "Discard session")
                     }
                     TextButton(onClick = { viewModel.finishSession(onFinished) }) {
                         Text("Finish")

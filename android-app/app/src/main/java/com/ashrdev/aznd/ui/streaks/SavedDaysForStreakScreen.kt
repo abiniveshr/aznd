@@ -42,16 +42,12 @@ fun SavedDaysForStreakScreen(
     onBack: () -> Unit
 ) {
     var streakName by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf("") }
 
     LaunchedEffect(streakId) {
-        val s = viewModel.getStreak(streakId)
-        streakName = s?.name ?: ""
-        startDate = s?.startDate ?: todayKey()
+        streakName = viewModel.getStreak(streakId)?.name ?: ""
     }
 
     val savedDays by viewModel.savedDaysForStreak(streakId).collectAsState(initial = emptyList())
-    val breaksList by viewModel.breaksForStreak(streakId).collectAsState(initial = emptyList())
 
     Scaffold(
         topBar = {
@@ -84,23 +80,14 @@ fun SavedDaysForStreakScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(savedDays, key = { it.date }) { day ->
-                val countAtDay = computeCurrentStreak(startDate, breaksList.toSet(), day.date)
-                SavedDayCard(
-                    day = day,
-                    streakCount = countAtDay,
-                    onClick = { onOpenDay(streakId, day.date) }
-                )
+                SavedDayCard(day = day, onClick = { onOpenDay(streakId, day.date) })
             }
         }
     }
 }
 
 @Composable
-private fun SavedDayCard(
-    day: StreakSavedDayEntity,
-    streakCount: Int,
-    onClick: () -> Unit
-) {
+private fun SavedDayCard(day: StreakSavedDayEntity, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -116,7 +103,7 @@ private fun SavedDayCard(
             Column {
                 Text(displayDate(day.date), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "$streakCount day${if (streakCount == 1) "" else "s"}",
+                    "${day.streakCountAtSave} day${if (day.streakCountAtSave == 1) "" else "s"}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
