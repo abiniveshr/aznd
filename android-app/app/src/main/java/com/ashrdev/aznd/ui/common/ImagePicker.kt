@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.common
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,17 +42,15 @@ fun rememberImagePicker(
     }
 
     fun launchCrop(sourceUri: Uri) {
-        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+        val dir = File(context.filesDir, "picked_images").apply { mkdirs() }
         val destFile = File(dir, "crop_${System.currentTimeMillis()}.jpg")
         val destUri = FileProvider.getUriForFile(context, PhotoStore.authority(context), destFile)
-        val options = UCrop.Options().apply {
-            setFreeStyleCropEnabled(aspect == null)
-        }
         var uCrop = UCrop.of(sourceUri, destUri)
-            .withOptions(options)
             .withMaxResultSize(outputWidth, outputHeight)
         if (aspect != null) uCrop = uCrop.withAspectRatio(aspect.first, aspect.second)
-        cropLauncher.launch(uCrop.getIntent(context))
+        val intent = uCrop.getIntent(context)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        cropLauncher.launch(intent)
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(

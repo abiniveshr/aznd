@@ -58,5 +58,5 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.github.yalantis:ucrop:2.2.11")
+implementation("com.github.yalantis:ucrop:2.2.11-native")
 }
