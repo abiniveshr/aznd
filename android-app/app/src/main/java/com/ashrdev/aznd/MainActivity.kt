@@ -60,7 +60,11 @@ class MainActivity : ComponentActivity() {
                     popExitTransition = { fadeOut(animationSpec = tween(30)) }
                 ) {
                     composable(Screen.Home.route) {
-                        HomeScreen(onNavigate = { route -> navController.navigate(route) })
+                        HomeScreen(
+                            workoutViewModel = workoutViewModel,
+                            streakViewModel = streakViewModel,
+                            onNavigate = { route -> navController.navigate(route) }
+                        )
                     }
                     composable(Screen.WorkoutLog.route) {
                         WorkoutLogScreen(

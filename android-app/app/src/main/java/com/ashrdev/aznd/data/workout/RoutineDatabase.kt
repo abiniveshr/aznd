@@ -16,6 +16,14 @@ interface RoutineDao {
     fun getWorkoutHistorySummaries(): Flow<List<WorkoutHistorySummary>>
 
     @Transaction
+    @Query("SELECT * FROM routines ORDER BY name")
+    fun getRoutinesWithExercises(): Flow<List<RoutineWithExercises>>
+
+    @Transaction
+    @Query("SELECT * FROM routines ORDER BY name")
+    suspend fun getAllRoutinesWithExercisesOnce(): List<RoutineWithExercises>
+
+    @Transaction
     @Query("SELECT * FROM sessions WHERE routineId = :routineId ORDER BY startedAt DESC LIMIT 1")
     suspend fun getLatestSessionForRoutine(routineId: Long): SessionWithSets?
 
@@ -57,10 +65,6 @@ interface RoutineDao {
     suspend fun routineCount(): Int
 
     @Transaction
-    @Query("SELECT * FROM routines ORDER BY name")
-    fun getRoutinesWithExercises(): Flow<List<RoutineWithExercises>>
-
-    @Transaction
     @Query("SELECT * FROM routines WHERE id = :routineId")
     suspend fun getRoutineWithExercises(routineId: Long): RoutineWithExercises?
 
@@ -85,12 +89,30 @@ interface RoutineDao {
     suspend fun getRecentSets(name: String, limit: Int): List<LoggedSetEntity>
 
     @Transaction
-    @Query("SELECT * FROM active_session LIMIT 1")
+    suspend fun saveRoutine(routine: RoutineEntity, exercises: List<ExerciseWithSets>) {
+        val routineId = if (routine.id == 0L) {
+            insertRoutine(routine)
+        } else {
+            updateRoutine(routine)
+            deleteExercisesForRoutine(routine.id)
+            routine.id
+        }
+        exercises.forEachIndexed { exIndex, ews ->
+            val exId = insertExercise(ews.exercise.copy(routineId = routineId, orderIndex = exIndex))
+            val setEntities = ews.sets.mapIndexed { setIndex, set ->
+                set.copy(exerciseId = exId, orderIndex = setIndex)
+            }
+            insertExerciseSets(setEntities)
+        }
+    }
+
+    @Transaction
+    @Query("SELECT * FROM active_session")
     fun observeActiveSession(): Flow<List<ActiveSessionWithSets>>
 
     @Transaction
-    @Query("SELECT * FROM active_session LIMIT 1")
-    suspend fun getActiveSession(): ActiveSessionWithSets?
+    @Query("SELECT * FROM active_session WHERE id = 1")
+    suspend fun getActiveSessionOnce(): ActiveSessionWithSets?
 
     @Insert
     suspend fun insertActiveSession(session: ActiveSessionEntity)
@@ -98,32 +120,8 @@ interface RoutineDao {
     @Insert
     suspend fun insertActiveSets(sets: List<ActiveSetEntity>)
 
-    @Update
-    suspend fun updateActiveSet(set: ActiveSetEntity)
-
-    @Query("UPDATE active_session SET photoUri = :uri WHERE id = 1")
-    suspend fun setActivePhoto(uri: String?)
-
     @Query("DELETE FROM active_session")
     suspend fun clearActiveSession()
-
-    @Transaction
-    suspend fun saveRoutine(routine: RoutineEntity, exercises: List<ExerciseWithSets>): Long {
-        val routineId = if (routine.id == 0L) insertRoutine(routine) else {
-            updateRoutine(routine)
-            routine.id
-        }
-        deleteExercisesForRoutine(routineId)
-        exercises.forEachIndexed { exIndex, ews ->
-            val exerciseId = insertExercise(
-                ews.exercise.copy(id = 0, routineId = routineId, orderIndex = exIndex)
-            )
-            insertExerciseSets(
-                ews.sets.mapIndexed { i, s -> s.copy(id = 0, exerciseId = exerciseId, orderIndex = i) }
-            )
-        }
-        return routineId
-    }
 
     @Transaction
     suspend fun startActiveSession(session: ActiveSessionEntity, sets: List<ActiveSetEntity>) {
@@ -132,9 +130,15 @@ interface RoutineDao {
         insertActiveSets(sets)
     }
 
+    @Update
+    suspend fun updateActiveSet(set: ActiveSetEntity)
+
+    @Query("UPDATE active_session SET photoUri = :uri WHERE id = 1")
+    suspend fun setActivePhoto(uri: String?)
+
     @Transaction
     suspend fun finishActiveSession(): Long? {
-        val active = getActiveSession() ?: return null
+        val active = getActiveSessionOnce() ?: return null
         val sessionId = insertSession(
             SessionEntity(
                 routineId = active.session.routineId,
@@ -144,20 +148,21 @@ interface RoutineDao {
                 photoUri = active.session.photoUri
             )
         )
-        val ordered = active.sets.sortedWith(compareBy({ it.exerciseIndex }, { it.setIndex }))
-        insertLoggedSets(
-            ordered.mapIndexed { i, s ->
-                LoggedSetEntity(
-                    sessionId = sessionId,
-                    exerciseName = s.exerciseName,
-                    mode = s.mode,
-                    value = s.valueText.toIntOrNull() ?: 0,
-                    weight = s.weightText.toDoubleOrNull() ?: 0.0,
-                    rpe = s.rpeText.toDoubleOrNull()?.coerceIn(0.0, 10.0),
-                    orderIndex = i
-                )
-            }
-        )
+        val loggedSets = active.sets.mapIndexed { index, activeSet ->
+            val valInt = activeSet.valueText.toIntOrNull() ?: 0
+            val weightDbl = activeSet.weightText.toDoubleOrNull() ?: 0.0
+            val rpeDbl = activeSet.rpeText.toDoubleOrNull()
+            LoggedSetEntity(
+                sessionId = sessionId,
+                exerciseName = activeSet.exerciseName,
+                mode = activeSet.mode,
+                value = valInt,
+                weight = weightDbl,
+                rpe = rpeDbl,
+                orderIndex = index
+            )
+        }
+        insertLoggedSets(loggedSets)
         clearActiveSession()
         return sessionId
     }

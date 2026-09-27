@@ -19,6 +19,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class TopExerciseStat(
+    val routineId: Long,
+    val exerciseId: Long,
+    val exerciseName: String,
+    val bestPoint: SessionE1rmPoint
+)
+
 class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
     val routines: StateFlow<List<RoutineWithExercises>> = dao.getRoutinesWithExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -48,6 +55,20 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
         exerciseName: String
     ): List<ExerciseSetPoint> =
         dao.getExerciseHistory(routineId, exerciseName)
+
+    // Best estimated-1RM set per exercise, across every routine, heaviest first.
+    suspend fun getTopExercises(limit: Int = 3): List<TopExerciseStat> {
+        val routines = dao.getAllRoutinesWithExercisesOnce()
+        return routines
+            .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.routine.id, ews.exercise.id, ews.exercise.name) } }
+            .mapNotNull { (routineId, exerciseId, exerciseName) ->
+                val best = buildSessionE1rmPoints(dao.getExerciseHistory(routineId, exerciseName))
+                    .maxByOrNull { it.e1rm }
+                best?.let { TopExerciseStat(routineId, exerciseId, exerciseName, it) }
+            }
+            .sortedByDescending { it.bestPoint.e1rm }
+            .take(limit)
+    }
 
     fun saveRoutine(
         id: Long,

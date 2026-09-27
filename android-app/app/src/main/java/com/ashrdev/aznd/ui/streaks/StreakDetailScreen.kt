@@ -73,7 +73,11 @@ fun StreakDetailScreen(
         aspect = 16f to 9f,
         outputWidth = 1200,
         outputHeight = 675,
-        onImagePicked = { uri -> viewModel.updateStreakPhoto(streakId, uri.toString()) }
+        onImagePicked = { uri ->
+            val newUri = uri.toString()
+            viewModel.updateStreakPhoto(streakId, newUri)
+            streak = streak?.copy(photoUri = newUri)
+        }
     )
 
     if (!loaded) return
@@ -164,6 +168,7 @@ fun StreakDetailScreen(
                                     onClick = {
                                         menuExpanded = false
                                         viewModel.updateStreakPhoto(streakId, null)
+                                        streak = current.copy(photoUri = null)
                                     }
                                 )
                             }
