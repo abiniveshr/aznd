@@ -77,4 +77,5 @@ progress:
     21/08/2026:
         -completed streak manager app with day-saving, pictures and graphical calendar views
 
-    22/08/2026:
+    22/08/2026-29/08/2026:
+        -optimised data schema, better UI, better image handling, better navigation, dedicated history and dashboard screen, theming and customization of app
