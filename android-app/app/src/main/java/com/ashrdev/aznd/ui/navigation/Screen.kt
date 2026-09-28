@@ -2,6 +2,8 @@ package com.ashrdev.aznd.ui.navigation
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
+    object Settings : Screen("settings")
+    object Appearance : Screen("settings_appearance")
     object WorkoutLog : Screen("workout_log")
     object History : Screen("history")
     object RoutineHistory : Screen("routine_history/{routineId}") {

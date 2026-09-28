@@ -19,12 +19,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,7 +56,6 @@ fun SavedDayDetailScreen(
     var streakCount by remember { mutableStateOf(0) }
     var isExisting by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
-    var showReplacePhoto by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
 
     val imagePicker = rememberImagePicker(
@@ -75,23 +74,6 @@ fun SavedDayDetailScreen(
     }
 
     if (!loaded) return
-
-    if (showReplacePhoto) {
-        AlertDialog(
-            onDismissRequest = { showReplacePhoto = false },
-            title = { Text("Replace photo?") },
-            text = { Text("This day already has a photo. Choosing a new one will replace it.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showReplacePhoto = false
-                    imagePicker.launch()
-                }) { Text("Replace") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReplacePhoto = false }) { Text("Cancel") }
-            }
-        )
-    }
 
     if (showDelete) {
         AlertDialog(
@@ -173,17 +155,16 @@ fun SavedDayDetailScreen(
             photoUri?.let { uri ->
                 item { SessionPhotoCard(uri) }
             }
-            item {
-                OutlinedButton(
-                    onClick = {
-                        if (photoUri != null) showReplacePhoto = true
-                        else imagePicker.launch()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (photoUri != null) "Replace photo" else "Add photo")
+            if (photoUri == null) {
+                item {
+                    OutlinedButton(
+                        onClick = { imagePicker.launch() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add photo")
+                    }
                 }
             }
         }

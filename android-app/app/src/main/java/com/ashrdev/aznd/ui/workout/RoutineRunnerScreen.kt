@@ -22,16 +22,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
+import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,6 +54,7 @@ import com.ashrdev.aznd.data.workout.ActiveSetEntity
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SetMode
 import com.ashrdev.aznd.ui.common.rememberImagePicker
+import com.ashrdev.aznd.ui.common.PhotoViewerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -302,33 +303,6 @@ fun SessionPhotoCard(uriString: String, maxHeight: Int = 240) {
     }
 
     if (showFull) {
-        FullPhotoDialog(uriString = uriString, onDismiss = { showFull = false })
-    }
-}
-
-@Composable
-private fun FullPhotoDialog(uriString: String, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val bitmap = remember(uriString) {
-        PhotoStore.loadBitmap(context, uriString.toUri(), maxDimension = 2000)
-    }
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .clickable(onClick = onDismiss)
-        ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Session photo",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                )
-            }
-        }
+        PhotoViewerDialog(uriString = uriString, onDismiss = { showFull = false })
     }
 }

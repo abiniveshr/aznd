@@ -3,6 +3,9 @@ package com.ashrdev.aznd
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.ashrdev.aznd.ui.settings.ThemeSettingsScreen
+import com.ashrdev.aznd.ui.settings.SettingsScreen
+import com.ashrdev.aznd.ui.theme.ThemeStore
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -41,6 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ThemeStore.init(this)
         val database = AppDatabase.getInstance(this)
         val dao = database.routineDao()
         val streakDao = database.streakDao()
@@ -65,6 +69,15 @@ class MainActivity : ComponentActivity() {
                             streakViewModel = streakViewModel,
                             onNavigate = { route -> navController.navigate(route) }
                         )
+                    }
+                    composable(Screen.Settings.route) {
+                        SettingsScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenAppearance = { navController.navigate(Screen.Appearance.route) }
+                        )
+                    }
+                    composable(Screen.Appearance.route) {
+                        ThemeSettingsScreen(onBack = { navController.popBackStack() })
                     }
                     composable(Screen.WorkoutLog.route) {
                         WorkoutLogScreen(
