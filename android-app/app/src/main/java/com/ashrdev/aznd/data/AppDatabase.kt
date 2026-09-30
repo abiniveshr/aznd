@@ -19,8 +19,8 @@ import com.ashrdev.aznd.data.workout.ExerciseEntity
 import com.ashrdev.aznd.data.workout.ExerciseSetEntity
 import com.ashrdev.aznd.data.workout.ExerciseWithSets
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
-import com.ashrdev.aznd.data.workout.RoutineDao
-import com.ashrdev.aznd.data.workout.RoutineEntity
+import com.ashrdev.aznd.data.workout.WorkoutDao
+import com.ashrdev.aznd.data.workout.WorkoutEntity
 import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.SetMode
 import java.text.SimpleDateFormat
@@ -29,7 +29,7 @@ import java.util.Locale
 
 @Database(
     entities = [
-        RoutineEntity::class,
+        WorkoutEntity::class,
         ExerciseEntity::class,
         ExerciseSetEntity::class,
         SessionEntity::class,
@@ -40,11 +40,11 @@ import java.util.Locale
         StreakBreakEntity::class,
         StreakSavedDayEntity::class
     ],
-    version = 10
+    version = 11
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun routineDao(): RoutineDao
+    abstract fun WorkoutDao(): WorkoutDao
     abstract fun streakDao(): StreakDao
 
     companion object {
@@ -61,8 +61,8 @@ abstract class AppDatabase : RoomDatabase() {
                     .also { db ->
                         INSTANCE = db
                         CoroutineScope(Dispatchers.IO).launch {
-                            if (db.routineDao().routineCount() == 0) {
-                                seedSampleRoutine(db.routineDao())
+                            if (db.WorkoutDao().WorkoutCount() == 0) {
+                                seedSampleWorkout(db.WorkoutDao())
                             }
                             if (db.streakDao().streakCount() == 0) {
                                 db.streakDao().insertStreak(
@@ -77,16 +77,16 @@ abstract class AppDatabase : RoomDatabase() {
         private fun todayKeyForSeed(): String =
             SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
-        private suspend fun seedSampleRoutine(dao: RoutineDao) {
-            dao.saveRoutine(
-                RoutineEntity(name = "Workout 1"),
+        private suspend fun seedSampleWorkout(dao: WorkoutDao) {
+            dao.saveWorkout(
+                WorkoutEntity(name = "Workout 1"),
                 listOf(
                     ExerciseWithSets(
-                        exercise = ExerciseEntity(routineId = 0, name = "Exercise 1", orderIndex = 0),
+                        exercise = ExerciseEntity(WorkoutId = 0, name = "Exercise 1", orderIndex = 0),
                         sets = List(3) { i -> ExerciseSetEntity(exerciseId = 0, mode = SetMode.REPS, orderIndex = i) }
                     ),
                     ExerciseWithSets(
-                        exercise = ExerciseEntity(routineId = 0, name = "Exercise 2", orderIndex = 1),
+                        exercise = ExerciseEntity(WorkoutId = 0, name = "Exercise 2", orderIndex = 1),
                         sets = List(3) { i -> ExerciseSetEntity(exerciseId = 0, mode = SetMode.REPS, orderIndex = i) }
                     )
                 )

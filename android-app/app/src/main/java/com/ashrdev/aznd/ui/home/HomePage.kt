@@ -34,7 +34,7 @@ private data class ModuleEntry(
 )
 
 private val modules = listOf(
-    ModuleEntry("Workouts", "Routines and sessions", Icons.Default.FitnessCenter, Screen.WorkoutLog.route),
+    ModuleEntry("Workouts", "Workouts and sessions", Icons.Default.FitnessCenter, Screen.WorkoutLog.route),
     ModuleEntry("Streaks", "Habits and calendars", Icons.Default.LocalFireDepartment, Screen.Streaks.route)
 )
 

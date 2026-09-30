@@ -11,16 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Photo
-import com.ashrdev.aznd.ui.components.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,14 +27,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.components.Card
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavedDaysForStreakScreen(
     streakId: Long,
     viewModel: StreakViewModel,
     onOpenDay: (Long, String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     var streakName by remember { mutableStateOf("") }
 
@@ -49,38 +48,32 @@ fun SavedDaysForStreakScreen(
 
     val savedDays by viewModel.savedDaysForStreak(streakId).collectAsState(initial = emptyList())
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(streakName) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
+    ScreenScaffold(
+        title = streakName,
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        third = ThirdAction(icon = Icons.Default.Share, label = "Share", enabled = false, onClick = {})
+    ) { padding ->
         if (savedDays.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
                     .padding(24.dp)
             ) {
                 Text("No saved days for this streak yet.", style = MaterialTheme.typography.bodyMedium)
             }
-            return@Scaffold
-        }
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(savedDays, key = { it.date }) { day ->
-                SavedDayCard(day = day, onClick = { onOpenDay(streakId, day.date) })
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(savedDays, key = { it.date }) { day ->
+                    SavedDayCard(day = day, onClick = { onOpenDay(streakId, day.date) })
+                }
             }
         }
     }

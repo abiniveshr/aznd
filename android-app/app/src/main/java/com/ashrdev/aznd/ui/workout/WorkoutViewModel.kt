@@ -7,11 +7,12 @@ import com.ashrdev.aznd.data.workout.ActiveSessionWithSets
 import com.ashrdev.aznd.data.workout.ExerciseSetPoint
 import com.ashrdev.aznd.data.workout.ExerciseWithSets
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
-import com.ashrdev.aznd.data.workout.RoutineDao
-import com.ashrdev.aznd.data.workout.RoutineEntity
-import com.ashrdev.aznd.data.workout.RoutineWithExercises
+import com.ashrdev.aznd.data.workout.WorkoutDao
+import com.ashrdev.aznd.data.workout.WorkoutEntity
+import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.WorkoutHistorySummary
+import com.ashrdev.aznd.data.workout.RecentWorkoutSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,14 +21,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class TopExerciseStat(
-    val routineId: Long,
+    val WorkoutId: Long,
     val exerciseId: Long,
     val exerciseName: String,
     val bestPoint: SessionE1rmPoint
 )
 
-class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
-    val routines: StateFlow<List<RoutineWithExercises>> = dao.getRoutinesWithExercises()
+class WorkoutViewModel(private val dao: WorkoutDao) : ViewModel() {
+    val Workouts: StateFlow<List<WorkoutWithExercises>> = dao.getWorkoutsWithExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val activeSession: StateFlow<ActiveSessionWithSets?> = dao.observeActiveSession()
@@ -38,46 +39,46 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
         dao.getWorkoutHistorySummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun sessionsForRoutine(routineId: Long): Flow<List<SessionWithSets>> =
-        dao.getSessionsForRoutine(routineId)
-
-    suspend fun getRoutine(id: Long): RoutineWithExercises? =
-        dao.getRoutineWithExercises(id)
+    fun sessionsForWorkout(WorkoutId: Long): Flow<List<SessionWithSets>> =
+        dao.getSessionsForWorkout(WorkoutId)
+    suspend fun getMostRecentSession(): RecentWorkoutSession? = dao.getMostRecentSession()
+    suspend fun getWorkout(id: Long): WorkoutWithExercises? =
+        dao.getWorkoutWithExercises(id)
 
     suspend fun getSession(id: Long): SessionWithSets? =
         dao.getSession(id)
 
-    suspend fun getPreviousSession(routineId: Long): SessionWithSets? =
-        dao.getLatestSessionForRoutine(routineId)
+    suspend fun getPreviousSession(WorkoutId: Long): SessionWithSets? =
+        dao.getLatestSessionForWorkout(WorkoutId)
 
     suspend fun getExerciseHistory(
-        routineId: Long,
+        WorkoutId: Long,
         exerciseName: String
     ): List<ExerciseSetPoint> =
-        dao.getExerciseHistory(routineId, exerciseName)
+        dao.getExerciseHistory(WorkoutId, exerciseName)
 
-    // Best estimated-1RM set per exercise, across every routine, heaviest first.
+    // Best estimated-1RM set per exercise, across every Workout, heaviest first.
     suspend fun getTopExercises(limit: Int = 3): List<TopExerciseStat> {
-        val routines = dao.getAllRoutinesWithExercisesOnce()
-        return routines
-            .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.routine.id, ews.exercise.id, ews.exercise.name) } }
-            .mapNotNull { (routineId, exerciseId, exerciseName) ->
-                val best = buildSessionE1rmPoints(dao.getExerciseHistory(routineId, exerciseName))
+        val Workouts = dao.getAllWorkoutsWithExercisesOnce()
+        return Workouts
+            .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.Workout.id, ews.exercise.id, ews.exercise.name) } }
+            .mapNotNull { (WorkoutId, exerciseId, exerciseName) ->
+                val best = buildSessionE1rmPoints(dao.getExerciseHistory(WorkoutId, exerciseName))
                     .maxByOrNull { it.e1rm }
-                best?.let { TopExerciseStat(routineId, exerciseId, exerciseName, it) }
+                best?.let { TopExerciseStat(WorkoutId, exerciseId, exerciseName, it) }
             }
             .sortedByDescending { it.bestPoint.e1rm }
             .take(limit)
     }
 
-    fun saveRoutine(
+    fun saveWorkout(
         id: Long,
         name: String,
         exercises: List<ExerciseWithSets>
     ) {
         viewModelScope.launch {
-            dao.saveRoutine(
-                RoutineEntity(
+            dao.saveWorkout(
+                WorkoutEntity(
                     id = id,
                     name = name
                 ),
@@ -86,9 +87,9 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
         }
     }
 
-    fun deleteRoutine(id: Long) {
+    fun deleteWorkout(id: Long) {
         viewModelScope.launch {
-            dao.deleteRoutine(id)
+            dao.deleteWorkout(id)
         }
     }
 
@@ -98,10 +99,10 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
         }
     }
 
-    fun startSession(routine: RoutineWithExercises, onStarted: () -> Unit = {}) {
+    fun startSession(Workout: WorkoutWithExercises, onStarted: () -> Unit = {}) {
         viewModelScope.launch {
             val sets = mutableListOf<com.ashrdev.aznd.data.workout.ActiveSetEntity>()
-            routine.exercises
+            Workout.exercises
                 .sortedBy { it.exercise.orderIndex }
                 .forEachIndexed { exIndex, ews ->
                     ews.sets
@@ -119,8 +120,8 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
                 }
             dao.startActiveSession(
                 com.ashrdev.aznd.data.workout.ActiveSessionEntity(
-                    routineId = routine.routine.id,
-                    routineName = routine.routine.name,
+                    WorkoutId = Workout.Workout.id,
+                    WorkoutName = Workout.Workout.name,
                     startedAt = System.currentTimeMillis()
                 ),
                 sets
@@ -129,8 +130,8 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
         }
     }
     
-    fun deleteHistoryForRoutine(routineId: Long) {
-        viewModelScope.launch { dao.deleteSessionsForRoutine(routineId) }
+    fun deleteHistoryForWorkout(WorkoutId: Long) {
+        viewModelScope.launch { dao.deleteSessionsForWorkout(WorkoutId) }
     }
 
     fun updateActiveSet(
@@ -161,7 +162,7 @@ class WorkoutViewModel(private val dao: RoutineDao) : ViewModel() {
 }
 
 class WorkoutViewModelFactory(
-    private val dao: RoutineDao
+    private val dao: WorkoutDao
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")

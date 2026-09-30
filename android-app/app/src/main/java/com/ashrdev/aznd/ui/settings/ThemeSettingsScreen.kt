@@ -21,14 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -48,11 +44,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
-import com.ashrdev.aznd.ui.components.TopAppBar
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.ThemeMode
 import com.ashrdev.aznd.ui.theme.ThemeStore
@@ -63,8 +59,13 @@ import com.ashrdev.aznd.ui.theme.toJson
 import com.ashrdev.aznd.ui.theme.withColor
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ThemeSettingsScreen(onBack: () -> Unit) {
+fun ThemeSettingsScreen(
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
     val context = LocalContext.current
     val settings by ThemeStore.settings.collectAsState()
     var editingDark by remember { mutableStateOf(false) }
@@ -139,23 +140,15 @@ fun ThemeSettingsScreen(onBack: () -> Unit) {
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Appearance") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+    ScreenScaffold(
+        title = "Appearance",
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        settingsEnabled = false
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Pinned preview: stays put while the options below scroll.
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -200,7 +193,7 @@ fun ThemeSettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 SectionTitle("Theme mode")
@@ -283,6 +276,7 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SegmentedChoice(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {

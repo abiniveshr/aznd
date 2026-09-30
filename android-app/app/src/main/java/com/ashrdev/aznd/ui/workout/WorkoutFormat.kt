@@ -49,7 +49,7 @@ fun formatExerciseBlock(exerciseName: String, sets: List<LoggedSetEntity>): Stri
 }
 
 fun formatSessionText(session: SessionEntity, sets: List<LoggedSetEntity>): String = buildString {
-    appendLine(session.routineName)
+    appendLine(session.WorkoutName)
     appendLine(formatTimestamp(session.startedAt) + " – " + formatClock(session.finishedAt))
     val elapsed = ((session.finishedAt - session.startedAt) / 1000L).toInt()
     appendLine("Duration: ${formatDuration(elapsed)}")
@@ -66,7 +66,7 @@ fun formatExerciseShare(
     exerciseName: String,
     sets: List<LoggedSetEntity>
 ): String = buildString {
-    appendLine("${session.routineName} · ${formatTimestamp(session.startedAt)}")
+    appendLine("${session.WorkoutName} · ${formatTimestamp(session.startedAt)}")
     appendLine()
     append(formatExerciseBlock(exerciseName, sets))
     appendLine()
@@ -79,7 +79,7 @@ fun formatSingleSetShare(
     index: Int,
     set: LoggedSetEntity
 ): String = buildString {
-    appendLine("${session.routineName} · ${formatTimestamp(session.startedAt)}")
+    appendLine("${session.WorkoutName} · ${formatTimestamp(session.startedAt)}")
     appendLine("$exerciseName — Set ${index + 1}: ${formatSet(set)}")
     append("logged with aznd")
 }

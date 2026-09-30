@@ -6,17 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import com.ashrdev.aznd.ui.components.OutlinedButton
-import com.ashrdev.aznd.ui.components.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,14 +18,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
+import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Back in the bottom bar cancels. Save stays in the top bar so it's reachable with the keyboard up.
 @Composable
 fun StreakEditorScreen(
     viewModel: StreakViewModel,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
@@ -46,33 +44,27 @@ fun StreakEditorScreen(
         onImagePicked = { uri -> photoUri = uri.toString() }
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("New Streak") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = {
-                        if (name.isNotBlank()) {
-                            viewModel.createStreak(name.trim(), startDate, photoUri)
-                            onDone()
-                        }
-                    }) {
-                        Text("Save")
-                    }
+    ScreenScaffold(
+        title = "New Streak",
+        onBack = onDone,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        topBarActions = {
+            TextButton(onClick = {
+                if (name.isNotBlank()) {
+                    viewModel.createStreak(name.trim(), startDate, photoUri)
+                    onDone()
                 }
-            )
+            }) {
+                Text("Save")
+            }
         }
-    ) { innerPadding ->
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             photoUri?.let { uri -> StreakBanner(uri) }

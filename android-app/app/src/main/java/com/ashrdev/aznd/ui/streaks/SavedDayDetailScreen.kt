@@ -5,26 +5,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.ashrdev.aznd.ui.components.OutlinedButton
-import com.ashrdev.aznd.ui.components.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,19 +27,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
+import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.workout.SessionPhotoCard
 import com.ashrdev.aznd.ui.workout.SessionShare
 
 private const val REMARK_LIMIT = 50
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Back in the bottom bar cancels. Save, Share and Delete stay in the top bar.
 @Composable
 fun SavedDayDetailScreen(
     streakId: Long,
     date: String,
     viewModel: StreakViewModel,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     var streakName by remember { mutableStateOf("") }
@@ -93,47 +90,44 @@ fun SavedDayDetailScreen(
         )
     }
 
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        topBar = {
-            TopAppBar(
-                title = { Text(displayDate(date)) },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel")
-                    }
-                },
-                actions = {
-                    if (isExisting) {
-                        IconButton(onClick = {
-                            SessionShare.share(
-                                context = context,
-                                subject = "$streakName · ${displayDate(date)}",
-                                body = "$streakName · Day $streakCount\n${displayDate(date)}\n\n$remark\n\nlogged with aznd",
-                                photoUri = photoUri?.toUri()
-                            )
-                        }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
-                        }
-                        IconButton(onClick = { showDelete = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    TextButton(onClick = {
-                        viewModel.saveDay(streakId, date, remark, photoUri)
-                        onDone()
-                    }) {
-                        Text("Save")
-                    }
+    ScreenScaffold(
+        title = displayDate(date),
+        onBack = onDone,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        topBarActions = {
+            if (isExisting) {
+                IconButton(onClick = {
+                    SessionShare.share(
+                        context = context,
+                        subject = "$streakName · ${displayDate(date)}",
+                        body = "$streakName · Day $streakCount\n${displayDate(date)}\n\n$remark\n\nlogged with aznd",
+                        photoUri = photoUri?.toUri()
+                    )
+                }) {
+                    Icon(Icons.Default.Share, contentDescription = "Share")
                 }
-            )
+                IconButton(onClick = { showDelete = true }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            TextButton(onClick = {
+                viewModel.saveDay(streakId, date, remark, photoUri)
+                onDone()
+            }) {
+                Text("Save")
+            }
         }
-    ) { innerPadding ->
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (isExisting) {

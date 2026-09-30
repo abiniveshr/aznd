@@ -6,30 +6,23 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.ashrdev.aznd.ui.components.OutlinedButton
-import com.ashrdev.aznd.ui.components.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,34 +36,42 @@ import com.ashrdev.aznd.data.workout.ExerciseEntity
 import com.ashrdev.aznd.data.workout.ExerciseSetEntity
 import com.ashrdev.aznd.data.workout.ExerciseWithSets
 import com.ashrdev.aznd.data.workout.SetMode
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 
 private data class EditableExercise(
     val name: String,
     val sets: List<SetMode>
 )
 
+// Back in the bottom bar cancels (same as the old X). Save and Delete stay in the top bar so
+// they're still reachable while the keyboard is open and the bottom bar is tucked away.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutineEditorScreen(
-    routineId: Long?,
+fun WorkoutEditorScreen(
+    workoutId: Long?,
     viewModel: WorkoutViewModel,
     onDone: () -> Unit,
-    onDeleted: () -> Unit
+    onDeleted: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
-        var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
     var exercises by remember {
         mutableStateOf(
-            if (routineId == null) listOf(EditableExercise("", listOf(SetMode.REPS)))
+            if (workoutId == null) listOf(EditableExercise("", listOf(SetMode.REPS)))
             else listOf()
         )
     }
-    var loaded by remember { mutableStateOf(routineId == null) }
+    var loaded by remember { mutableStateOf(workoutId == null) }
     var showDelete by remember { mutableStateOf(false) }
 
-    LaunchedEffect(routineId) {
-        if (routineId != null) {
-            viewModel.getRoutine(routineId)?.let { existing ->
-                name = existing.routine.name
+    LaunchedEffect(workoutId) {
+        if (workoutId != null) {
+            viewModel.getWorkout(workoutId)?.let { existing ->
+                name = existing.Workout.name
                 exercises = existing.exercises
                     .sortedBy { it.exercise.orderIndex }
                     .map { ews ->
@@ -89,12 +90,12 @@ fun RoutineEditorScreen(
     if (showDelete) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
-            title = { Text("Delete routine?") },
+            title = { Text("Delete workout?") },
             text = { Text("\"$name\" and its exercises will be deleted. This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     showDelete = false
-                    viewModel.deleteRoutine(routineId!!)
+                    viewModel.deleteWorkout(workoutId!!)
                     onDeleted()
                 }) { Text("Delete") }
             },
@@ -104,56 +105,53 @@ fun RoutineEditorScreen(
         )
     }
 
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        topBar = {
-            TopAppBar(
-                title = { Text(if (routineId == null) "New Routine" else "Edit Routine") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                    Icon(Icons.Default.Close, contentDescription = "Cancel")
-                    }
-                },
-                actions = {
-                    if (routineId != null) {
-                        IconButton(onClick = { showDelete = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete routine", tint = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    TextButton(onClick = {
-                        val payload = exercises.mapIndexed { exIndex, ex ->
-                            ExerciseWithSets(
-                                exercise = ExerciseEntity(
-                                    routineId = routineId ?: 0,
-                                    name = ex.name,
-                                    orderIndex = exIndex
-                                ),
-                                sets = ex.sets.mapIndexed { i, mode ->
-                                    ExerciseSetEntity(exerciseId = 0, mode = mode, orderIndex = i)
-                                }
-                            )
-                        }
-                        viewModel.saveRoutine(routineId ?: 0, name, payload)
-                        onDone()
-                    }) {
-                        Text("Save")
-                    }
+    ScreenScaffold(
+        title = if (workoutId == null) "New Workout" else "Edit Workout",
+        onBack = onDone,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        topBarActions = {
+            if (workoutId != null) {
+                IconButton(onClick = { showDelete = true }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete workout",
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
-            )
+            }
+            TextButton(onClick = {
+                val payload = exercises.mapIndexed { exIndex, ex ->
+                    ExerciseWithSets(
+                        exercise = ExerciseEntity(
+                            WorkoutId = workoutId ?: 0,
+                            name = ex.name,
+                            orderIndex = exIndex
+                        ),
+                        sets = ex.sets.mapIndexed { i, mode ->
+                            ExerciseSetEntity(exerciseId = 0, mode = mode, orderIndex = i)
+                        }
+                    )
+                }
+                viewModel.saveWorkout(workoutId ?: 0, name, payload)
+                onDone()
+            }) {
+                Text("Save")
+            }
         }
-    ) { innerPadding ->
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Routine name") },
+                    label = { Text("Workout name") },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -200,7 +198,11 @@ private fun ExerciseCard(
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete routine", tint = MaterialTheme.colorScheme.error)
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete exercise",
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             }
             exercise.sets.forEachIndexed { setIndex, mode ->

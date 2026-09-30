@@ -10,44 +10,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.components.TopAppBar
 
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenAppearance: () -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
+    ScreenScaffold(
+        title = "Settings",
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        settingsEnabled = false
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SettingsRow(

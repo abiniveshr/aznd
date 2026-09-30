@@ -11,19 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
-import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,16 +30,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SetMode
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.components.Card
 
 private enum class ChartRange { LIFETIME, LAST_5 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseViewScreen(
-    routineId: Long,
+    workoutId: Long,
     exerciseId: Long,
     viewModel: WorkoutViewModel,
     onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenSession: (Long) -> Unit
 ) {
     val context = LocalContext.current
@@ -56,17 +55,17 @@ fun ExerciseViewScreen(
     var loaded by remember { mutableStateOf(false) }
     var range by remember { mutableStateOf(ChartRange.LIFETIME) }
 
-    LaunchedEffect(routineId, exerciseId) {
-        val exercise = viewModel.getRoutine(routineId)?.exercises?.find { it.exercise.id == exerciseId }
+    LaunchedEffect(workoutId, exerciseId) {
+        val exercise = viewModel.getWorkout(workoutId)?.exercises?.find { it.exercise.id == exerciseId }
         if (exercise != null) {
             exerciseName = exercise.exercise.name
             setModes = exercise.sets.sortedBy { it.orderIndex }.map { it.mode }
-            previousSets = viewModel.getPreviousSession(routineId)
+            previousSets = viewModel.getPreviousSession(workoutId)
                 ?.sets
                 ?.sortedBy { it.orderIndex }
                 ?.filter { it.exerciseName == exerciseName }
                 ?: emptyList()
-            allPoints = buildSessionE1rmPoints(viewModel.getExerciseHistory(routineId, exerciseName))
+            allPoints = buildSessionE1rmPoints(viewModel.getExerciseHistory(workoutId, exerciseName))
         }
         loaded = true
     }
@@ -80,40 +79,33 @@ fun ExerciseViewScreen(
     val gridColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val backgroundColor = MaterialTheme.colorScheme.surface.toArgb()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(exerciseName) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (displayedPoints.isNotEmpty()) {
-                        IconButton(onClick = {
-                            val uri = ChartExport.exportChart(
-                                context, displayedPoints, lineColor, textColor, gridColor, backgroundColor
-                            )
-                            SessionShare.share(
-                                context = context,
-                                subject = "$exerciseName progress",
-                                body = "$exerciseName · ${if (range == ChartRange.LIFETIME) "lifetime" else "last 5 sessions"}\nEstimated 1 Rep Max = ${formatE1rm(displayedPoints.last().e1rm)}",
-                                photoUri = uri
-                            )
-                        }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share progress")
-                        }
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
+    ScreenScaffold(
+        title = exerciseName,
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        third = ThirdAction(
+            icon = Icons.Default.Share,
+            label = "Share",
+            enabled = displayedPoints.isNotEmpty(),
+            onClick = {
+                val uri = ChartExport.exportChart(
+                    context, displayedPoints, lineColor, textColor, gridColor, backgroundColor
+                )
+                SessionShare.share(
+                    context = context,
+                    subject = "$exerciseName progress",
+                    body = "$exerciseName · ${if (range == ChartRange.LIFETIME) "lifetime" else "last 5 sessions"}\nEstimated 1 Rep Max = ${formatE1rm(displayedPoints.last().e1rm)}",
+                    photoUri = uri
+                )
+            }
+        )
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (allPoints.isNotEmpty()) {

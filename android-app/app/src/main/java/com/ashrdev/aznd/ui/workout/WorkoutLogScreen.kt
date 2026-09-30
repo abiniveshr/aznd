@@ -12,25 +12,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,65 +34,70 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.data.workout.RoutineWithExercises
+import com.ashrdev.aznd.data.workout.WorkoutWithExercises
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.components.Card
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutLogScreen(
     viewModel: WorkoutViewModel,
-    onOpenRoutine: (Long) -> Unit,
-    onEditRoutine: (Long) -> Unit,
-    onAddRoutine: () -> Unit,
-    onOpenHistory: () -> Unit,
+    onOpenWorkout: (Long) -> Unit,
+    onEditWorkout: (Long) -> Unit,
+    onAddWorkout: () -> Unit,
     onOpenSession: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
-    val routines by viewModel.routines.collectAsState()
+    val workouts by viewModel.Workouts.collectAsState()
     val active by viewModel.activeSession.collectAsState()
-    var routineToDelete by remember { mutableStateOf<RoutineWithExercises?>(null) }
+    var workoutToDelete by remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
-    routineToDelete?.let { target ->
+    workoutToDelete?.let { target ->
         AlertDialog(
-            onDismissRequest = { routineToDelete = null },
-            title = { Text("Delete routine?") },
-            text = { Text("\"${target.routine.name}\" and its exercises will be deleted. This can't be undone.") },
+            onDismissRequest = { workoutToDelete = null },
+            title = { Text("Delete workout?") },
+            text = { Text("\"${target.Workout.name}\" and its exercises will be deleted. This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteRoutine(target.routine.id)
-                    routineToDelete = null
+                    viewModel.deleteWorkout(target.Workout.id)
+                    workoutToDelete = null
                 }) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { routineToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { workoutToDelete = null }) { Text("Cancel") }
             }
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Workouts") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenHistory) {
-                        Icon(Icons.Default.History, contentDescription = "History")
-                    }
-                    IconButton(onClick = onAddRoutine) {
-                        Icon(Icons.Default.Add, contentDescription = "Add routine")
-                    }
+    ScreenScaffold(
+        title = "Workouts",
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        third = ThirdAction(icon = Icons.Default.Add, label = "Add workout", onClick = onAddWorkout),
+        topBarActions = {
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
                 }
-            )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(text = { Text("Delete data") }, enabled = false, onClick = {})
+                    DropdownMenuItem(text = { Text("Export data") }, enabled = false, onClick = {})
+                }
+            }
         }
-    ) { innerPadding ->
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             active?.let { running ->
@@ -112,32 +111,29 @@ fun WorkoutLogScreen(
                             .clickable(onClick = onOpenSession)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Session in progress", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "Session in progress",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                "${running.session.routineName} · started ${formatClock(running.session.startedAt)}",
+                                "${running.session.WorkoutName} · started ${formatClock(running.session.startedAt)}",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
                 }
             }
-            if (routines.isEmpty()) {
+            if (workouts.isEmpty()) {
                 item {
                     Text(
-                        "No routines yet — tap + to add one.",
+                        "No workouts yet — tap Add workout to create one.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             } else {
-                items(routines, key = { it.routine.id }) { item ->
-                    RoutineCard(
+                items(workouts, key = { it.Workout.id }) { item ->
+                    WorkoutCard(
                         item = item,
-                        onOpen = { onOpenRoutine(item.routine.id) },
-                        onEdit = { onEditRoutine(item.routine.id) },
-                        onRequestDelete = { routineToDelete = item }
+                        onOpen = { onOpenWorkout(item.Workout.id) },
+                        onEdit = { onEditWorkout(item.Workout.id) },
+                        onRequestDelete = { workoutToDelete = item }
                     )
                 }
             }
@@ -146,8 +142,8 @@ fun WorkoutLogScreen(
 }
 
 @Composable
-private fun RoutineCard(
-    item: RoutineWithExercises,
+private fun WorkoutCard(
+    item: WorkoutWithExercises,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onRequestDelete: () -> Unit
@@ -167,7 +163,7 @@ private fun RoutineCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(item.routine.name, style = MaterialTheme.typography.titleMedium)
+                Text(item.Workout.name, style = MaterialTheme.typography.titleMedium)
                 Text(
                     "${item.exercises.size} exercises · ${item.exercises.sumOf { it.sets.size }} sets",
                     style = MaterialTheme.typography.bodySmall
@@ -175,7 +171,7 @@ private fun RoutineCard(
             }
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Routine options")
+                    Icon(Icons.Default.MoreVert, contentDescription = "Workout options")
                 }
                 DropdownMenu(
                     expanded = menuExpanded,

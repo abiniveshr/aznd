@@ -3,9 +3,6 @@ package com.ashrdev.aznd
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.ashrdev.aznd.ui.settings.ThemeSettingsScreen
-import com.ashrdev.aznd.ui.settings.SettingsScreen
-import com.ashrdev.aznd.ui.theme.ThemeStore
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -19,6 +16,8 @@ import androidx.navigation.navArgument
 import com.ashrdev.aznd.data.AppDatabase
 import com.ashrdev.aznd.ui.home.HomeScreen
 import com.ashrdev.aznd.ui.navigation.Screen
+import com.ashrdev.aznd.ui.settings.SettingsScreen
+import com.ashrdev.aznd.ui.settings.ThemeSettingsScreen
 import com.ashrdev.aznd.ui.streaks.SavedDayDetailScreen
 import com.ashrdev.aznd.ui.streaks.SavedDaysForStreakScreen
 import com.ashrdev.aznd.ui.streaks.SavedDaysScreen
@@ -28,17 +27,18 @@ import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.streaks.StreakViewModelFactory
 import com.ashrdev.aznd.ui.streaks.StreaksScreen
 import com.ashrdev.aznd.ui.theme.AzndTheme
+import com.ashrdev.aznd.ui.theme.ThemeStore
 import com.ashrdev.aznd.ui.workout.ExerciseViewScreen
 import com.ashrdev.aznd.ui.workout.HistoryScreen
-import com.ashrdev.aznd.ui.workout.RoutineEditorScreen
-import com.ashrdev.aznd.ui.workout.RoutineRunnerScreen
-import com.ashrdev.aznd.ui.workout.RoutineStatsScreen
-import com.ashrdev.aznd.ui.workout.RoutineViewScreen
 import com.ashrdev.aznd.ui.workout.SessionDetailScreen
 import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
+import com.ashrdev.aznd.ui.workout.WorkoutEditorScreen
 import com.ashrdev.aznd.ui.workout.WorkoutLogScreen
+import com.ashrdev.aznd.ui.workout.WorkoutRunnerScreen
+import com.ashrdev.aznd.ui.workout.WorkoutStatsScreen
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutViewModelFactory
+import com.ashrdev.aznd.ui.workout.WorkoutViewScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         ThemeStore.init(this)
         val database = AppDatabase.getInstance(this)
-        val dao = database.routineDao()
+        val dao = database.WorkoutDao()
         val streakDao = database.streakDao()
         setContent {
             AzndTheme {
@@ -55,13 +55,22 @@ class MainActivity : ComponentActivity() {
                     viewModel(factory = WorkoutViewModelFactory(dao))
                 val streakViewModel: StreakViewModel =
                     viewModel(factory = StreakViewModelFactory(streakDao))
+
+                // Shared by every screen's bottom bar.
+                val goBack: () -> Unit = { navController.popBackStack() }
+                val goHome: () -> Unit = { navController.popBackStack(Screen.Home.route, false) }
+                val openSettings: () -> Unit = {
+                    navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+                }
+
+                // Very subtle cross-fade between screens.
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Home.route,
-                    enterTransition = { fadeIn(animationSpec = tween(30)) },
-                    exitTransition = { fadeOut(animationSpec = tween(30)) },
-                    popEnterTransition = { fadeIn(animationSpec = tween(30)) },
-                    popExitTransition = { fadeOut(animationSpec = tween(30)) }
+                    enterTransition = { fadeIn(animationSpec = tween(160)) },
+                    exitTransition = { fadeOut(animationSpec = tween(100)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(160)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(100)) }
                 ) {
                     composable(Screen.Home.route) {
                         HomeScreen(
@@ -72,108 +81,129 @@ class MainActivity : ComponentActivity() {
                     }
                     composable(Screen.Settings.route) {
                         SettingsScreen(
-                            onBack = { navController.popBackStack() },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings,
                             onOpenAppearance = { navController.navigate(Screen.Appearance.route) }
                         )
                     }
                     composable(Screen.Appearance.route) {
-                        ThemeSettingsScreen(onBack = { navController.popBackStack() })
+                        ThemeSettingsScreen(
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
+                        )
                     }
+
+                    // ---- Workouts ----
                     composable(Screen.WorkoutLog.route) {
                         WorkoutLogScreen(
                             viewModel = workoutViewModel,
-                            onOpenRoutine = { id ->
-                                navController.navigate(Screen.RoutineView.createRoute(id))
+                            onOpenWorkout = { id ->
+                                navController.navigate(Screen.WorkoutView.createRoute(id))
                             },
-                            onEditRoutine = { id ->
-                                navController.navigate(Screen.RoutineEditor.createRoute(id))
+                            onEditWorkout = { id ->
+                                navController.navigate(Screen.WorkoutEditor.createRoute(id))
                             },
-                            onAddRoutine = {
-                                navController.navigate(Screen.RoutineEditor.createRoute(null))
+                            onAddWorkout = {
+                                navController.navigate(Screen.WorkoutEditor.createRoute(null))
                             },
-                            onOpenHistory = { navController.navigate(Screen.History.route) },
-                            onOpenSession = { navController.navigate(Screen.RoutineRunner.route) },
-                            onBack = { navController.popBackStack() }
+                            onOpenSession = { navController.navigate(Screen.WorkoutRunner.route) },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(Screen.History.route) {
                         HistoryScreen(
                             viewModel = workoutViewModel,
-                            onOpenRoutine = { id ->
-                                navController.navigate(Screen.RoutineHistory.createRoute(id))
+                            onOpenWorkout = { id ->
+                                navController.navigate(Screen.WorkoutHistory.createRoute(id))
                             },
-                            onBack = { navController.popBackStack() }
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
-                        route = Screen.RoutineHistory.route,
-                        arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                        route = Screen.WorkoutHistory.route,
+                        arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
                     ) { backStackEntry ->
-                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
+                        val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
                         SessionHistoryScreen(
-                            routineId = routineId,
+                            workoutId = workoutId,
                             viewModel = workoutViewModel,
                             onOpenSession = { id ->
                                 navController.navigate(Screen.SessionDetail.createRoute(id))
                             },
                             onOpenStats = { id ->
-                                navController.navigate(Screen.RoutineStats.createRoute(id))
+                                navController.navigate(Screen.WorkoutStats.createRoute(id))
                             },
-                            onBack = { navController.popBackStack() }
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
-                        route = Screen.RoutineStats.route,
-                        arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                        route = Screen.WorkoutStats.route,
+                        arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
                     ) { backStackEntry ->
-                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
-                        RoutineStatsScreen(
-                            routineId = routineId,
+                        val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                        WorkoutStatsScreen(
+                            workoutId = workoutId,
                             viewModel = workoutViewModel,
-                            onBack = { navController.popBackStack() },
-                            onOpenExercise = { rId, exId ->
-                                navController.navigate(Screen.ExerciseView.createRoute(rId, exId))
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings,
+                            onOpenExercise = { wId, exId ->
+                                navController.navigate(Screen.ExerciseView.createRoute(wId, exId))
                             }
                         )
                     }
                     composable(
-                        route = Screen.RoutineView.route,
-                        arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                        route = Screen.WorkoutView.route,
+                        arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
                     ) { backStackEntry ->
-                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
-                        RoutineViewScreen(
-                            routineId = routineId,
+                        val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                        WorkoutViewScreen(
+                            workoutId = workoutId,
                             viewModel = workoutViewModel,
-                            onBack = { navController.popBackStack() },
-                            onEdit = { id -> navController.navigate(Screen.RoutineEditor.createRoute(id)) },
-                            onOpenSession = { navController.navigate(Screen.RoutineRunner.route) },
-                            onViewExercise = { rId, exId ->
-                                navController.navigate(Screen.ExerciseView.createRoute(rId, exId))
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings,
+                            onEdit = { id -> navController.navigate(Screen.WorkoutEditor.createRoute(id)) },
+                            onOpenSession = { navController.navigate(Screen.WorkoutRunner.route) },
+                            onViewExercise = { wId, exId ->
+                                navController.navigate(Screen.ExerciseView.createRoute(wId, exId))
                             },
-                            onOpenStats = { id -> navController.navigate(Screen.RoutineStats.createRoute(id)) }
+                            onOpenStats = { id -> navController.navigate(Screen.WorkoutStats.createRoute(id)) }
                         )
                     }
                     composable(
                         route = Screen.ExerciseView.route,
                         arguments = listOf(
-                            navArgument("routineId") { type = NavType.LongType },
+                            navArgument("workoutId") { type = NavType.LongType },
                             navArgument("exerciseId") { type = NavType.LongType }
                         )
                     ) { backStackEntry ->
-                        val routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L
+                        val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
                         val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
                         ExerciseViewScreen(
-                            routineId = routineId,
+                            workoutId = workoutId,
                             exerciseId = exerciseId,
                             viewModel = workoutViewModel,
-                            onBack = { navController.popBackStack() },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings,
                             onOpenSession = { id -> navController.navigate(Screen.SessionDetail.createRoute(id)) }
                         )
                     }
-                    composable(Screen.RoutineRunner.route) {
-                        RoutineRunnerScreen(
+                    composable(Screen.WorkoutRunner.route) {
+                        WorkoutRunnerScreen(
                             viewModel = workoutViewModel,
-                            onBack = { navController.popBackStack() },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings,
                             onFinished = { id ->
                                 navController.navigate(Screen.SessionDetail.createRoute(id)) {
                                     popUpTo(Screen.WorkoutLog.route)
@@ -189,39 +219,48 @@ class MainActivity : ComponentActivity() {
                         SessionDetailScreen(
                             sessionId = sessionId,
                             viewModel = workoutViewModel,
-                            onBack = { navController.popBackStack() }
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
-                        route = Screen.RoutineEditor.route,
-                        arguments = listOf(navArgument("routineId") {
+                        route = Screen.WorkoutEditor.route,
+                        arguments = listOf(navArgument("workoutId") {
                             type = NavType.LongType
                             defaultValue = -1L
                         })
                     ) { backStackEntry ->
-                        val routineId = backStackEntry.arguments
-                            ?.getLong("routineId")
+                        val workoutId = backStackEntry.arguments
+                            ?.getLong("workoutId")
                             ?.takeIf { it != -1L }
-                        RoutineEditorScreen(
-                            routineId = routineId,
+                        WorkoutEditorScreen(
+                            workoutId = workoutId,
                             viewModel = workoutViewModel,
-                            onDone = { navController.popBackStack() },
-                            onDeleted = { navController.popBackStack(Screen.WorkoutLog.route, false) }
+                            onDone = goBack,
+                            onDeleted = { navController.popBackStack(Screen.WorkoutLog.route, false) },
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
+
+                    // ---- Streaks ----
                     composable(Screen.Streaks.route) {
                         StreaksScreen(
                             viewModel = streakViewModel,
                             onOpenStreak = { id -> navController.navigate(Screen.StreakDetail.createRoute(id)) },
                             onAddStreak = { navController.navigate(Screen.StreakEditor.route) },
-                            onOpenSavedDays = { navController.navigate(Screen.SavedDays.route) },
-                            onBack = { navController.popBackStack() }
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(Screen.StreakEditor.route) {
                         StreakEditorScreen(
                             viewModel = streakViewModel,
-                            onDone = { navController.popBackStack() }
+                            onDone = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
@@ -232,7 +271,9 @@ class MainActivity : ComponentActivity() {
                         StreakDetailScreen(
                             streakId = streakId,
                             viewModel = streakViewModel,
-                            onBack = { navController.popBackStack() },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings,
                             onSaveDay = { sId, date ->
                                 navController.navigate(Screen.SavedDayDetail.createRoute(sId, date))
                             }
@@ -244,7 +285,9 @@ class MainActivity : ComponentActivity() {
                             onOpenStreak = { id ->
                                 navController.navigate(Screen.SavedDaysForStreak.createRoute(id))
                             },
-                            onBack = { navController.popBackStack() }
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
@@ -258,7 +301,9 @@ class MainActivity : ComponentActivity() {
                             onOpenDay = { sId, date ->
                                 navController.navigate(Screen.SavedDayDetail.createRoute(sId, date))
                             },
-                            onBack = { navController.popBackStack() }
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
@@ -274,7 +319,9 @@ class MainActivity : ComponentActivity() {
                             streakId = streakId,
                             date = date,
                             viewModel = streakViewModel,
-                            onDone = { navController.popBackStack() }
+                            onDone = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                 }

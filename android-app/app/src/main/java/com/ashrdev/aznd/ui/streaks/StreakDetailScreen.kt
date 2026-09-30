@@ -9,25 +9,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.ashrdev.aznd.ui.components.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,7 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.StreakEntity
+import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
+import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.OutlinedButton
 import java.util.Calendar
 
 private val slipPhrases = listOf(
@@ -49,12 +48,13 @@ private val slipPhrases = listOf(
     "On your feet soldier"
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreakDetailScreen(
     streakId: Long,
     viewModel: StreakViewModel,
     onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit,
     onSaveDay: (Long, String) -> Unit
 ) {
     val context = LocalContext.current
@@ -137,66 +137,60 @@ fun StreakDetailScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(current.name) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Streak options")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(if (current.photoUri != null) "Replace photo" else "Add photo") },
-                                onClick = {
-                                    menuExpanded = false
-                                    imagePicker.launch()
-                                }
-                            )
-                            if (current.photoUri != null) {
-                                DropdownMenuItem(
-                                    text = { Text("Remove photo") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        viewModel.updateStreakPhoto(streakId, null)
-                                        streak = current.copy(photoUri = null)
-                                    }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Delete streak") },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    showDelete = true
-                                }
-                            )
-                        }
-                    }
+    ScreenScaffold(
+        title = current.name,
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        topBarActions = {
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Streak options")
                 }
-            )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(if (current.photoUri != null) "Replace photo" else "Add photo") },
+                        onClick = {
+                            menuExpanded = false
+                            imagePicker.launch()
+                        }
+                    )
+                    if (current.photoUri != null) {
+                        DropdownMenuItem(
+                            text = { Text("Remove photo") },
+                            onClick = {
+                                menuExpanded = false
+                                viewModel.updateStreakPhoto(streakId, null)
+                                streak = current.copy(photoUri = null)
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Delete streak") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            showDelete = true
+                        }
+                    )
+                }
+            }
         }
-    ) { innerPadding ->
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             current.photoUri?.let { uri -> StreakBanner(uri) }

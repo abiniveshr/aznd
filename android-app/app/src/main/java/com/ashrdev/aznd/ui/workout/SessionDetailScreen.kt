@@ -10,18 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Share
-import com.ashrdev.aznd.ui.components.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,13 +31,17 @@ import androidx.core.net.toUri
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.SessionWithSets
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.components.Card
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionDetailScreen(
     sessionId: Long,
     viewModel: WorkoutViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     var data by remember { mutableStateOf<SessionWithSets?>(null) }
@@ -64,35 +63,29 @@ fun SessionDetailScreen(
     val grouped = item.sets.sortedBy { it.orderIndex }.groupBy { it.exerciseName }
     val elapsed = ((item.session.finishedAt - item.session.startedAt) / 1000L).toInt()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(item.session.routineName) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        SessionShare.share(
-                            context = context,
-                            subject = "${item.session.routineName} · ${formatTimestamp(item.session.startedAt)}",
-                            body = formatSessionText(item.session, item.sets),
-                            photoUri = item.session.photoUri?.toUri()
-                        )
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share session")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
+    ScreenScaffold(
+        title = item.session.WorkoutName,
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        third = ThirdAction(
+            icon = Icons.Default.Share,
+            label = "Share",
+            onClick = {
+                SessionShare.share(
+                    context = context,
+                    subject = "${item.session.WorkoutName} · ${formatTimestamp(item.session.startedAt)}",
+                    body = formatSessionText(item.session, item.sets),
+                    photoUri = item.session.photoUri?.toUri()
+                )
+            }
+        )
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {

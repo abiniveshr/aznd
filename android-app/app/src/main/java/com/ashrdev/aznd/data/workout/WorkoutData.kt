@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.data.workout
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -10,25 +11,30 @@ import androidx.room.TypeConverter
 
 enum class SetMode { REPS, TIME }
 
-@Entity(tableName = "routines")
-data class RoutineEntity(
+@Entity(tableName = "Workouts")
+data class WorkoutEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String
+)
+
+data class RecentWorkoutSession(
+    @ColumnInfo(name = "WorkoutName") val workoutName: String,
+    val startedAt: Long
 )
 
 @Entity(
     tableName = "exercises",
     foreignKeys = [ForeignKey(
-        entity = RoutineEntity::class,
+        entity = WorkoutEntity::class,
         parentColumns = ["id"],
-        childColumns = ["routineId"],
+        childColumns = ["WorkoutId"],
         onDelete = ForeignKey.CASCADE
     )],
-    indices = [Index("routineId")]
+    indices = [Index("WorkoutId")]
 )
 data class ExerciseEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val routineId: Long,
+    val WorkoutId: Long,
     val name: String,
     val orderIndex: Int
 )
@@ -53,8 +59,8 @@ data class ExerciseSetEntity(
 @Entity(tableName = "sessions")
 data class SessionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val routineId: Long,
-    val routineName: String,
+    val WorkoutId: Long,
+    val WorkoutName: String,
     val startedAt: Long,
     val finishedAt: Long,
     val photoUri: String? = null
@@ -84,8 +90,8 @@ data class LoggedSetEntity(
 @Entity(tableName = "active_session")
 data class ActiveSessionEntity(
     @PrimaryKey val id: Long = 1,
-    val routineId: Long,
-    val routineName: String,
+    val WorkoutId: Long,
+    val WorkoutName: String,
     val startedAt: Long,
     val photoUri: String? = null
 )
@@ -118,9 +124,9 @@ data class ExerciseWithSets(
     val sets: List<ExerciseSetEntity>
 )
 
-data class RoutineWithExercises(
-    @Embedded val routine: RoutineEntity,
-    @Relation(entity = ExerciseEntity::class, parentColumn = "id", entityColumn = "routineId")
+data class WorkoutWithExercises(
+    @Embedded val Workout: WorkoutEntity,
+    @Relation(entity = ExerciseEntity::class, parentColumn = "id", entityColumn = "WorkoutId")
     val exercises: List<ExerciseWithSets>
 )
 
@@ -137,8 +143,8 @@ data class ActiveSessionWithSets(
 )
 
 data class WorkoutHistorySummary(
-    val routineId: Long,
-    val routineName: String
+    val WorkoutId: Long,
+    val WorkoutName: String
 )
 
 data class ExerciseSetPoint(

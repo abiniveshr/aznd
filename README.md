@@ -11,6 +11,7 @@ no LLM API, local model
 -supplement tracker
 -run tracker (gps)
 -workout tracker + analyzer (manual input)
+-streak tracker
 -calisthenics progression
 -sleep tracker (manual input)
 -stat card generator (streak, personal best)
@@ -78,4 +79,4 @@ progress:
         -completed streak manager app with day-saving, pictures and graphical calendar views
 
     22/08/2026-29/08/2026:
-        -optimised data schema, better UI, better image handling, better navigation, dedicated history and dashboard screen, theming and customization of app
+        -optimised data schema, better UI, better image handling, better navigation, dedicated history and dashboard screen, theming and customization of appq

@@ -1,10 +1,8 @@
 package com.ashrdev.aznd.ui.workout
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,26 +10,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
-import com.ashrdev.aznd.ui.components.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.ashrdev.aznd.ui.components.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.ashrdev.aznd.ui.components.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,25 +33,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ashrdev.aznd.data.workout.ActiveSetEntity
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SetMode
-import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.common.PhotoViewerDialog
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.rememberImagePicker
+import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutineRunnerScreen(
+fun WorkoutRunnerScreen(
     viewModel: WorkoutViewModel,
     onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit,
     onFinished: (Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
@@ -78,8 +71,8 @@ fun RoutineRunnerScreen(
     }
     if (session == null) return
 
-    LaunchedEffect(session.session.routineId) {
-        previousByExercise = viewModel.getPreviousSession(session.session.routineId)
+    LaunchedEffect(session.session.WorkoutId) {
+        previousByExercise = viewModel.getPreviousSession(session.session.WorkoutId)
             ?.sets
             ?.sortedBy { it.orderIndex }
             ?.groupBy { it.exerciseName }
@@ -120,42 +113,35 @@ fun RoutineRunnerScreen(
         )
     }
 
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        topBar = {
-            TopAppBar(
-                title = { Text(session.session.routineName) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        if (session.session.photoUri != null) showReplacePhoto = true
-                        else imagePicker.launch()
-                    }) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = "Add photo")
-                    }
-                    IconButton(onClick = { showDiscard = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Discard session")
-                    }
-                    TextButton(onClick = { viewModel.finishSession(onFinished) }) {
-                        Text("Finish")
-                    }
-                }
-            )
+    ScreenScaffold(
+        title = session.session.WorkoutName,
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        topBarActions = {
+            IconButton(onClick = {
+                if (session.session.photoUri != null) showReplacePhoto = true
+                else imagePicker.launch()
+            }) {
+                Icon(Icons.Default.PhotoCamera, contentDescription = "Add photo")
+            }
+            IconButton(onClick = { showDiscard = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "Discard session")
+            }
+            TextButton(onClick = { viewModel.finishSession(onFinished) }) {
+                Text("Finish")
+            }
         }
-    ) { innerPadding ->
+    ) { padding ->
         val grouped = session.sets
             .sortedWith(compareBy({ it.exerciseIndex }, { it.setIndex }))
             .groupBy { it.exerciseIndex }
 
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {

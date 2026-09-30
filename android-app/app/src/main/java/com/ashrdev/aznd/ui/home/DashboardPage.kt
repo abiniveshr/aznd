@@ -105,7 +105,7 @@ fun DashboardPage(
                 stat = stat,
                 modifier = Modifier.padding(horizontal = 16.dp),
                 onClick = {
-                    onNavigate(Screen.ExerciseView.createRoute(stat.routineId, stat.exerciseId))
+                    onNavigate(Screen.ExerciseView.createRoute(stat.WorkoutId, stat.exerciseId))
                 }
             )
         }
