@@ -2,7 +2,6 @@ package com.ashrdev.aznd.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -15,6 +14,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,12 +37,27 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     workoutViewModel: WorkoutViewModel,
     streakViewModel: StreakViewModel,
+    homeSignal: Int,
     onNavigate: (String) -> Unit
 ) {
     val pages = HomePageId.entries
     val homeIndex = HomePageId.HOME.ordinal
-    val pagerState = rememberPagerState(initialPage = homeIndex, pageCount = { pages.size })
-    val tray = remember { Animatable(0f) }
+    // Back from a screen lands on the page you left (History / Home / Dashboard).
+    var lastPage by rememberSaveable { mutableIntStateOf(homeIndex) }
+    val pagerState = rememberPagerState(initialPage = lastPage, pageCount = { pages.size })
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { lastPage = it }
+    }
+
+    // The Home button on other screens asks for the middle Home page specifically.
+    var handledSignal by rememberSaveable { mutableIntStateOf(homeSignal) }
+    LaunchedEffect(homeSignal) {
+        if (homeSignal != handledSignal) {
+            handledSignal = homeSignal
+            pagerState.scrollToPage(homeIndex)
+        }
+    }
+    val tray = rememberTrayState()
     val scope = rememberCoroutineScope()
     val bottomClearance = bottomBarClearance()
 
@@ -62,7 +79,7 @@ fun HomeScreen(
     }
 
     BackHandler(enabled = pagerState.currentPage != homeIndex) { goToPage(homeIndex) }
-    BackHandler(enabled = tray.value > 0f) { scope.launch { tray.animateTo(0f) } }
+    BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -109,11 +126,11 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f * tray.value))
+                        .background(Color.Black.copy(alpha = 0.45f * tray.value.coerceIn(0f, 1f)))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
-                        ) { scope.launch { tray.animateTo(0f) } }
+                        ) { scope.launch { tray.settleTo(0f) } }
                 )
             }
 

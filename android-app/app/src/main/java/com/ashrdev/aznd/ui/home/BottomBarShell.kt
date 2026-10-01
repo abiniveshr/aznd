@@ -60,6 +60,20 @@ val TabsHeight = 56.dp
 val BarBottomMargin = 8.dp
 private const val FLING_VELOCITY = 800f
 
+private val TrayMotion = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow
+)
+
+/** Pull-up state, clamped to 0..1 so a bouncy spring can never leave a dim scrim half-drawn. */
+@Composable
+fun rememberTrayState(): Animatable<Float, AnimationVector1D> =
+    remember { Animatable(0f).also { it.updateBounds(0f, 1f) } }
+
+suspend fun Animatable<Float, AnimationVector1D>.settleTo(target: Float) {
+    animateTo(target, TrayMotion)
+}
+
 // Height of the bar when closed, including the gesture-navigation inset underneath it.
 @Composable
 fun bottomBarHeight(): Dp {
@@ -93,7 +107,7 @@ fun BottomBarShell(
     }
 
     fun collapseTray() {
-        scope.launch { tray.animateTo(0f) }
+        scope.launch { tray.settleTo(0f) }
     }
 
     val shape = MaterialTheme.shapes.large.copy(
@@ -124,7 +138,7 @@ fun BottomBarShell(
                             tray.value >= 0.5f -> 1f
                             else -> 0f
                         }
-                        tray.animateTo(target, spring(stiffness = Spring.StiffnessMediumLow))
+                        tray.settleTo(target)
                     }
                 )
         ) {
@@ -137,7 +151,7 @@ fun BottomBarShell(
                         indication = null,
                         onClickLabel = "Show or hide quick actions"
                     ) {
-                        scope.launch { tray.animateTo(if (tray.value > 0.5f) 0f else 1f) }
+                        scope.launch { tray.settleTo(if (tray.value > 0.5f) 0f else 1f) }
                     },
                 contentAlignment = Alignment.Center
             ) {

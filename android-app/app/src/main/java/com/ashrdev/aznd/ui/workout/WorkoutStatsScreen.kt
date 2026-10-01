@@ -70,7 +70,7 @@ fun WorkoutStatsScreen(
     if (!loaded) return
 
     ScreenScaffold(
-        title = "$workoutName · Stats",
+        title = "$workoutName • Stats",
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,

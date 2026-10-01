@@ -1,5 +1,31 @@
 package com.ashrdev.aznd.ui.navigation
 
+/*
+ * Route map (what opens what). Back always returns to the screen you came from;
+ * the Home button returns to the Home page.
+ *
+ * Home (pager: History | Home | Dashboard)
+ *  |- Workouts -------- WorkoutLog
+ *  |                     |- Add workout ------ WorkoutEditor
+ *  |                     |- a workout -------- WorkoutView
+ *  |                     |                       |- Start ---- WorkoutRunner -- Finish --> SessionDetail
+ *  |                     |                       |- Stats ---- WorkoutStats -- ExerciseView -- SessionDetail
+ *  |                     |                       |- Edit ----- WorkoutEditor
+ *  |                     |                       '- exercise -- ExerciseView
+ *  |                     '- session in progress - WorkoutRunner
+ *  |- Streaks --------- Streaks
+ *  |                     |- Add streak ------- StreakEditor
+ *  |                     '- a streak ---------- StreakDetail
+ *  |                                             |- Saved (book) -- SavedDaysForStreak -- SavedDayDetail
+ *  |                                             '- Save today ---- SavedDayDetail
+ *  |- History page
+ *  |    |- Workout History -- History (pick a workout) -- WorkoutHistory (calendar) -- SessionDetail
+ *  |    |                                                   '- Stats -- WorkoutStats
+ *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
+ *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseView
+ *
+ * Settings -> Appearance opens from the pull-up bar on every screen.
+ */
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Settings : Screen("settings")

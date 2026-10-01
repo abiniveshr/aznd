@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
@@ -36,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.StreakEntity
+import com.ashrdev.aznd.ui.calendar.rememberFavoriteDays
 import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
@@ -55,6 +58,7 @@ fun StreakDetailScreen(
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSavedDays: () -> Unit,
     onSaveDay: (Long, String) -> Unit
 ) {
     val context = LocalContext.current
@@ -89,6 +93,9 @@ fun StreakDetailScreen(
 
     val breaksList by viewModel.breaksForStreak(streakId).collectAsState(initial = emptyList())
     val breaks = breaksList.toSet()
+    val savedDaysList by viewModel.savedDaysForStreak(streakId).collectAsState(initial = emptyList())
+    val savedDays = savedDaysList.map { it.date }.toSet()
+    val favorites = rememberFavoriteDays("streak:$streakId")
     val today = todayKey()
     val currentCount = computeCurrentStreak(current.startDate, breaks, today)
 
@@ -142,6 +149,11 @@ fun StreakDetailScreen(
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
+        third = ThirdAction(
+            icon = Icons.AutoMirrored.Filled.MenuBook,
+            label = "Saved",
+            onClick = onOpenSavedDays
+        ),
         topBarActions = {
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
@@ -235,6 +247,8 @@ fun StreakDetailScreen(
             StreakCalendar(
                 startDate = current.startDate,
                 breaks = breaks,
+                savedDays = savedDays,
+                favoriteDays = favorites.days,
                 onDayClick = { date -> tappedDate = date },
                 modifier = Modifier.fillMaxWidth()
             )

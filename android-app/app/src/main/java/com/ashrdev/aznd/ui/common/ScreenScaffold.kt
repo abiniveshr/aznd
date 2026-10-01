@@ -1,7 +1,6 @@
 package com.ashrdev.aznd.ui.common
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,6 +37,8 @@ import com.ashrdev.aznd.ui.components.TopAppBar
 import com.ashrdev.aznd.ui.home.TabsHeight
 import com.ashrdev.aznd.ui.home.bottomBarClearance
 import com.ashrdev.aznd.ui.home.bottomBarHeight
+import com.ashrdev.aznd.ui.home.rememberTrayState
+import com.ashrdev.aznd.ui.home.settleTo
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -61,7 +62,7 @@ fun ScreenScaffold(
     topBarActions: @Composable RowScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
-    val tray = remember { Animatable(0f) }
+    val tray = rememberTrayState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val imeVisible = WindowInsets.isImeVisible
@@ -70,7 +71,7 @@ fun ScreenScaffold(
     val trayTravelPx = with(density) { TabsHeight.toPx() }
     val reserve = if (primaryAction != null) PrimaryButtonHeight + PrimaryButtonGap else 0.dp
 
-    BackHandler(enabled = tray.value > 0f) { scope.launch { tray.animateTo(0f) } }
+    BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(title) }, actions = topBarActions) }
@@ -92,7 +93,7 @@ fun ScreenScaffold(
                             .align(Alignment.BottomCenter)
                             .padding(start = 16.dp, end = 16.dp, bottom = barHeight + PrimaryButtonGap)
                             .offset { IntOffset(0, -(trayTravelPx * tray.value).roundToInt()) }
-                            .graphicsLayer { alpha = 1f - tray.value }
+                            .graphicsLayer { alpha = (1f - tray.value).coerceIn(0f, 1f) }
                     ) {
                         Button(
                             onClick = primaryAction.onClick,
@@ -112,11 +113,11 @@ fun ScreenScaffold(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.45f * tray.value))
+                            .background(Color.Black.copy(alpha = 0.45f * tray.value.coerceIn(0f, 1f)))
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { scope.launch { tray.animateTo(0f) } }
+                            ) { scope.launch { tray.settleTo(0f) } }
                     )
                 }
                 ScreenBottomBar(
