@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,15 +27,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.data.workout.SetMode
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
+import com.ashrdev.aznd.domain.ExerciseType
+import com.ashrdev.aznd.domain.SetKind
+import com.ashrdev.aznd.domain.setLabels
+import com.ashrdev.aznd.domain.targetLabel
 import com.ashrdev.aznd.ui.common.PrimaryAction
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
 
+/**
+ * Read-only view of a workout's template. Start opens the logger, which starts a new session or
+ * resumes the unfinished one of this workout. Only one session can run at a time, so while a
+ * session of ANOTHER workout is unfinished, Start offers to go there instead.
+ *
+ * [onOpenSession] receives the id of the workout whose logger should open.
+ */
 @Composable
 fun WorkoutViewScreen(
     workoutId: Long,
@@ -43,17 +55,19 @@ fun WorkoutViewScreen(
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
     onEdit: (Long) -> Unit,
-    onOpenSession: () -> Unit,
+    onOpenSession: (Long) -> Unit,
     onViewExercise: (Long, Long) -> Unit,
     onOpenStats: (Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
     var workout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    var template by remember { mutableStateOf<TemplateView?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var blockedDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(workoutId) {
         workout = viewModel.getWorkout(workoutId)
+        template = viewModel.templateView(workoutId)
         loaded = true
     }
 
@@ -63,18 +77,21 @@ fun WorkoutViewScreen(
         LaunchedEffect(Unit) { onBack() }
         return
     }
+    val view = template
+    val hasRows = view != null && view.cards.isNotEmpty()
 
     if (blockedDialog) {
+        val running = active
         AlertDialog(
             onDismissRequest = { blockedDialog = false },
             title = { Text("Session already running") },
             text = {
-                Text("You have an unfinished ${active?.session?.WorkoutName.orEmpty()} session. Finish or discard it before starting another.")
+                Text("You have an unfinished ${running?.workoutName.orEmpty()} session. Finish or discard it before starting another.")
             },
             confirmButton = {
                 TextButton(onClick = {
                     blockedDialog = false
-                    onOpenSession()
+                    if (running != null) onOpenSession(running.workoutId)
                 }) { Text("Go to session") }
             },
             dismissButton = {
@@ -95,11 +112,12 @@ fun WorkoutViewScreen(
         ),
         primaryAction = PrimaryAction(
             icon = Icons.Default.PlayArrow,
-            label = "Start",
-            enabled = item.exercises.isNotEmpty(),
+            label = if (active?.workoutId == item.Workout.id) "Resume" else "Start",
+            enabled = hasRows,
             onClick = {
-                if (active != null) blockedDialog = true
-                else viewModel.startSession(item) { onOpenSession() }
+                val running = active
+                if (running != null && running.workoutId != item.Workout.id) blockedDialog = true
+                else onOpenSession(item.Workout.id)
             }
         ),
         topBarActions = {
@@ -108,7 +126,7 @@ fun WorkoutViewScreen(
             }
         }
     ) { padding ->
-        if (item.exercises.isEmpty()) {
+        if (view == null || view.cards.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -127,20 +145,35 @@ fun WorkoutViewScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(item.exercises, key = { it.exercise.id }) { ews ->
+                items(view.cards, key = { it.rows.first().id }) { card ->
+                    val exercise = card.exerciseId?.let { view.exercises[it] }
+                    // The History/Stats screens know exercises by their old per-workout id.
+                    val statsId = item.exercises.firstOrNull { it.exercise.name == exercise?.name }?.exercise?.id
+                    val labels = setLabels(card)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onViewExercise(item.Workout.id, ews.exercise.id) }
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(ews.exercise.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                ews.sets.joinToString(" · ") {
-                                    if (it.mode == SetMode.REPS) "Reps" else "Time"
-                                },
-                                style = MaterialTheme.typography.bodySmall
+                            .then(
+                                if (statsId != null) Modifier.clickable { onViewExercise(item.Workout.id, statsId) }
+                                else Modifier
                             )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (exercise != null) MuscleBadge(exercise.primaryMuscle, exercise.photoPath)
+                                Text(exercise?.name ?: "Unknown exercise", style = MaterialTheme.typography.titleMedium)
+                            }
+                            card.rows.forEach { row ->
+                                val rowExercise = row.exerciseId?.let { view.exercises[it] } ?: exercise
+                                val target = targetLabel(row, rowExercise?.type ?: ExerciseType.WEIGHTED, true)
+                                val label = labels[row.id].orEmpty()
+                                val name = if (row.kind == SetKind.SUPERSET) " · ${rowExercise?.name.orEmpty()}" else ""
+                                Text(
+                                    text = label + name + if (target != null) " · target $target" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(start = if (row.kind == SetKind.NORMAL) 0.dp else 12.dp)
+                                )
+                            }
                         }
                     }
                 }

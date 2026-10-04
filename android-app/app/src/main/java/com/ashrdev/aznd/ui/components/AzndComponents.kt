@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TopAppBarColors
@@ -18,8 +19,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+
+// Drop-in replacements for the Material3 components of the same name. Every screen imports these
+// (not androidx.compose.material3.Card etc.) so the Appearance settings apply everywhere.
 
 @Composable
 fun Card(
@@ -97,7 +102,8 @@ fun OutlinedTextField(
     modifier: Modifier = Modifier,
     label: @Composable (() -> Unit)? = null,
     singleLine: Boolean = false,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    textStyle: TextStyle = LocalTextStyle.current
 ) {
     val style = LocalAzndStyle.current
     val colors = if (style.fieldOutline) {
@@ -119,6 +125,7 @@ fun OutlinedTextField(
         label = label,
         singleLine = singleLine,
         keyboardOptions = keyboardOptions,
+        textStyle = textStyle,
         colors = colors
     )
 }

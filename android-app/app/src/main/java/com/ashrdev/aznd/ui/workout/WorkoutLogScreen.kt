@@ -45,10 +45,13 @@ fun WorkoutLogScreen(
     onOpenWorkout: (Long) -> Unit,
     onEditWorkout: (Long) -> Unit,
     onAddWorkout: () -> Unit,
-    onOpenSession: () -> Unit,
+    onOpenSession: (Long) -> Unit,
+    onDeleteWorkout: (Long) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    // Opens the Custom exercises list (add / edit / delete). Menu item hidden when null.
+    onManageCustomExercises: (() -> Unit)? = null
 ) {
     val workouts by viewModel.Workouts.collectAsState()
     val active by viewModel.activeSession.collectAsState()
@@ -62,7 +65,7 @@ fun WorkoutLogScreen(
             text = { Text("\"${target.Workout.name}\" and its exercises will be deleted. This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteWorkout(target.Workout.id)
+                    onDeleteWorkout(target.Workout.id)
                     workoutToDelete = null
                 }) { Text("Delete") }
             },
@@ -87,6 +90,15 @@ fun WorkoutLogScreen(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false }
                 ) {
+                    if (onManageCustomExercises != null) {
+                        DropdownMenuItem(
+                            text = { Text("Custom exercises") },
+                            onClick = {
+                                menuExpanded = false
+                                onManageCustomExercises()
+                            }
+                        )
+                    }
                     DropdownMenuItem(text = { Text("Delete data") }, enabled = false, onClick = {})
                     DropdownMenuItem(text = { Text("Export data") }, enabled = false, onClick = {})
                 }
@@ -108,12 +120,12 @@ fun WorkoutLogScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onOpenSession)
+                            .clickable(onClick = { onOpenSession(running.workoutId) })
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Session in progress", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "${running.session.WorkoutName} · started ${formatClock(running.session.startedAt)}",
+                                "${running.workoutName} · started ${formatClock(running.startedAt)}",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

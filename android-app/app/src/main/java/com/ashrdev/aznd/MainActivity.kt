@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,6 +26,16 @@ import com.ashrdev.aznd.ui.home.HomeScreen
 import com.ashrdev.aznd.ui.navigation.Screen
 import com.ashrdev.aznd.ui.settings.SettingsScreen
 import com.ashrdev.aznd.ui.settings.ThemeSettingsScreen
+import com.ashrdev.aznd.data.workout.TrainingRepository
+import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
+import com.ashrdev.aznd.ui.workout.BuilderViewModel
+import com.ashrdev.aznd.ui.workout.CustomExerciseScreen
+import com.ashrdev.aznd.ui.workout.CustomExerciseViewModel
+import com.ashrdev.aznd.ui.workout.CustomExercisesScreen
+import com.ashrdev.aznd.ui.workout.CustomExercisesViewModel
+import com.ashrdev.aznd.ui.workout.LoggerViewModel
+import com.ashrdev.aznd.ui.workout.WorkoutBuilderScreen
+import com.ashrdev.aznd.ui.workout.WorkoutLoggerScreen
 import com.ashrdev.aznd.ui.streaks.SavedDayDetailScreen
 import com.ashrdev.aznd.ui.streaks.SavedDaysForStreakScreen
 import com.ashrdev.aznd.ui.streaks.SavedDaysScreen
@@ -39,9 +50,7 @@ import com.ashrdev.aznd.ui.workout.ExerciseViewScreen
 import com.ashrdev.aznd.ui.workout.HistoryScreen
 import com.ashrdev.aznd.ui.workout.SessionDetailScreen
 import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
-import com.ashrdev.aznd.ui.workout.WorkoutEditorScreen
 import com.ashrdev.aznd.ui.workout.WorkoutLogScreen
-import com.ashrdev.aznd.ui.workout.WorkoutRunnerScreen
 import com.ashrdev.aznd.ui.workout.WorkoutStatsScreen
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutViewModelFactory
@@ -55,11 +64,15 @@ class MainActivity : ComponentActivity() {
         val database = AppDatabase.getInstance(this)
         val dao = database.WorkoutDao()
         val streakDao = database.streakDao()
+        val trainingRepository = TrainingRepository(
+            database.exerciseDao(), database.templateDao(), database.sessionDao(), legacy = dao
+        )
+        val workoutSettings = WorkoutSettingsStore(this)
         setContent {
             AzndTheme {
                 val navController = rememberNavController()
                 val workoutViewModel: WorkoutViewModel =
-                    viewModel(factory = WorkoutViewModelFactory(dao))
+                    viewModel(factory = WorkoutViewModelFactory(dao, trainingRepository))
                 val streakViewModel: StreakViewModel =
                     viewModel(factory = StreakViewModelFactory(streakDao))
 
@@ -124,7 +137,8 @@ class MainActivity : ComponentActivity() {
                             onBack = goBack,
                             onHome = goHome,
                             onOpenSettings = openSettings,
-                            onOpenAppearance = { navigateTo(Screen.Appearance.route) }
+                            onOpenAppearance = { navigateTo(Screen.Appearance.route) },
+                            workoutSettings = workoutSettings
                         )
                     }
                     composable(Screen.Appearance.route) {
@@ -148,7 +162,9 @@ class MainActivity : ComponentActivity() {
                             onAddWorkout = {
                                 navigateTo(Screen.WorkoutEditor.createRoute(null))
                             },
-                            onOpenSession = { navigateTo(Screen.WorkoutRunner.route) },
+                            onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
+                            onDeleteWorkout = { id -> workoutViewModel.deleteWorkout(id) },
+                            onManageCustomExercises = { navigateTo(Screen.CustomExercises.route) },
                             onBack = goBack,
                             onHome = goHome,
                             onOpenSettings = openSettings
@@ -212,7 +228,7 @@ class MainActivity : ComponentActivity() {
                             onHome = goHome,
                             onOpenSettings = openSettings,
                             onEdit = { id -> navigateTo(Screen.WorkoutEditor.createRoute(id)) },
-                            onOpenSession = { navigateTo(Screen.WorkoutRunner.route) },
+                            onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
                             onViewExercise = { wId, exId ->
                                 navigateTo(Screen.ExerciseView.createRoute(wId, exId))
                             },
@@ -238,19 +254,24 @@ class MainActivity : ComponentActivity() {
                             onOpenSession = { id -> navigateTo(Screen.SessionDetail.createRoute(id)) }
                         )
                     }
-                    composable(Screen.WorkoutRunner.route) {
-                        WorkoutRunnerScreen(
-                            viewModel = workoutViewModel,
+                    composable(
+                        route = Screen.WorkoutLogger.route,
+                        arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                        val workoutName by produceState(initialValue = "", workoutId) {
+                            value = workoutViewModel.getWorkout(workoutId)?.Workout?.name.orEmpty()
+                        }
+                        val loggerVm: LoggerViewModel =
+                            viewModel(factory = LoggerViewModel.factory(trainingRepository, workoutSettings))
+                        WorkoutLoggerScreen(
+                            workoutId = workoutId,
+                            workoutName = workoutName,
+                            viewModel = loggerVm,
+                            onFinished = goBack,
                             onBack = goBack,
                             onHome = goHome,
-                            onOpenSettings = openSettings,
-                            onFinished = { id ->
-                                navigateTo(
-                                    Screen.SessionDetail.createRoute(id),
-                                    popUpToRoute = Screen.WorkoutRunner.route,
-                                    popUpInclusive = true
-                                )
-                            }
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
@@ -276,11 +297,63 @@ class MainActivity : ComponentActivity() {
                         val workoutId = backStackEntry.arguments
                             ?.getLong("workoutId")
                             ?.takeIf { it != -1L }
-                        WorkoutEditorScreen(
-                            workoutId = workoutId,
-                            viewModel = workoutViewModel,
-                            onDone = goBack,
-                            onDeleted = { popToRoute(Screen.WorkoutLog.route) },
+                        // One builder per screen instance: it survives rotation, but opening the
+                        // editor again starts from the saved template, never from an earlier session's edits.
+                        val builderVm: BuilderViewModel = viewModel(
+                            viewModelStoreOwner = backStackEntry,
+                            factory = BuilderViewModel.factory(trainingRepository, workoutSettings)
+                        )
+                        // The name must be known before the screen starts (it seeds the text field).
+                        val initialName by produceState<String?>(
+                            initialValue = if (workoutId == null) "" else null,
+                            workoutId
+                        ) {
+                            value = workoutId?.let { workoutViewModel.getWorkout(it)?.Workout?.name.orEmpty() }.orEmpty()
+                        }
+                        initialName?.let { loadedName ->
+                            WorkoutBuilderScreen(
+                                workoutId = workoutId,
+                                initialName = loadedName,
+                                viewModel = builderVm,
+                                onSaveRecord = { name -> workoutViewModel.saveWorkoutRecord(workoutId, name) },
+                                onDelete = if (workoutId == null) null else ({
+                                    workoutViewModel.deleteWorkout(workoutId)
+                                    popToRoute(Screen.WorkoutLog.route)
+                                }),
+                                deleteTemplate = trainingRepository::deleteTemplate,
+                                onDone = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                    }
+
+                    composable(Screen.CustomExercises.route) {
+                        val listVm: CustomExercisesViewModel =
+                            viewModel(factory = CustomExercisesViewModel.factory(trainingRepository))
+                        CustomExercisesScreen(
+                            viewModel = listVm,
+                            onAdd = { navigateTo(Screen.CustomExercise.createRoute(null)) },
+                            onEdit = { id -> navigateTo(Screen.CustomExercise.createRoute(id)) },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
+                        )
+                    }
+                    composable(
+                        route = Screen.CustomExercise.route,
+                        arguments = listOf(navArgument("exerciseId") {
+                            type = NavType.LongType
+                            defaultValue = -1L
+                        })
+                    ) { backStackEntry ->
+                        val editId = backStackEntry.arguments?.getLong("exerciseId")?.takeIf { it != -1L }
+                        val customVm: CustomExerciseViewModel =
+                            viewModel(factory = CustomExerciseViewModel.factory(trainingRepository, editId))
+                        CustomExerciseScreen(
+                            viewModel = customVm,
+                            onSaved = goBack,
+                            onBack = goBack,
                             onHome = goHome,
                             onOpenSettings = openSettings
                         )

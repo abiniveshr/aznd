@@ -3,20 +3,22 @@ package com.ashrdev.aznd.ui.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.ashrdev.aznd.data.workout.ActiveSessionWithSets
 import com.ashrdev.aznd.data.workout.ExerciseSetPoint
+import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.ExerciseWithSets
-import com.ashrdev.aznd.data.workout.LoggedSetEntity
+import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.data.workout.WorkoutDao
 import com.ashrdev.aznd.data.workout.WorkoutEntity
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.WorkoutHistorySummary
 import com.ashrdev.aznd.data.workout.RecentWorkoutSession
+import com.ashrdev.aznd.domain.SetCard
+import com.ashrdev.aznd.domain.SetTree
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -27,13 +29,27 @@ data class TopExerciseStat(
     val bestPoint: SessionE1rmPoint
 )
 
-class WorkoutViewModel(private val dao: WorkoutDao) : ViewModel() {
+/** The unfinished session, if any, shown on the Workouts list and checked before starting another. */
+data class ActiveSessionInfo(val workoutId: Long, val workoutName: String, val startedAt: Long)
+
+/** A workout's saved template, grouped into exercise cards (unset rows removed), for the read-only view. */
+class TemplateView(val cards: List<SetCard>, val exercises: Map<Long, Exercise>)
+
+class WorkoutViewModel(
+    private val dao: WorkoutDao,
+    private val training: TrainingRepository
+) : ViewModel() {
     val Workouts: StateFlow<List<WorkoutWithExercises>> = dao.getWorkoutsWithExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val activeSession: StateFlow<ActiveSessionWithSets?> = dao.observeActiveSession()
-        .map { it.firstOrNull() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    /** Null when nothing is running, or when the running session's workout no longer exists. */
+    val activeSession: StateFlow<ActiveSessionInfo?> =
+        combine(training.observeActiveSession(), Workouts) { session, workouts ->
+            session?.let { s ->
+                workouts.firstOrNull { it.Workout.id == s.workoutId }
+                    ?.let { ActiveSessionInfo(s.workoutId, it.Workout.name, s.startedAt) }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val workoutHistorySummaries: StateFlow<List<WorkoutHistorySummary>> =
         dao.getWorkoutHistorySummaries()
@@ -44,6 +60,9 @@ class WorkoutViewModel(private val dao: WorkoutDao) : ViewModel() {
     suspend fun getMostRecentSession(): RecentWorkoutSession? = dao.getMostRecentSession()
     suspend fun getWorkout(id: Long): WorkoutWithExercises? =
         dao.getWorkoutWithExercises(id)
+
+    suspend fun saveWorkoutRecord(id: Long?, name: String): Long =
+        dao.saveWorkoutRecord(id, name)
 
     suspend fun getSession(id: Long): SessionWithSets? =
         dao.getSession(id)
@@ -87,86 +106,45 @@ class WorkoutViewModel(private val dao: WorkoutDao) : ViewModel() {
         }
     }
 
+    /** Deletes the workout, its template and any session of it that is still running. */
     fun deleteWorkout(id: Long) {
         viewModelScope.launch {
             dao.deleteWorkout(id)
+            training.deleteTemplate(id)
         }
     }
 
+    /** Deletes a session from the history, together with its copy used for "Previous:" and suggestions. */
     fun deleteSession(id: Long) {
         viewModelScope.launch {
             dao.deleteSession(id)
+            training.deleteByLegacySession(id)
         }
     }
 
-    fun startSession(Workout: WorkoutWithExercises, onStarted: () -> Unit = {}) {
-        viewModelScope.launch {
-            val sets = mutableListOf<com.ashrdev.aznd.data.workout.ActiveSetEntity>()
-            Workout.exercises
-                .sortedBy { it.exercise.orderIndex }
-                .forEachIndexed { exIndex, ews ->
-                    ews.sets
-                        .sortedBy { it.orderIndex }
-                        .forEachIndexed { setIndex, s ->
-                            sets += com.ashrdev.aznd.data.workout.ActiveSetEntity(
-                                exerciseName = ews.exercise.name,
-                                exerciseIndex = exIndex,
-                                setIndex = setIndex,
-                                mode = s.mode,
-                                valueText = "",
-                                weightText = ""
-                            )
-                        }
-                }
-            dao.startActiveSession(
-                com.ashrdev.aznd.data.workout.ActiveSessionEntity(
-                    WorkoutId = Workout.Workout.id,
-                    WorkoutName = Workout.Workout.name,
-                    startedAt = System.currentTimeMillis()
-                ),
-                sets
-            )
-            onStarted()
-        }
-    }
-    
     fun deleteHistoryForWorkout(WorkoutId: Long) {
-        viewModelScope.launch { dao.deleteSessionsForWorkout(WorkoutId) }
-    }
-
-    fun updateActiveSet(
-        set: com.ashrdev.aznd.data.workout.ActiveSetEntity
-    ) {
         viewModelScope.launch {
-            dao.updateActiveSet(set)
+            dao.deleteSessionsForWorkout(WorkoutId)
+            training.deleteCompletedForWorkout(WorkoutId)
         }
     }
 
-    fun attachPhoto(uri: String?) {
-        viewModelScope.launch {
-            dao.setActivePhoto(uri)
-        }
-    }
-
-    fun discardSession() {
-        viewModelScope.launch {
-            dao.clearActiveSession()
-        }
-    }
-
-    fun finishSession(onSaved: (Long) -> Unit) {
-        viewModelScope.launch {
-            dao.finishActiveSession()?.let(onSaved)
-        }
+    suspend fun templateView(workoutId: Long): TemplateView {
+        val rows = SetTree.dropUnsetRows(training.templateRows(workoutId))
+        return TemplateView(
+            cards = SetTree.cards(rows),
+            exercises = training.exercisesById(rows.mapNotNull { it.exerciseId })
+        )
     }
 }
 
 class WorkoutViewModelFactory(
-    private val dao: WorkoutDao
+    private val dao: WorkoutDao,
+    private val training: TrainingRepository
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(
         modelClass: Class<T>
-    ): T = WorkoutViewModel(dao) as T
+    ): T = WorkoutViewModel(dao, training) as T
 }

@@ -15,6 +15,15 @@ interface WorkoutDao {
     @Insert
     suspend fun insertWorkout(Workout: WorkoutEntity): Long
 
+    /** Save only the workout record for the new template-based builder and return its real id. */
+    @Transaction
+    suspend fun saveWorkoutRecord(id: Long?, name: String): Long {
+        if (id == null) return insertWorkout(WorkoutEntity(name = name))
+        updateWorkout(WorkoutEntity(id = id, name = name))
+        deleteExercisesForWorkout(id)
+        return id
+    }
+
     @Query("SELECT DISTINCT WorkoutId, WorkoutName FROM sessions ORDER BY WorkoutName")
     fun getWorkoutHistorySummaries(): Flow<List<WorkoutHistorySummary>>
 

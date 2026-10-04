@@ -22,13 +22,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
+import com.ashrdev.aznd.ui.workout.WorkoutSettingsSection
 
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenAppearance: () -> Unit
+    onOpenAppearance: () -> Unit,
+    workoutSettings: WorkoutSettingsStore
 ) {
     ScreenScaffold(
         title = "Settings",
@@ -49,6 +52,7 @@ fun SettingsScreen(
                 subtitle = "Colours, corners, outlines, theme files",
                 onClick = onOpenAppearance
             )
+            WorkoutSettingsSection(workoutSettings)
         }
     }
 }

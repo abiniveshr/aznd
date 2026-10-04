@@ -100,6 +100,7 @@ fun DashboardPage(
                 }
             }
         }
+        // NOTE: the repo's TopExerciseStat field is WorkoutId (capital W) after the rename.
         items(topExercises, key = { it.exerciseId }) { stat ->
             TopExerciseCard(
                 stat = stat,

@@ -28,6 +28,8 @@ class ImagePicker internal constructor(private val request: () -> Unit) {
     fun launch() = request()
 }
 
+// NOTE: UCrop needs androidx.exifinterface:exifinterface declared explicitly in build.gradle,
+// otherwise cropping fails with NoClassDefFoundError (this was the original "photo vanishes" bug).
 @Composable
 fun rememberImagePicker(
     aspect: Pair<Float, Float>? = null,

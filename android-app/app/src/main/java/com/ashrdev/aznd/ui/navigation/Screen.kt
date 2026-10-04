@@ -7,12 +7,13 @@ package com.ashrdev.aznd.ui.navigation
  * Home (pager: History | Home | Dashboard)
  *  |- Workouts -------- WorkoutLog
  *  |                     |- Add workout ------ WorkoutEditor
+ *  |                     |- (menu) Custom exercises -- CustomExercises -- CustomExercise (add / edit)
  *  |                     |- a workout -------- WorkoutView
- *  |                     |                       |- Start ---- WorkoutRunner -- Finish --> SessionDetail
+ *  |                     |                       |- Start ---- WorkoutLogger -- Finish --> (back)
  *  |                     |                       |- Stats ---- WorkoutStats -- ExerciseView -- SessionDetail
  *  |                     |                       |- Edit ----- WorkoutEditor
  *  |                     |                       '- exercise -- ExerciseView
- *  |                     '- session in progress - WorkoutRunner
+ *  |                     '- session in progress - WorkoutLogger
  *  |- Streaks --------- Streaks
  *  |                     |- Add streak ------- StreakEditor
  *  |                     '- a streak ---------- StreakDetail
@@ -39,7 +40,13 @@ sealed class Screen(val route: String) {
     object WorkoutStats : Screen("workout_stats/{workoutId}") {
         fun createRoute(workoutId: Long) = "workout_stats/$workoutId"
     }
-    object WorkoutRunner : Screen("workout_runner")
+    object WorkoutLogger : Screen("workout_logger/{workoutId}") {
+        fun createRoute(workoutId: Long) = "workout_logger/$workoutId"
+    }
+    object CustomExercises : Screen("custom_exercises")
+    object CustomExercise : Screen("custom_exercise?exerciseId={exerciseId}") {
+        fun createRoute(exerciseId: Long?) = "custom_exercise?exerciseId=${exerciseId ?: -1}"
+    }
     object WorkoutView : Screen("workout_view/{workoutId}") {
         fun createRoute(workoutId: Long) = "workout_view/$workoutId"
     }
