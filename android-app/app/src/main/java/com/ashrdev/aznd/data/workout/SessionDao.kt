@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ashrdev.aznd.domain.MuscleSetData
 import com.ashrdev.aznd.domain.SetRow
 import com.ashrdev.aznd.domain.SetTree
 import kotlinx.coroutines.flow.Flow
@@ -82,6 +83,16 @@ interface SessionDao {
 
     @Query("SELECT * FROM session_set WHERE exerciseId = :exerciseId AND sessionId IN (:sessionIds)")
     suspend fun setsForExercise(exerciseId: Long, sessionIds: List<Long>): List<LoggedSet>
+
+    /** Every set of every FINISHED session plus that session's bodyweight, for the muscle statistics. */
+    @Query(
+        "SELECT ss.exerciseId AS exerciseId, ss.sessionId AS sessionId, ls.finishedAt AS finishedAt, " +
+            "ls.bodyweightKgSnapshot AS bodyweightKg, ss.kind AS kind, ss.weightKg AS weightKg, " +
+            "ss.reps AS reps, ss.durationSec AS durationSec, ss.rpe AS rpe " +
+            "FROM session_set ss INNER JOIN logged_session ls ON ls.id = ss.sessionId " +
+            "WHERE ls.finishedAt IS NOT NULL"
+    )
+    suspend fun completedSetData(): List<MuscleSetData>
 
     /**
      * Create a session from a workout's template rows: bodyweight snapshot taken now, empty

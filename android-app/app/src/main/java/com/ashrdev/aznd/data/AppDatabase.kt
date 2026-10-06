@@ -6,6 +6,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,6 +26,7 @@ import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.ExerciseDao
 import com.ashrdev.aznd.data.workout.ExerciseSeeder
+import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.data.workout.TemplateSet
 import com.ashrdev.aznd.data.workout.LoggedSession
 import com.ashrdev.aznd.data.workout.LoggedSet
@@ -74,6 +76,23 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "aznd.db"
                 ).fallbackToDestructiveMigration(true)
+                    .addCallback(object : RoomDatabase.Callback() {
+                        // Runs on every open, before the first query: the old single "SHOULDERS"
+                        // muscle no longer exists, so any stored value is moved to SIDE_DELTS
+                        // (catalog rows are then corrected exactly by the seed sync).
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            db.execSQL("UPDATE catalog_exercise SET primaryMuscle = 'SIDE_DELTS' WHERE primaryMuscle = 'SHOULDERS'")
+                            // Safety net: Room throws when it reads an enum value it doesn't know, which
+                            // would crash every screen that lists exercises. Anything unrecognised becomes
+                            // CHEST (catalog rows are then corrected exactly by the seed sync).
+                            val known = Muscle.values().joinToString(",") { "'" + it.name + "'" }
+                            db.execSQL("UPDATE catalog_exercise SET primaryMuscle = 'CHEST' WHERE primaryMuscle NOT IN ($known)")
+                            db.execSQL(
+                                "UPDATE catalog_exercise SET secondaryMuscles = REPLACE(secondaryMuscles, 'SHOULDERS', 'SIDE_DELTS') " +
+                                    "WHERE secondaryMuscles LIKE '%SHOULDERS%'"
+                            )
+                        }
+                    })
                     .build()
                     .also { db ->
                         INSTANCE = db

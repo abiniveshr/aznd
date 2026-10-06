@@ -2,6 +2,8 @@ package com.ashrdev.aznd.data.workout
 
 import com.ashrdev.aznd.domain.BodyweightProvider
 import com.ashrdev.aznd.domain.ExerciseType
+import com.ashrdev.aznd.domain.MuscleExercise
+import com.ashrdev.aznd.domain.MuscleSetData
 import com.ashrdev.aznd.domain.PlaceholderBodyweightProvider
 import com.ashrdev.aznd.domain.SessionHistory
 import com.ashrdev.aznd.domain.SetRow
@@ -72,6 +74,15 @@ class TrainingRepository(
         exercises.deleteCustomCascade(old)
         return old
     }
+
+    // ---- muscle statistics ----
+
+    suspend fun muscleSetData(): List<MuscleSetData> = sessions.completedSetData()
+
+    suspend fun muscleExercises(): Map<Long, MuscleExercise> =
+        exercises.allOnce().associate {
+            it.id to MuscleExercise(it.id, it.name, it.type, it.bodyweightShare, it.primaryMuscle, it.secondaryMuscles)
+        }
 
     // ---- templates ----
 

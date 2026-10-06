@@ -1,170 +1,170 @@
 # Exercise catalog, one exercise per line:
 #   name|type|primaryMuscle|secondaryMuscles|bodyweightSharePercent
 # type: W weighted, B bodyweight reps, A assisted bodyweight, T time held
-# muscles: lowercase enum names (upper_back, lower_back, ...); secondary is a comma list (0-3)
+# muscles: lowercase enum names (upper_chest, rotator_cuff, ...); secondary is a comma list (any number)
 # share: percent of bodyweight moved, only for types B and A (blank = 100)
 # A new line here is added on the next app start (lines are matched by the slug of the name).
 
 # ---- chest ----
-Barbell Bench Press|W|chest|triceps,shoulders|
-Incline Barbell Bench Press|W|chest|shoulders,triceps|
-Decline Barbell Bench Press|W|chest|triceps,shoulders|
-Dumbbell Bench Press|W|chest|triceps,shoulders|
-Incline Dumbbell Press|W|chest|shoulders,triceps|
-Decline Dumbbell Press|W|chest|triceps|
-Smith Machine Bench Press|W|chest|triceps,shoulders|
-Machine Chest Press|W|chest|triceps,shoulders|
-Dumbbell Fly|W|chest|shoulders|
-Incline Dumbbell Fly|W|chest|shoulders|
-Cable Crossover|W|chest|shoulders|
-Low-to-High Cable Fly|W|chest|shoulders|
-Pec Deck Fly|W|chest||
-Push-Up|B|chest|triceps,shoulders|64
-Knee Push-Up|B|chest|triceps,shoulders|49
-Decline Push-Up|B|chest|shoulders,triceps|74
-Incline Push-Up|B|chest|triceps,shoulders|45
-Diamond Push-Up|B|triceps|chest,shoulders|64
-Chest Dip|B|chest|triceps,shoulders|95
-Dip|B|triceps|chest,shoulders|95
-Assisted Dip|A|triceps|chest,shoulders|95
+Barbell Bench Press|W|chest|triceps,front_delts,upper_chest|
+Incline Barbell Bench Press|W|upper_chest|chest,front_delts,triceps|
+Decline Barbell Bench Press|W|lower_chest|chest,triceps,front_delts|
+Dumbbell Bench Press|W|chest|triceps,front_delts,upper_chest|
+Incline Dumbbell Press|W|upper_chest|chest,front_delts,triceps|
+Decline Dumbbell Press|W|lower_chest|chest,triceps,front_delts|
+Smith Machine Bench Press|W|chest|triceps,front_delts,upper_chest|
+Machine Chest Press|W|chest|triceps,front_delts|
+Dumbbell Fly|W|chest|front_delts,upper_chest|
+Incline Dumbbell Fly|W|upper_chest|chest,front_delts|
+Cable Crossover|W|chest|lower_chest,front_delts|
+Low-to-High Cable Fly|W|upper_chest|chest,front_delts|
+Pec Deck Fly|W|chest|front_delts|
+Push-Up|B|chest|triceps,front_delts,serratus_anterior,upper_chest|64
+Knee Push-Up|B|chest|triceps,front_delts,serratus_anterior|49
+Decline Push-Up|B|upper_chest|chest,front_delts,triceps,serratus_anterior|74
+Incline Push-Up|B|lower_chest|chest,triceps,front_delts,serratus_anterior|45
+Diamond Push-Up|B|triceps|chest,front_delts|64
+Chest Dip|B|lower_chest|chest,triceps,front_delts|95
+Dip|B|triceps|lower_chest,chest,front_delts|95
+Assisted Dip|A|triceps|lower_chest,chest,front_delts|95
 
 # ---- lats ----
-Pull-Up|B|lats|biceps,upper_back|100
-Chin-Up|B|lats|biceps,upper_back|100
-Neutral-Grip Pull-Up|B|lats|biceps,upper_back|100
-Muscle-Up|B|lats|chest,triceps,biceps|100
-Assisted Pull-Up|A|lats|biceps,upper_back|100
-Assisted Chin-Up|A|lats|biceps,upper_back|100
-Lat Pulldown|W|lats|biceps,upper_back|
-Close-Grip Lat Pulldown|W|lats|biceps,upper_back|
-Wide-Grip Lat Pulldown|W|lats|biceps,upper_back|
-Machine Pulldown|W|lats|biceps|
-Single-Arm Cable Pulldown|W|lats|biceps|
-Straight-Arm Pulldown|W|lats|triceps|
-Dumbbell Pullover|W|lats|chest,triceps|
-One-Arm Dumbbell Row|W|lats|upper_back,biceps|
+Pull-Up|B|lats|biceps,brachialis,upper_back,rear_delts,forearms|100
+Chin-Up|B|lats|biceps,brachialis,upper_back,rear_delts,forearms|100
+Neutral-Grip Pull-Up|B|lats|biceps,brachialis,upper_back,rear_delts,forearms|100
+Muscle-Up|B|lats|biceps,triceps,chest,upper_back,front_delts|100
+Assisted Pull-Up|A|lats|biceps,brachialis,upper_back,rear_delts,forearms|100
+Assisted Chin-Up|A|lats|biceps,brachialis,upper_back,rear_delts,forearms|100
+Lat Pulldown|W|lats|biceps,brachialis,upper_back,rear_delts|
+Close-Grip Lat Pulldown|W|lats|biceps,brachialis,upper_back|
+Wide-Grip Lat Pulldown|W|lats|upper_back,rear_delts,biceps|
+Machine Pulldown|W|lats|biceps,upper_back|
+Single-Arm Cable Pulldown|W|lats|biceps,upper_back|
+Straight-Arm Pulldown|W|lats|triceps,serratus_anterior|
+Dumbbell Pullover|W|lats|chest,triceps,serratus_anterior|
+One-Arm Dumbbell Row|W|lats|upper_back,biceps,rear_delts|
 
 # ---- upper back ----
-Barbell Row|W|upper_back|lats,biceps,lower_back|
-Pendlay Row|W|upper_back|lats,biceps,lower_back|
-Seated Cable Row|W|upper_back|lats,biceps|
-T-Bar Row|W|upper_back|lats,biceps|
-Chest-Supported Dumbbell Row|W|upper_back|lats,biceps|
-Machine Row|W|upper_back|lats,biceps|
-Meadows Row|W|upper_back|lats,biceps|
-Inverted Row|B|upper_back|lats,biceps|60
-Face Pull|W|upper_back|shoulders,traps|
-Reverse Pec Deck|W|upper_back|shoulders|
+Barbell Row|W|upper_back|lats,rear_delts,biceps,lower_back,traps|
+Pendlay Row|W|upper_back|lats,rear_delts,biceps,lower_back,traps|
+Seated Cable Row|W|upper_back|lats,rear_delts,biceps|
+T-Bar Row|W|upper_back|lats,rear_delts,biceps,lower_back,traps|
+Chest-Supported Dumbbell Row|W|upper_back|lats,rear_delts,biceps|
+Machine Row|W|upper_back|lats,rear_delts,biceps|
+Meadows Row|W|upper_back|lats,rear_delts,biceps,forearms|
+Inverted Row|B|upper_back|lats,rear_delts,biceps|60
+Face Pull|W|rear_delts|upper_back,rotator_cuff,traps|
+Reverse Pec Deck|W|rear_delts|upper_back,rotator_cuff,traps|
 
 # ---- lower back ----
 Back Extension|B|lower_back|glutes,hamstrings|60
 Good Morning|W|lower_back|hamstrings,glutes|
 Reverse Hyperextension|W|lower_back|glutes,hamstrings|
-Rack Pull|W|lower_back|traps,glutes,hamstrings|
-Superman Hold|T|lower_back|glutes|
+Rack Pull|W|lower_back|traps,glutes,hamstrings,upper_back,forearms|
+Superman Hold|T|lower_back|glutes,hamstrings|
 
 # ---- traps ----
 Barbell Shrug|W|traps|forearms|
 Dumbbell Shrug|W|traps|forearms|
 Smith Machine Shrug|W|traps|forearms|
 Cable Shrug|W|traps|forearms|
-Upright Row|W|traps|shoulders,biceps|
+Upright Row|W|traps|side_delts,front_delts,biceps|
 
 # ---- shoulders ----
-Overhead Press|W|shoulders|triceps,traps|
-Seated Dumbbell Shoulder Press|W|shoulders|triceps|
-Arnold Press|W|shoulders|triceps|
-Machine Shoulder Press|W|shoulders|triceps|
-Push Press|W|shoulders|triceps,quads|
-Landmine Press|W|shoulders|chest,triceps|
-Lateral Raise|W|shoulders||
-Cable Lateral Raise|W|shoulders||
-Machine Lateral Raise|W|shoulders||
-Front Raise|W|shoulders|chest|
-Rear Delt Fly|W|shoulders|upper_back|
-Cable Rear Delt Fly|W|shoulders|upper_back|
-Handstand Push-Up|B|shoulders|triceps,traps|100
-Pike Push-Up|B|shoulders|triceps,chest|70
+Overhead Press|W|front_delts|side_delts,triceps,traps,upper_chest,rotator_cuff|
+Seated Dumbbell Shoulder Press|W|front_delts|side_delts,triceps,traps,upper_chest,rotator_cuff|
+Arnold Press|W|front_delts|side_delts,triceps,upper_chest,rotator_cuff|
+Machine Shoulder Press|W|front_delts|side_delts,triceps,upper_chest|
+Push Press|W|front_delts|triceps,side_delts,quads,glutes,traps|
+Landmine Press|W|front_delts|upper_chest,triceps,serratus_anterior,side_delts|
+Lateral Raise|W|side_delts|rotator_cuff,traps|
+Cable Lateral Raise|W|side_delts|rotator_cuff,traps|
+Machine Lateral Raise|W|side_delts|rotator_cuff,traps|
+Front Raise|W|front_delts|upper_chest,side_delts|
+Rear Delt Fly|W|rear_delts|upper_back,rotator_cuff,traps|
+Cable Rear Delt Fly|W|rear_delts|upper_back,rotator_cuff,traps|
+Handstand Push-Up|B|front_delts|side_delts,triceps,traps,upper_chest,serratus_anterior,rotator_cuff|100
+Pike Push-Up|B|front_delts|side_delts,triceps,upper_chest,serratus_anterior,traps|70
 
 # ---- biceps ----
-Barbell Curl|W|biceps|forearms|
-EZ-Bar Curl|W|biceps|forearms|
-Dumbbell Curl|W|biceps|forearms|
-Hammer Curl|W|biceps|forearms|
-Incline Dumbbell Curl|W|biceps||
-Preacher Curl|W|biceps||
-Cable Curl|W|biceps|forearms|
-Concentration Curl|W|biceps||
-Spider Curl|W|biceps||
+Barbell Curl|W|biceps|brachialis,forearms|
+EZ-Bar Curl|W|biceps|brachialis,forearms|
+Dumbbell Curl|W|biceps|brachialis,forearms|
+Hammer Curl|W|brachialis|biceps,forearms|
+Incline Dumbbell Curl|W|biceps|brachialis|
+Preacher Curl|W|biceps|brachialis|
+Cable Curl|W|biceps|brachialis,forearms|
+Concentration Curl|W|biceps|brachialis|
+Spider Curl|W|biceps|brachialis|
 
 # ---- triceps ----
-Close-Grip Bench Press|W|triceps|chest,shoulders|
+Close-Grip Bench Press|W|triceps|chest,front_delts|
 Skull Crusher|W|triceps||
 Triceps Pushdown|W|triceps||
 Rope Pushdown|W|triceps||
 Overhead Triceps Extension|W|triceps||
 Cable Overhead Triceps Extension|W|triceps||
 Dumbbell Kickback|W|triceps||
-JM Press|W|triceps|chest,shoulders|
+JM Press|W|triceps|chest,front_delts|
 
 # ---- forearms ----
 Wrist Curl|W|forearms||
 Reverse Wrist Curl|W|forearms||
-Reverse Barbell Curl|W|forearms|biceps|
-Dead Hang|T|forearms|lats,shoulders|
+Reverse Barbell Curl|W|forearms|brachialis,biceps|
+Dead Hang|T|forearms|lats|
 
 # ---- abs ----
 Crunch|B|abs||40
-Sit-Up|B|abs||40
-Decline Sit-Up|B|abs||40
-Bicycle Crunch|B|abs||40
-Russian Twist|B|abs||40
-Lying Leg Raise|B|abs||40
-Hanging Leg Raise|B|abs|forearms|40
-Hanging Knee Raise|B|abs|forearms|40
-Ab Wheel Rollout|B|abs|shoulders,lats|40
+Sit-Up|B|abs|hip_flexors|40
+Decline Sit-Up|B|abs|hip_flexors|40
+Bicycle Crunch|B|abs|obliques,hip_flexors|40
+Russian Twist|B|obliques|abs,hip_flexors|40
+Lying Leg Raise|B|abs|hip_flexors|40
+Hanging Leg Raise|B|abs|hip_flexors,forearms|40
+Hanging Knee Raise|B|abs|hip_flexors,forearms|40
+Ab Wheel Rollout|B|abs|lats,front_delts,serratus_anterior,hip_flexors|40
 Cable Crunch|W|abs||
 Machine Crunch|W|abs||
-Pallof Press|W|abs|shoulders|
-Plank|T|abs|shoulders|
-Side Plank|T|abs|shoulders|
-Hollow Body Hold|T|abs||
+Pallof Press|W|obliques|abs|
+Plank|T|abs|obliques,serratus_anterior,front_delts,glutes|
+Side Plank|T|obliques|abs,abductors,side_delts|
+Hollow Body Hold|T|abs|hip_flexors|
 
 # ---- glutes ----
-Barbell Hip Thrust|W|glutes|hamstrings,quads|
-Glute Bridge|B|glutes|hamstrings|60
-Single-Leg Glute Bridge|B|glutes|hamstrings|60
+Barbell Hip Thrust|W|glutes|hamstrings,adductors,quads|
+Glute Bridge|B|glutes|hamstrings,adductors|60
+Single-Leg Glute Bridge|B|glutes|hamstrings,abductors|60
 Cable Kickback|W|glutes|hamstrings|
 Glute Kickback Machine|W|glutes|hamstrings|
 Cable Pull-Through|W|glutes|hamstrings,lower_back|
-Sumo Deadlift|W|glutes|hamstrings,adductors,quads|
+Sumo Deadlift|W|glutes|hamstrings,adductors,quads,lower_back,traps,forearms|
 
 # ---- quads ----
-Back Squat|W|quads|glutes,hamstrings,lower_back|
-Front Squat|W|quads|glutes,abs|
-Goblet Squat|W|quads|glutes,abs|
-Smith Machine Squat|W|quads|glutes|
-Leg Press|W|quads|glutes,hamstrings|
-Hack Squat|W|quads|glutes|
+Back Squat|W|quads|glutes,adductors,hamstrings,lower_back,abs|
+Front Squat|W|quads|glutes,adductors,abs,upper_back,lower_back|
+Goblet Squat|W|quads|glutes,adductors,abs|
+Smith Machine Squat|W|quads|glutes,adductors|
+Leg Press|W|quads|glutes,hamstrings,adductors|
+Hack Squat|W|quads|glutes,adductors|
 Leg Extension|W|quads||
-Bodyweight Squat|B|quads|glutes|70
-Walking Lunge|B|quads|glutes,hamstrings|80
-Reverse Lunge|B|quads|glutes,hamstrings|80
-Bulgarian Split Squat|B|quads|glutes,hamstrings|80
-Step-Up|B|quads|glutes,hamstrings|80
-Pistol Squat|B|quads|glutes|80
-Assisted Pistol Squat|A|quads|glutes|80
-Wall Sit|T|quads|glutes|
+Bodyweight Squat|B|quads|glutes,adductors|70
+Walking Lunge|B|quads|glutes,hamstrings,adductors,abductors|80
+Reverse Lunge|B|quads|glutes,hamstrings,adductors|80
+Bulgarian Split Squat|B|quads|glutes,adductors,hamstrings,abductors|80
+Step-Up|B|quads|glutes,hamstrings,abductors|80
+Pistol Squat|B|quads|glutes,adductors,abductors,hamstrings|80
+Assisted Pistol Squat|A|quads|glutes,adductors,abductors,hamstrings|80
+Wall Sit|T|quads|glutes,adductors|
 
 # ---- hamstrings ----
-Deadlift|W|hamstrings|glutes,lower_back,traps|
-Romanian Deadlift|W|hamstrings|glutes,lower_back|
-Stiff-Leg Deadlift|W|hamstrings|glutes,lower_back|
-Single-Leg Romanian Deadlift|W|hamstrings|glutes,lower_back|
-Lying Leg Curl|W|hamstrings||
-Seated Leg Curl|W|hamstrings||
-Standing Leg Curl|W|hamstrings||
-Nordic Hamstring Curl|B|hamstrings|glutes|100
+Deadlift|W|hamstrings|glutes,lower_back,quads,traps,upper_back,lats,forearms|
+Romanian Deadlift|W|hamstrings|glutes,lower_back,adductors,forearms|
+Stiff-Leg Deadlift|W|hamstrings|glutes,lower_back,adductors,forearms|
+Single-Leg Romanian Deadlift|W|hamstrings|glutes,lower_back,abductors|
+Lying Leg Curl|W|hamstrings|calves|
+Seated Leg Curl|W|hamstrings|calves|
+Standing Leg Curl|W|hamstrings|calves|
+Nordic Hamstring Curl|B|hamstrings|glutes,calves|100
 
 # ---- calves ----
 Standing Calf Raise|W|calves||
@@ -178,10 +178,31 @@ Single-Leg Calf Raise|B|calves||100
 Hip Adduction Machine|W|adductors||
 Cable Hip Adduction|W|adductors||
 Sumo Squat|W|adductors|quads,glutes|
-Lateral Lunge|B|adductors|quads,glutes|80
-Copenhagen Plank|T|adductors|abs,glutes|
+Lateral Lunge|B|adductors|quads,glutes,hamstrings|80
+Copenhagen Plank|T|adductors|obliques,abs,glutes|
 
 # ---- abductors ----
 Hip Abduction Machine|W|abductors|glutes|
 Cable Hip Abduction|W|abductors|glutes|
-Curtsy Lunge|B|abductors|glutes,quads|80
+Curtsy Lunge|B|abductors|glutes,quads,adductors|80
+
+# ---- obliques ----
+Cable Woodchop|W|obliques|abs,serratus_anterior|
+Dumbbell Side Bend|W|obliques|abs,lower_back|
+Hanging Oblique Knee Raise|B|obliques|abs,hip_flexors,forearms|40
+
+# ---- neck ----
+Neck Curl|W|neck||
+Neck Extension|W|neck|traps|
+Lateral Neck Flexion|W|neck||
+
+# ---- hip flexors ----
+Cable Hip Flexion|W|hip_flexors|abs,quads|
+
+# ---- rotator cuff / serratus / tibialis / brachialis ----
+Cross-Body Hammer Curl|W|brachialis|biceps,forearms|
+Push-Up Plus|B|serratus_anterior|chest,front_delts,triceps|64
+Cable External Rotation|W|rotator_cuff|rear_delts|
+Side-Lying External Rotation|W|rotator_cuff|rear_delts|
+Wall Tibialis Raise|B|tibialis_anterior||40
+Seated Tibialis Raise|W|tibialis_anterior||

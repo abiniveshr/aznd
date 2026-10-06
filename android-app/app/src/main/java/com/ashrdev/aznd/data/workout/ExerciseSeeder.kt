@@ -21,6 +21,11 @@ class ExerciseSeeder(
         val parsed = ExerciseSeedParser.parse(readSeedText())
         if (parsed.errors.isNotEmpty()) onSkippedLines(parsed.errors)
         val existing = dao.seedKeys().toHashSet()
+        // Muscle tags of exercises already in the table follow the seed file (e.g. after the
+        // shoulders were split into delt heads). Only muscles are synced; ids and everything else stay.
+        parsed.exercises.filter { it.seedKey in existing }.forEach {
+            dao.syncCatalogMuscles(it.seedKey, it.primaryMuscle.name, it.secondaryMuscles.joinToString(",") { m -> m.name })
+        }
         val missing = parsed.exercises
             .filter { it.seedKey !in existing }
             .map { it.toExercise() }

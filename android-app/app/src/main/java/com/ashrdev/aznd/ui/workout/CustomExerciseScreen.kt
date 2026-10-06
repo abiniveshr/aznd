@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -140,7 +142,22 @@ fun CustomExerciseScreen(
                 )
             }
 
-            Section("Muscles (up to 4, first = primary)")
+            Section("Muscles (first = primary)")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Muscle groups: ${form.muscles.size} of ${form.maxMuscles} max",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { viewModel.update { it.withMaxMuscles(it.maxMuscles - 1) } },
+                    enabled = form.maxMuscles > 1
+                ) { Icon(Icons.Default.Remove, contentDescription = "Allow fewer muscles") }
+                IconButton(
+                    onClick = { viewModel.update { it.withMaxMuscles(it.maxMuscles + 1) } },
+                    enabled = form.maxMuscles < Muscle.COUNT
+                ) { Icon(Icons.Default.Add, contentDescription = "Allow more muscles") }
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Muscle.values().forEach { m ->
                     FilterChip(

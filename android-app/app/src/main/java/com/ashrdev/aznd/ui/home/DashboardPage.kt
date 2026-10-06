@@ -1,6 +1,7 @@
 package com.ashrdev.aznd.ui.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,15 +13,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.domain.displayName
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.navigation.Screen
@@ -77,6 +89,15 @@ fun DashboardPage(
             }
         }
         item {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Muscle data", style = MaterialTheme.typography.titleLarge)
+                MuscleDataMenu(onPick = { onNavigate(Screen.MuscleStats.createRoute(it)) })
+            }
+        }
+        item {
             Text(
                 "Top Lifts",
                 style = MaterialTheme.typography.titleLarge,
@@ -109,6 +130,29 @@ fun DashboardPage(
                     onNavigate(Screen.ExerciseView.createRoute(stat.WorkoutId, stat.exerciseId))
                 }
             )
+        }
+    }
+}
+
+/** Button that drops down every muscle group; picking one opens its statistics screen. */
+@Composable
+private fun MuscleDataMenu(onPick: (Muscle) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Button(onClick = { expanded = true }) {
+            Text("Choose muscle group")
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            Muscle.values().forEach { muscle ->
+                DropdownMenuItem(
+                    text = { Text(muscle.displayName()) },
+                    onClick = {
+                        expanded = false
+                        onPick(muscle)
+                    }
+                )
+            }
         }
     }
 }

@@ -4,7 +4,8 @@ import com.ashrdev.aznd.domain.ExerciseType
 import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.domain.parseCount
 
-const val MAX_FORM_MUSCLES = 4
+/** Starting muscle-count limit of a new custom exercise; the form lets you raise it up to every muscle. */
+const val DEFAULT_FORM_MUSCLES = 6
 const val DEFAULT_SHARE_PERCENT = "100"
 
 enum class FormError { NAME_BLANK, NAME_TAKEN, TYPE_MISSING, NO_PRIMARY, SHARE_INVALID }
@@ -19,6 +20,8 @@ data class CustomExerciseForm(
     val name: String = "",
     val type: ExerciseType? = null,
     val muscles: List<Muscle> = emptyList(),
+    /** How many muscles this exercise may list (1..all). Lowering it trims the last-picked ones. */
+    val maxMuscles: Int = DEFAULT_FORM_MUSCLES,
     val sharePercentText: String = DEFAULT_SHARE_PERCENT,
     val photoPath: String? = null
 ) {
@@ -32,6 +35,7 @@ data class CustomExerciseForm(
             name = e.name,
             type = e.type,
             muscles = listOf(e.primaryMuscle) + e.secondaryMuscles,
+            maxMuscles = maxOf(DEFAULT_FORM_MUSCLES, 1 + e.secondaryMuscles.size),
             sharePercentText = Math.round(e.bodyweightShare * 100).toString(),
             photoPath = e.photoPath
         )
@@ -45,9 +49,14 @@ data class CustomExerciseForm(
     fun withShareText(v: String) = copy(sharePercentText = v)
     fun withPhoto(path: String?) = copy(photoPath = path)
 
+    fun withMaxMuscles(n: Int): CustomExerciseForm {
+        val limit = n.coerceIn(1, Muscle.COUNT)
+        return copy(maxMuscles = limit, muscles = muscles.take(limit))
+    }
+
     fun toggleMuscle(m: Muscle): CustomExerciseForm = when {
         m in muscles -> copy(muscles = muscles - m)
-        muscles.size >= MAX_FORM_MUSCLES -> this
+        muscles.size >= maxMuscles -> this
         else -> copy(muscles = muscles + m)
     }
 

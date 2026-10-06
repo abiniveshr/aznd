@@ -23,7 +23,8 @@ package com.ashrdev.aznd.ui.navigation
  *  |    |- Workout History -- History (pick a workout) -- WorkoutHistory (calendar) -- SessionDetail
  *  |    |                                                   '- Stats -- WorkoutStats
  *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
- *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseView
+ *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseView,
+ *                     Muscle data (dropdown) -> MuscleStats
  *
  * Settings -> Appearance opens from the pull-up bar on every screen.
  */
@@ -44,6 +45,9 @@ sealed class Screen(val route: String) {
         fun createRoute(workoutId: Long) = "workout_logger/$workoutId"
     }
     object CustomExercises : Screen("custom_exercises")
+    object MuscleStats : Screen("muscle_stats/{muscle}") {
+        fun createRoute(muscle: com.ashrdev.aznd.domain.Muscle) = "muscle_stats/${muscle.name}"
+    }
     object CustomExercise : Screen("custom_exercise?exerciseId={exerciseId}") {
         fun createRoute(exerciseId: Long?) = "custom_exercise?exerciseId=${exerciseId ?: -1}"
     }

@@ -70,7 +70,7 @@ object ExerciseSeedParser {
         val secondary = fields.getOrElse(3) { "" }
             .split(",").map { it.trim() }.filter { it.isNotEmpty() }
             .map { muscle(it) }
-        require(secondary.size <= 3) { "more than 3 secondary muscles" }
+        require(secondary.size < Muscle.COUNT) { "too many secondary muscles" }
         require(secondary.toSet().size == secondary.size && primary !in secondary) {
             "a muscle is listed twice"
         }

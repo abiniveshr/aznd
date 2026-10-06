@@ -27,7 +27,7 @@ data class Exercise(
     val name: String,
     val type: ExerciseType,
     val primaryMuscle: Muscle,
-    /** 0 to 3 muscles. */
+    /** Any number of muscles (the primary one is not repeated here). */
     val secondaryMuscles: List<Muscle> = emptyList(),
     /** 0..1. Only used by the two bodyweight types. */
     val bodyweightShare: Double = 1.0,

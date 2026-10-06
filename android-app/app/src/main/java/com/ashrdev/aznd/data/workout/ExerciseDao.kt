@@ -39,6 +39,19 @@ interface ExerciseDao {
     @Query("SELECT COUNT(*) FROM catalog_exercise")
     suspend fun count(): Int
 
+    @Query("SELECT * FROM catalog_exercise")
+    suspend fun allOnce(): List<Exercise>
+
+    /**
+     * Keeps a catalog exercise's muscle tags equal to the seed file (matched by seedKey, so custom
+     * exercises are never touched). Only writes when something differs. Ids never change.
+     */
+    @Query(
+        "UPDATE catalog_exercise SET primaryMuscle = :primary, secondaryMuscles = :secondary " +
+            "WHERE seedKey = :seedKey AND (primaryMuscle != :primary OR secondaryMuscles != :secondary)"
+    )
+    suspend fun syncCatalogMuscles(seedKey: String, primary: String, secondary: String)
+
     // ---------------------------------------------------------------------------------------
     // Editing / deleting custom exercises.
     // New tables (template_set, session_set) point at the exercise by id; the older history

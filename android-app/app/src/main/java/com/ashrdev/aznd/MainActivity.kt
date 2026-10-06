@@ -30,7 +30,10 @@ import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
 import com.ashrdev.aznd.ui.workout.BuilderViewModel
 import com.ashrdev.aznd.ui.workout.CustomExerciseScreen
+import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.ui.workout.CustomExerciseViewModel
+import com.ashrdev.aznd.ui.workout.MuscleStatsScreen
+import com.ashrdev.aznd.ui.workout.MuscleStatsViewModel
 import com.ashrdev.aznd.ui.workout.CustomExercisesScreen
 import com.ashrdev.aznd.ui.workout.CustomExercisesViewModel
 import com.ashrdev.aznd.ui.workout.LoggerViewModel
@@ -328,6 +331,26 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    composable(
+                        route = Screen.MuscleStats.route,
+                        arguments = listOf(navArgument("muscle") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val muscle = backStackEntry.arguments?.getString("muscle")
+                            ?.let { n -> Muscle.values().firstOrNull { it.name == n } }
+                        if (muscle != null) {
+                            val statsVm: MuscleStatsViewModel = viewModel(
+                                factory = MuscleStatsViewModel.factory(
+                                    trainingRepository, muscle, workoutSettings.settings.value.trackRpe
+                                )
+                            )
+                            MuscleStatsScreen(
+                                viewModel = statsVm,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                    }
                     composable(Screen.CustomExercises.route) {
                         val listVm: CustomExercisesViewModel =
                             viewModel(factory = CustomExercisesViewModel.factory(trainingRepository))

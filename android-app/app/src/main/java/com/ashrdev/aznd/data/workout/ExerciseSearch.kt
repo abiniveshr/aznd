@@ -6,7 +6,22 @@ const val PICKER_MAX_RESULTS = 30
 
 /** Lower-case words a user may type for a muscle: "upper back", "upper_back", "UBK". */
 private fun Muscle.keys(): List<String> =
-    listOf(name.lowercase(), name.lowercase().replace('_', ' '), badgeCode.lowercase())
+    listOf(name.lowercase(), name.lowercase().replace('_', ' '), badgeCode.lowercase()) +
+        name.lowercase().split('_') + aliases()
+
+/** Extra words that find a muscle: "shoulders" / "delts" find all three delt heads. */
+private fun Muscle.aliases(): List<String> = when (this) {
+    Muscle.FRONT_DELTS, Muscle.SIDE_DELTS, Muscle.REAR_DELTS, Muscle.ROTATOR_CUFF ->
+        listOf("shoulders", "shoulder", "delts", "delt")
+    Muscle.UPPER_CHEST, Muscle.CHEST, Muscle.LOWER_CHEST -> listOf("chest", "pecs", "pec")
+    Muscle.SERRATUS_ANTERIOR -> listOf("serratus")
+    Muscle.TIBIALIS_ANTERIOR -> listOf("tibialis", "shins", "shin")
+    Muscle.BRACHIALIS -> listOf("arms")
+    Muscle.BICEPS, Muscle.TRICEPS -> listOf("arms")
+    Muscle.HIP_FLEXORS -> listOf("hips", "psoas")
+    Muscle.OBLIQUES -> listOf("side abs")
+    else -> emptyList()
+}
 
 /**
  * Picker filter: blank query = first [limit] by name; otherwise every word of the query must
