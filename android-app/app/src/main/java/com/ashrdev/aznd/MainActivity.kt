@@ -54,6 +54,9 @@ import com.ashrdev.aznd.ui.workout.HistoryScreen
 import com.ashrdev.aznd.ui.workout.SessionDetailScreen
 import com.ashrdev.aznd.ui.workout.SessionHistoryScreen
 import com.ashrdev.aznd.ui.workout.WorkoutLogScreen
+import com.ashrdev.aznd.ui.common.GraphRangeStore
+import com.ashrdev.aznd.ui.common.LocalGraphRangeStore
+import com.ashrdev.aznd.ui.workout.WorkoutGraphViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutStatsScreen
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutViewModelFactory
@@ -71,8 +74,10 @@ class MainActivity : ComponentActivity() {
             database.exerciseDao(), database.templateDao(), database.sessionDao(), legacy = dao
         )
         val workoutSettings = WorkoutSettingsStore(this)
+        val graphRange = GraphRangeStore(this)
         setContent {
             AzndTheme {
+              androidx.compose.runtime.CompositionLocalProvider(LocalGraphRangeStore provides graphRange) {
                 val navController = rememberNavController()
                 val workoutViewModel: WorkoutViewModel =
                     viewModel(factory = WorkoutViewModelFactory(dao, trainingRepository))
@@ -208,7 +213,13 @@ class MainActivity : ComponentActivity() {
                         arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
                     ) { backStackEntry ->
                         val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                        val graphVm: WorkoutGraphViewModel = viewModel(
+                            factory = WorkoutGraphViewModel.factory(
+                                trainingRepository, workoutId, workoutSettings.settings.value.trackRpe
+                            )
+                        )
                         WorkoutStatsScreen(
+                            graphViewModel = graphVm,
                             workoutId = workoutId,
                             viewModel = workoutViewModel,
                             onBack = goBack,
@@ -466,6 +477,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+              }
             }
         }
     }

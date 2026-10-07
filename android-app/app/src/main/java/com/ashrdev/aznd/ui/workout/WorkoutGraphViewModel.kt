@@ -7,29 +7,28 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.domain.E1rmCalculator
-import com.ashrdev.aznd.domain.Muscle
-import com.ashrdev.aznd.domain.MuscleSession
-import com.ashrdev.aznd.domain.MuscleStatsCalculator
+import com.ashrdev.aznd.domain.SessionStat
+import com.ashrdev.aznd.domain.SessionStatsCalculator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Reads every finished set once and turns it into one entry per session for this muscle. */
-class MuscleStatsViewModel(
+/** Per-session numbers of one workout, for the graph on the workout stats screen. */
+class WorkoutGraphViewModel(
     repository: TrainingRepository,
-    val muscle: Muscle,
+    workoutId: Long,
     trackRpe: Boolean
 ) : ViewModel() {
 
-    private val _sessions = MutableStateFlow<List<MuscleSession>?>(null)
+    private val _sessions = MutableStateFlow<List<SessionStat>?>(null)
     /** Null until the data has been read. */
-    val sessions: StateFlow<List<MuscleSession>?> = _sessions.asStateFlow()
+    val sessions: StateFlow<List<SessionStat>?> = _sessions.asStateFlow()
 
     init {
         viewModelScope.launch {
-            _sessions.value = MuscleStatsCalculator.sessions(
-                muscle,
+            _sessions.value = SessionStatsCalculator.forWorkout(
+                workoutId,
                 repository.loggedSetData(),
                 repository.statsExercises(),
                 E1rmCalculator(rpeTracking = trackRpe)
@@ -38,7 +37,7 @@ class MuscleStatsViewModel(
     }
 
     companion object {
-        fun factory(repository: TrainingRepository, muscle: Muscle, trackRpe: Boolean): ViewModelProvider.Factory =
-            viewModelFactory { initializer { MuscleStatsViewModel(repository, muscle, trackRpe) } }
+        fun factory(repository: TrainingRepository, workoutId: Long, trackRpe: Boolean): ViewModelProvider.Factory =
+            viewModelFactory { initializer { WorkoutGraphViewModel(repository, workoutId, trackRpe) } }
     }
 }

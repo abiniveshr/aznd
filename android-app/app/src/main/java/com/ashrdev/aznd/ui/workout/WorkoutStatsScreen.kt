@@ -40,7 +40,8 @@ fun WorkoutStatsScreen(
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenExercise: (Long, Long) -> Unit
+    onOpenExercise: (Long, Long) -> Unit,
+    graphViewModel: WorkoutGraphViewModel? = null
 ) {
     var workoutName by remember { mutableStateOf("") }
     var stats by remember { mutableStateOf(listOf<ExerciseStat>()) }
@@ -92,6 +93,9 @@ fun WorkoutStatsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (graphViewModel != null) {
+                    item(key = "graph") { WorkoutGraphSection(graphViewModel) }
+                }
                 items(stats, key = { it.exercise.id }) { stat ->
                     Card(
                         modifier = Modifier
