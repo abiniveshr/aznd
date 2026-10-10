@@ -2,12 +2,12 @@ package com.ashrdev.aznd.domain
 
 /** The only place bodyweight comes from. Sessions snapshot it when they start. */
 fun interface BodyweightProvider {
-    fun currentKg(): Double
+    suspend fun currentKg(): Double
 }
 
 const val PLACEHOLDER_BODYWEIGHT_KG = 75.0
 
-// TODO(bodyweight-tracker): replace with the real tracker
+/** Fixed fallback; the app uses RoomBodyweightProvider, which reads the bodyweight log. */
 object PlaceholderBodyweightProvider : BodyweightProvider {
-    override fun currentKg(): Double = PLACEHOLDER_BODYWEIGHT_KG
+    override suspend fun currentKg(): Double = PLACEHOLDER_BODYWEIGHT_KG
 }

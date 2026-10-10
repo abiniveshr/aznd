@@ -202,11 +202,6 @@ private fun SetRowLine(
     }
 }
 
-/**
- * "8-12" or "10" (= 8 to 8). The text is the user's own while typing; only valid text is stored
- * (BuilderState.setTargetText), so "8-" or "x" keep the last stored target. Seconds for TIME_HELD.
- * KeyboardType.Phone is used because it offers the "-" key that a plain number pad often lacks.
- */
 @Composable
 private fun TargetField(row: SetRow, seconds: Boolean, onText: (String) -> Unit, modifier: Modifier) {
     var text by remember(row.id) { mutableStateOf(formatTarget(row.targetMin, row.targetMax)) }

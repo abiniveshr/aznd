@@ -10,6 +10,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.ashrdev.aznd.data.body.BodyDao
+import com.ashrdev.aznd.data.body.BodyMeasurement
+import com.ashrdev.aznd.data.body.BodyWeightEntry
+import com.ashrdev.aznd.data.body.MIGRATION_13_14
+import com.ashrdev.aznd.data.macro.FoodDao
+import com.ashrdev.aznd.data.macro.FoodEntry
+import com.ashrdev.aznd.data.macro.MIGRATION_14_15
 import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
@@ -54,9 +61,12 @@ import java.util.Locale
         Exercise::class,
         TemplateSet::class,
         LoggedSession::class,
-        LoggedSet::class
+        LoggedSet::class,
+        BodyWeightEntry::class,
+        BodyMeasurement::class,
+        FoodEntry::class
     ],
-    version = 13
+    version = 15
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -65,6 +75,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
     abstract fun templateDao(): TemplateDao
     abstract fun sessionDao(): SessionDao
+    abstract fun bodyDao(): BodyDao
+    abstract fun foodDao(): FoodDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -75,7 +87,8 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aznd.db"
-                ).fallbackToDestructiveMigration(true)
+                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15)
+                    .fallbackToDestructiveMigration(true)
                     .addCallback(object : RoomDatabase.Callback() {
                         // Runs on every open, before the first query: the old single "SHOULDERS"
                         // muscle no longer exists, so any stored value is moved to SIDE_DELTS

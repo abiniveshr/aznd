@@ -23,8 +23,15 @@ object SessionStatsCalculator {
         rows: List<LoggedSetData>,
         exercises: Map<Long, StatsExercise>,
         calculator: E1rmCalculator = E1rmCalculator()
+    ): List<SessionStat> = all(rows.filter { it.workoutId == workoutId }, exercises, calculator)
+
+    /** Finished sessions of EVERY workout that have at least one logged set, oldest first (used by the macro tracker). */
+    fun all(
+        rows: List<LoggedSetData>,
+        exercises: Map<Long, StatsExercise>,
+        calculator: E1rmCalculator = E1rmCalculator()
     ): List<SessionStat> =
-        rows.filter { it.workoutId == workoutId && it.isLogged && exercises.containsKey(it.exerciseId) }
+        rows.filter { it.isLogged && exercises.containsKey(it.exerciseId) }
             .groupBy { it.sessionId }
             .map { (sessionId, sets) ->
                 val head = sets.first()

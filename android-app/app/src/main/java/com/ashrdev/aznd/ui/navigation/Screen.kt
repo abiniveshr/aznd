@@ -65,6 +65,8 @@ sealed class Screen(val route: String) {
     }
 
     object Streaks : Screen("streaks")
+    object Macros : Screen("macros")
+    object BodyMeasurements : Screen("body_measurements")
     object StreakEditor : Screen("streak_editor")
     object StreakDetail : Screen("streak_detail/{streakId}") {
         fun createRoute(streakId: Long) = "streak_detail/$streakId"

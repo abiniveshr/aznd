@@ -109,9 +109,11 @@ fun StatsGraph(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
 
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(modes, key = { it.id }) { m ->
-                    FilterChip(selected = m.id == mode.id, onClick = { modeId = m.id }, label = { Text(m.label) })
+            if (modes.size > 1) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(modes, key = { it.id }) { m ->
+                        FilterChip(selected = m.id == mode.id, onClick = { modeId = m.id }, label = { Text(m.label) })
+                    }
                 }
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

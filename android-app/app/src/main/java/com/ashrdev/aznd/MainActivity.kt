@@ -30,7 +30,13 @@ import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
 import com.ashrdev.aznd.ui.workout.BuilderViewModel
 import com.ashrdev.aznd.ui.workout.CustomExerciseScreen
+import com.ashrdev.aznd.data.body.RoomBodyweightProvider
 import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.data.macro.MacroTargetsStore
+import com.ashrdev.aznd.ui.body.BodyViewModel
+import com.ashrdev.aznd.ui.macro.MacroScreen
+import com.ashrdev.aznd.ui.macro.MacroViewModel
+import com.ashrdev.aznd.ui.body.MeasurementsScreen
 import com.ashrdev.aznd.ui.workout.CustomExerciseViewModel
 import com.ashrdev.aznd.ui.workout.MuscleStatsScreen
 import com.ashrdev.aznd.ui.workout.MuscleStatsViewModel
@@ -71,10 +77,12 @@ class MainActivity : ComponentActivity() {
         val dao = database.WorkoutDao()
         val streakDao = database.streakDao()
         val trainingRepository = TrainingRepository(
-            database.exerciseDao(), database.templateDao(), database.sessionDao(), legacy = dao
+            database.exerciseDao(), database.templateDao(), database.sessionDao(),
+            bodyweight = RoomBodyweightProvider(database.bodyDao()), legacy = dao
         )
         val workoutSettings = WorkoutSettingsStore(this)
         val graphRange = GraphRangeStore(this)
+        val macroTargets = MacroTargetsStore(this)
         setContent {
             AzndTheme {
               androidx.compose.runtime.CompositionLocalProvider(LocalGraphRangeStore provides graphRange) {
@@ -361,6 +369,24 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = openSettings
                             )
                         }
+                    }
+                    composable(Screen.Macros.route) {
+                        val macroVm: MacroViewModel = viewModel(
+                            factory = MacroViewModel.factory(
+                                database.foodDao(), trainingRepository, workoutSettings.settings.value.trackRpe
+                            )
+                        )
+                        MacroScreen(
+                            viewModel = macroVm,
+                            targets = macroTargets,
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
+                        )
+                    }
+                    composable(Screen.BodyMeasurements.route) {
+                        val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                        MeasurementsScreen(viewModel = bodyVm, onBack = goBack, onHome = goHome, onOpenSettings = openSettings)
                     }
                     composable(Screen.CustomExercises.route) {
                         val listVm: CustomExercisesViewModel =

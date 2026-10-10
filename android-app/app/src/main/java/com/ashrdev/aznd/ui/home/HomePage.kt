@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,7 +38,9 @@ private data class ModuleEntry(
 // To add a module (nutrition, runs, sleep ...), add one line here.
 private val modules = listOf(
     ModuleEntry("Workouts", "Routines and sessions", Icons.Default.FitnessCenter, Screen.WorkoutLog.route),
-    ModuleEntry("Streaks", "Habits and calendars", Icons.Default.LocalFireDepartment, Screen.Streaks.route)
+    ModuleEntry("Streaks", "Habits and calendars", Icons.Default.LocalFireDepartment, Screen.Streaks.route),
+    ModuleEntry("Macros", "Calories and macros", Icons.Default.Restaurant, Screen.Macros.route),
+    ModuleEntry("Measurements", "Weight, body fat, tape", Icons.Default.Straighten, Screen.BodyMeasurements.route)
 )
 
 @Composable
