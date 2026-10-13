@@ -186,7 +186,6 @@ class MainActivity : ComponentActivity() {
                                 onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
                                 onOpenWorkoutStats = { id -> navigateTo(Screen.WorkoutStats.createRoute(id)) },
                                 onOpenExercise = { id -> navigateTo(Screen.ExerciseViewer.createRoute(id)) },
-                                onManageCustomExercises = { navigateTo(Screen.CustomExercises.route) },
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings

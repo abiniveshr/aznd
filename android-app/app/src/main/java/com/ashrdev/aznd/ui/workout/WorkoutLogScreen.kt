@@ -23,12 +23,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,7 +67,7 @@ private val WorkoutPages = listOf(
  *   Exercises | Workouts | Stats
  *  - Workouts: every workout with a Start button; tap a workout to see what is in it.
  *  - Exercises (swipe left): every catalog exercise, A-Z, in the same searcher as the add-exercise
- *    picker, with "Add custom exercise". Tapping one opens the exercise viewer.
+ *    picker. Tapping one opens the exercise viewer. The + in the top bar adds a custom exercise.
  *  - Stats (swipe right): pick a workout to open its stats.
  */
 @Composable
@@ -83,15 +80,13 @@ fun WorkoutLogScreen(
     onOpenExercise: (Long) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit,
-    // Opens the Custom exercises list (add / edit / delete). Menu item hidden when null.
-    onManageCustomExercises: (() -> Unit)? = null
+    onOpenSettings: () -> Unit
 ) {
+    val openCustom = LocalOpenCustomExercise.current
     val workouts by viewModel.Workouts.collectAsState()
     val catalog by viewModel.catalogExercises.collectAsState()
     val active by viewModel.activeSession.collectAsState()
     var blockedDialog by remember { mutableStateOf(false) }
-    var menuExpanded by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(initialPage = PAGE_VIEW) { WorkoutPages.size }
     val subPages = rememberSubPageBar(pagerState, WorkoutPages)
 
@@ -154,25 +149,9 @@ fun WorkoutLogScreen(
             onClick = startEmpty
         ) else null,
         topBarActions = {
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
-                ) {
-                    if (onManageCustomExercises != null) {
-                        DropdownMenuItem(
-                            text = { Text("Custom exercises") },
-                            onClick = {
-                                menuExpanded = false
-                                onManageCustomExercises()
-                            }
-                        )
-                    }
-                    DropdownMenuItem(text = { Text("Delete data") }, enabled = false, onClick = {})
-                    DropdownMenuItem(text = { Text("Export data") }, enabled = false, onClick = {})
+            if (openCustom != null) {
+                IconButton(onClick = openCustom) {
+                    Icon(Icons.Default.Add, contentDescription = "Add custom exercise")
                 }
             }
         }
@@ -293,7 +272,7 @@ private fun ExercisesPage(
         selected = null,
         exercises = exercises,
         onPick = onOpen,
-        onAddCustom = LocalOpenCustomExercise.current,
+        onAddCustom = null,
         modifier = Modifier.fillMaxSize().padding(top = 8.dp),
         autoFocus = false,
         bottomPadding = bottomPadding

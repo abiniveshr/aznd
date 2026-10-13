@@ -47,3 +47,10 @@ fun searchExercises(all: List<Exercise>, query: String, limit: Int = PICKER_MAX_
         .sortedWith(compareBy<Exercise>({ rank(it) }, { it.name.lowercase() }))
         .take(limit)
 }
+
+/** Muscles whose name, 3-letter code or alias matches every word of [query]; all of them when blank. */
+fun searchMuscles(query: String): List<Muscle> {
+    val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return Muscle.values().toList()
+    return Muscle.values().filter { m -> words.all { w -> m.keys().any { it.startsWith(w) } } }
+}

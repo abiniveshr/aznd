@@ -110,10 +110,8 @@ fun CustomExercisesScreen(
                             MuscleBadge(e.primaryMuscle, e.photoPath, size = 48.dp)
                             Column(Modifier.weight(1f)) {
                                 Text(e.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                val muscles = (listOf(e.primaryMuscle) + e.secondaryMuscles)
-                                    .joinToString(", ") { it.name.lowercase().replace('_', ' ') }
                                 Text(
-                                    "$muscles  •  ${e.type.formLabel()}",
+                                    e.subtitle(),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,

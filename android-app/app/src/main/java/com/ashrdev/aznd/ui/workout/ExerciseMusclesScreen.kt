@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.Exercise
-import com.ashrdev.aznd.domain.ExerciseType
+import com.ashrdev.aznd.data.workout.formLabel
 import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.domain.displayName
 import com.ashrdev.aznd.ui.common.BodyModelPlaceholder
@@ -44,7 +44,7 @@ fun ExerciseMusclesPage(item: Exercise, bottomPadding: Dp) {
         }
         item(key = "type") {
             Text(
-                "Type: ${item.type.label()}",
+                "Type: ${item.type.formLabel()}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -83,11 +83,4 @@ private fun MuscleRow(muscle: Muscle, primary: Boolean) {
             )
         }
     }
-}
-
-private fun ExerciseType.label(): String = when (this) {
-    ExerciseType.WEIGHTED -> "Weighted"
-    ExerciseType.BODYWEIGHT_REPS -> "Bodyweight"
-    ExerciseType.ASSISTED_BODYWEIGHT -> "Assisted bodyweight"
-    ExerciseType.TIME_HELD -> "Timed hold"
 }

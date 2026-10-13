@@ -11,11 +11,10 @@ package com.ashrdev.aznd.ui.navigation
  *  |     |                                                 |- Start ---- WorkoutLogger
  *  |     |                                                 '- exercise -- ExerciseViewer
  *  |     |- Exercises page: an exercise ---------------- ExerciseViewer (pager: Tutorial | Exercise | Stats; Edit on custom exercises -> CustomExercise)
- *  |     |                   Add custom exercise ------- CustomExercise
+ *  |     |                   + (top bar, every page) --- CustomExercise (add)
  *  |     |- Add workout button (Workouts page; "Empty workout" beside it starts a session with no template) or Edit in WorkoutView --------- WorkoutEditor (Add exercise opens the picker,
  *  |     |                                                 which has "Add custom exercise" -> CustomExercise)
  *  |     |- Stats page: a workout ---------------------- WorkoutStats (pager: Stats | Exercises; exercise menu on the 2nd)
- *  |     |- (menu) Custom exercises -- CustomExercises -- CustomExercise (add / edit)
  *  |     '- session in progress ------------------------- WorkoutLogger
  *  |- Streaks --------- Streaks
  *  |                     |- Add streak ------- StreakEditor
