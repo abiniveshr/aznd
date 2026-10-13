@@ -115,7 +115,7 @@ fun DashboardPage(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Button(onClick = { onNavigate(Screen.WorkoutLog.route) }) {
+                    Button(onClick = { onNavigate(Screen.Workouts.route) }) {
                         Text("Go to workouts")
                     }
                 }

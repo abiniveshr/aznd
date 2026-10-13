@@ -40,14 +40,15 @@ import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
 
 /**
- * Read-only view of a workout's template. Tapping an exercise opens the exercise viewer. Start opens the logger, which starts a new session or
- * resumes the unfinished one of this workout. Only one session can run at a time, so while a
- * session of ANOTHER workout is unfinished, Start offers to go there instead.
+ * Read-only view of a workout's template details. Tapping an exercise opens the exercise viewer.
+ * Start opens the logger, which starts a new session or resumes the unfinished one of this workout.
+ * Only one session can run at a time, so while a session of ANOTHER workout is unfinished, Start
+ * offers to go there instead.
  *
  * [onOpenSession] receives the id of the workout whose logger should open.
  */
 @Composable
-fun WorkoutViewScreen(
+fun WorkoutDetailScreen(
     workoutId: Long,
     viewModel: WorkoutViewModel,
     onBack: () -> Unit,

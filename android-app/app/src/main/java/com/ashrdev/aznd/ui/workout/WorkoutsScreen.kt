@@ -71,7 +71,7 @@ private val WorkoutPages = listOf(
  *  - Stats (swipe right): pick a workout to open its stats.
  */
 @Composable
-fun WorkoutLogScreen(
+fun WorkoutsScreen(
     viewModel: WorkoutViewModel,
     onOpenWorkout: (Long) -> Unit,
     onAddWorkout: () -> Unit,
@@ -135,25 +135,27 @@ fun WorkoutLogScreen(
         onHome = onHome,
         onOpenSettings = onOpenSettings,
         subPages = subPages,
-        // The big bottom button, split in two, only on the Workouts page. Its space stays reserved
-        // on the other pages so their lists don't jump while swiping.
         reservePrimarySpace = true,
         primaryAction = if (page == PAGE_VIEW) PrimaryAction(
             icon = Icons.Default.Add,
-            label = "Add workout",
+            label = "New Preset",
             onClick = onAddWorkout
         ) else null,
         secondaryAction = if (page == PAGE_VIEW) PrimaryAction(
             icon = Icons.Default.PlayArrow,
-            label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume empty" else "Empty workout",
+            label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume empty" else "Blank",
             onClick = startEmpty
         ) else null,
-        topBarActions = {
-            if (openCustom != null) {
-                IconButton(onClick = openCustom) {
-                    Icon(Icons.Default.Add, contentDescription = "Add custom exercise")
+        topBarActions = if (page == PAGE_EXERCISES) {
+            {
+                if (openCustom != null) {
+                    IconButton(onClick = openCustom) {
+                        Icon(Icons.Default.Add, contentDescription = "Add custom exercise")
+                    }
                 }
             }
+        } else {
+            {}
         }
     ) { padding ->
         val bottom = padding.calculateBottomPadding()

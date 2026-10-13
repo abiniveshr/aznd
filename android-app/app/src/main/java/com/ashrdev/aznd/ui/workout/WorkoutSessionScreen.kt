@@ -3,6 +3,7 @@ package com.ashrdev.aznd.ui.workout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -19,9 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 
@@ -30,7 +29,7 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
  * per set, adding photos, and completing or discarding the session.
  */
 @Composable
-fun WorkoutLoggerScreen(
+fun WorkoutSessionScreen(
     workoutId: Long,
     workoutName: String,
     viewModel: LoggerViewModel,
