@@ -50,6 +50,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -77,10 +78,12 @@ fun ExercisePicker(
     exercises: List<Exercise>,
     onPick: (Exercise) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Exercise"
+    label: String = "Exercise",
+    // false for pickers that only look things up (stats): no "Add custom exercise" button
+    allowAddCustom: Boolean = true
 ) {
     var open by remember { mutableStateOf(false) }
-    val openCustom = LocalOpenCustomExercise.current
+    val openCustom = if (allowAddCustom) LocalOpenCustomExercise.current else null
 
     Box(modifier) {
         FieldBox(
@@ -122,14 +125,60 @@ private fun ExerciseType.label(): String = when (this) {
     ExerciseType.TIME_HELD -> "Timed"
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * The full-screen search page (a dialog): a header with [title] and a back arrow above
+ * [ExerciseSearchContent]. [onPick] receives the tapped exercise.
+ */
 @Composable
-private fun ExerciseSearchScreen(
+fun ExerciseSearchScreen(
     selected: Exercise?,
     exercises: List<Exercise>,
     onDismiss: () -> Unit,
     onPick: (Exercise) -> Unit,
-    onAddCustom: (() -> Unit)?
+    onAddCustom: (() -> Unit)?,
+    title: String = "Choose exercise"
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close")
+                    }
+                    Text(title, style = MaterialTheme.typography.titleLarge)
+                }
+                ExerciseSearchContent(
+                    selected = selected,
+                    exercises = exercises,
+                    onPick = onPick,
+                    onAddCustom = onAddCustom,
+                    modifier = Modifier.weight(1f),
+                    bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The searcher itself: search field, optional "Add custom exercise" button, muscle and type
+ * filters and the A-Z list. Used by [ExerciseSearchScreen] (picking) and by the Exercises page
+ * (browsing), so both behave identically; only what [onPick] does differs.
+ * [autoFocus] opens the keyboard on arrival; [bottomPadding] keeps the list clear of bars.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ExerciseSearchContent(
+    selected: Exercise?,
+    exercises: List<Exercise>,
+    onPick: (Exercise) -> Unit,
+    onAddCustom: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    autoFocus: Boolean = true,
+    bottomPadding: Dp = 0.dp
 ) {
     var query by remember { mutableStateOf("") }
     var muscle by remember { mutableStateOf<Muscle?>(null) }
@@ -147,7 +196,9 @@ private fun ExerciseSearchScreen(
     }
     val grouped = query.isBlank()
 
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    if (autoFocus) {
+        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    }
     // dragging the list hides the keyboard so you can see more rows
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }.collect { if (it) keyboard?.hide() }
@@ -155,130 +206,114 @@ private fun ExerciseSearchScreen(
     // jump back to the top whenever the filter changes
     LaunchedEffect(query, muscle, type) { listState.scrollToItem(0) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close")
+    Column(modifier) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Search name or muscle") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear search")
                     }
-                    Text("Choose exercise", style = MaterialTheme.typography.titleLarge)
                 }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .focusRequester(focus)
+        )
 
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = { Text("Search name or muscle") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear search")
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .focusRequester(focus)
+        if (onAddCustom != null) {
+            OutlinedButton(
+                onClick = onAddCustom,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Text("Add custom exercise")
+            }
+        }
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item(key = "all") {
+                FilterChip(
+                    selected = muscle == null,
+                    onClick = { muscle = null },
+                    label = { Text("All") }
                 )
+            }
+            items(Muscle.values().toList(), key = { it.name }) { m ->
+                FilterChip(
+                    selected = muscle == m,
+                    onClick = { muscle = if (muscle == m) null else m },
+                    label = { Text(m.label()) }
+                )
+            }
+        }
 
-                if (onAddCustom != null) {
-                    OutlinedButton(
-                        onClick = onAddCustom,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Text("Add custom exercise")
-                    }
-                }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(ExerciseType.values().toList(), key = { it.name }) { t ->
+                FilterChip(
+                    selected = type == t,
+                    onClick = { type = if (type == t) null else t },
+                    label = { Text(t.label()) }
+                )
+            }
+        }
 
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item(key = "all") {
-                        FilterChip(
-                            selected = muscle == null,
-                            onClick = { muscle = null },
-                            label = { Text("All") }
-                        )
-                    }
-                    items(Muscle.values().toList(), key = { it.name }) { m ->
-                        FilterChip(
-                            selected = muscle == m,
-                            onClick = { muscle = if (muscle == m) null else m },
-                            label = { Text(m.label()) }
-                        )
-                    }
-                }
+        Text(
+            text = if (results.size == 1) "1 exercise" else "${results.size} exercises",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+        )
 
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(ExerciseType.values().toList(), key = { it.name }) { t ->
-                        FilterChip(
-                            selected = type == t,
-                            onClick = { type = if (type == t) null else t },
-                            label = { Text(t.label()) }
-                        )
-                    }
-                }
-
+        if (results.isEmpty()) {
+            Box(Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.TopCenter) {
                 Text(
-                    text = if (results.size == 1) "1 exercise" else "${results.size} exercises",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    "No matching exercise",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                if (results.isEmpty()) {
-                    Box(Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.TopCenter) {
-                        Text(
-                            "No matching exercise",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = bottomPadding)
+            ) {
+                if (grouped) {
+                    val byLetter = results.groupBy { it.name.first().uppercaseChar().toString() }
+                    byLetter.forEach { (letter, group) ->
+                        stickyHeader(key = "h-$letter") {
+                            Text(
+                                text = letter,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
+                        items(group, key = { it.id }) { e ->
+                            ExerciseRow(e, e.id == selected?.id) { onPick(e) }
+                        }
                     }
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(
-                            bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                        )
-                    ) {
-                        if (grouped) {
-                            val byLetter = results.groupBy { it.name.first().uppercaseChar().toString() }
-                            byLetter.forEach { (letter, group) ->
-                                stickyHeader(key = "h-$letter") {
-                                    Text(
-                                        text = letter,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(MaterialTheme.colorScheme.background)
-                                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                                    )
-                                }
-                                items(group, key = { it.id }) { e ->
-                                    ExerciseRow(e, e.id == selected?.id) { onPick(e) }
-                                }
-                            }
-                        } else {
-                            items(results, key = { it.id }) { e ->
-                                ExerciseRow(e, e.id == selected?.id) { onPick(e) }
-                            }
-                        }
+                    items(results, key = { it.id }) { e ->
+                        ExerciseRow(e, e.id == selected?.id) { onPick(e) }
                     }
                 }
             }

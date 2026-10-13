@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
+import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.PrimaryAction
@@ -68,7 +69,8 @@ private val WorkoutPages = listOf(
  * The Workouts module: three swipable pages, opening on the middle one.
  *   Exercises | Workouts | Stats
  *  - Workouts: every workout with a Start button; tap a workout to see what is in it.
- *  - Exercises (swipe left): placeholder for now. Workouts are edited from their own screen.
+ *  - Exercises (swipe left): every catalog exercise, A-Z, in the same searcher as the add-exercise
+ *    picker, with "Add custom exercise". Tapping one opens the exercise viewer.
  *  - Stats (swipe right): pick a workout to open its stats.
  */
 @Composable
@@ -78,6 +80,7 @@ fun WorkoutLogScreen(
     onAddWorkout: () -> Unit,
     onOpenSession: (Long) -> Unit,
     onOpenWorkoutStats: (Long) -> Unit,
+    onOpenExercise: (Long) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -85,6 +88,7 @@ fun WorkoutLogScreen(
     onManageCustomExercises: (() -> Unit)? = null
 ) {
     val workouts by viewModel.Workouts.collectAsState()
+    val catalog by viewModel.catalogExercises.collectAsState()
     val active by viewModel.activeSession.collectAsState()
     var blockedDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -176,7 +180,11 @@ fun WorkoutLogScreen(
         val bottom = padding.calculateBottomPadding()
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
             when (index) {
-                PAGE_EXERCISES -> ExercisesPage(bottomPadding = bottom)
+                PAGE_EXERCISES -> ExercisesPage(
+                    exercises = catalog,
+                    bottomPadding = bottom,
+                    onOpen = { onOpenExercise(it.id) }
+                )
                 PAGE_STATS -> StatsPickerPage(
                     workouts = workouts,
                     bottomPadding = bottom,
@@ -273,30 +281,23 @@ private fun ViewPage(
     }
 }
 
-// ---- Exercises page: placeholder ----
+// ---- Exercises page: every exercise ----
 
 @Composable
-private fun ExercisesPage(bottomPadding: Dp) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            Icons.Default.FitnessCenter,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("Exercises", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Coming soon.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+private fun ExercisesPage(
+    exercises: List<Exercise>,
+    bottomPadding: Dp,
+    onOpen: (Exercise) -> Unit
+) {
+    ExerciseSearchContent(
+        selected = null,
+        exercises = exercises,
+        onPick = onOpen,
+        onAddCustom = LocalOpenCustomExercise.current,
+        modifier = Modifier.fillMaxSize().padding(top = 8.dp),
+        autoFocus = false,
+        bottomPadding = bottomPadding
+    )
 }
 
 // ---- Stats page: pick a workout ----

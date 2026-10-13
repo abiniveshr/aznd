@@ -81,7 +81,6 @@ fun WorkoutStatsScreen(
             } else {
                 ExerciseStatsPage(
                     workoutId = workoutId,
-                    exercises = exercises,
                     viewModel = viewModel,
                     useTargets = useTargets,
                     bottomPadding = padding.calculateBottomPadding()

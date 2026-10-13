@@ -40,7 +40,7 @@ import com.ashrdev.aznd.ui.macro.MacroScreen
 import com.ashrdev.aznd.ui.macro.MacroViewModel
 import com.ashrdev.aznd.ui.body.BodyScreen
 import com.ashrdev.aznd.ui.body.WeightHistoryScreen
-import com.ashrdev.aznd.ui.workout.ExerciseMusclesScreen
+import com.ashrdev.aznd.ui.workout.ExerciseViewerScreen
 import com.ashrdev.aznd.ui.workout.LocalOpenCustomExercise
 import com.ashrdev.aznd.ui.workout.CustomExerciseViewModel
 import com.ashrdev.aznd.ui.workout.MuscleStatsScreen
@@ -172,21 +172,26 @@ class MainActivity : ComponentActivity() {
 
                     // ---- Workouts ----
                     composable(Screen.WorkoutLog.route) {
-                        WorkoutLogScreen(
-                            viewModel = workoutViewModel,
-                            onOpenWorkout = { id ->
-                                navigateTo(Screen.WorkoutView.createRoute(id))
-                            },
-                            onAddWorkout = {
-                                navigateTo(Screen.WorkoutEditor.createRoute(null))
-                            },
-                            onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
-                            onOpenWorkoutStats = { id -> navigateTo(Screen.WorkoutStats.createRoute(id)) },
-                            onManageCustomExercises = { navigateTo(Screen.CustomExercises.route) },
-                            onBack = goBack,
-                            onHome = goHome,
-                            onOpenSettings = openSettings
-                        )
+                        CompositionLocalProvider(
+                            LocalOpenCustomExercise provides { navigateTo(Screen.CustomExercise.createRoute(null)) }
+                        ) {
+                            WorkoutLogScreen(
+                                viewModel = workoutViewModel,
+                                onOpenWorkout = { id ->
+                                    navigateTo(Screen.WorkoutView.createRoute(id))
+                                },
+                                onAddWorkout = {
+                                    navigateTo(Screen.WorkoutEditor.createRoute(null))
+                                },
+                                onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
+                                onOpenWorkoutStats = { id -> navigateTo(Screen.WorkoutStats.createRoute(id)) },
+                                onOpenExercise = { id -> navigateTo(Screen.ExerciseViewer.createRoute(id)) },
+                                onManageCustomExercises = { navigateTo(Screen.CustomExercises.route) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
                     }
                     composable(Screen.History.route) {
                         HistoryScreen(
@@ -252,21 +257,22 @@ class MainActivity : ComponentActivity() {
                             onEdit = { id -> navigateTo(Screen.WorkoutEditor.createRoute(id)) },
                             onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
                             onViewExercise = { exId ->
-                                navigateTo(Screen.ExerciseMuscles.createRoute(exId))
+                                navigateTo(Screen.ExerciseViewer.createRoute(exId))
                             }
                         )
                     }
                     composable(
-                        route = Screen.ExerciseMuscles.route,
+                        route = Screen.ExerciseViewer.route,
                         arguments = listOf(navArgument("exerciseId") { type = NavType.LongType })
                     ) { backStackEntry ->
                         val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
-                        ExerciseMusclesScreen(
+                        ExerciseViewerScreen(
                             exerciseId = exerciseId,
                             viewModel = workoutViewModel,
                             onBack = goBack,
                             onHome = goHome,
-                            onOpenSettings = openSettings
+                            onOpenSettings = openSettings,
+                            onEdit = { id -> navigateTo(Screen.CustomExercise.createRoute(id)) }
                         )
                     }
                     composable(

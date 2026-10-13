@@ -40,7 +40,7 @@ import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
 
 /**
- * Read-only view of a workout's template. Tapping an exercise opens the muscle viewer. Start opens the logger, which starts a new session or
+ * Read-only view of a workout's template. Tapping an exercise opens the exercise viewer. Start opens the logger, which starts a new session or
  * resumes the unfinished one of this workout. Only one session can run at a time, so while a
  * session of ANOTHER workout is unfinished, Start offers to go there instead.
  *
@@ -55,7 +55,7 @@ fun WorkoutViewScreen(
     onOpenSettings: () -> Unit,
     onEdit: (Long) -> Unit,
     onOpenSession: (Long) -> Unit,
-    // Opens the muscle viewer for a catalog exercise id.
+    // Opens the exercise viewer for a catalog exercise id.
     onViewExercise: (Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
@@ -144,7 +144,7 @@ fun WorkoutViewScreen(
                     val exercise = card.exerciseId?.let { view.exercises[it] }
                     val labels = setLabels(card)
                     val exerciseId = card.exerciseId
-                    // Tapping an exercise opens the muscle viewer (which muscles it trains).
+                    // Tapping an exercise opens the exercise viewer.
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()

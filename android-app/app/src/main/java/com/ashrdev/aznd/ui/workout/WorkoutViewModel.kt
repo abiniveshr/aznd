@@ -14,6 +14,7 @@ import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.WorkoutHistorySummary
 import com.ashrdev.aznd.data.workout.RecentWorkoutSession
+import com.ashrdev.aznd.domain.LoggedSetData
 import com.ashrdev.aznd.domain.SetCard
 import com.ashrdev.aznd.domain.SetKind
 import com.ashrdev.aznd.domain.SetTree
@@ -64,8 +65,16 @@ class WorkoutViewModel(
     suspend fun getWorkout(id: Long): WorkoutWithExercises? =
         dao.getWorkoutWithExercises(id)
 
-    /** One catalog exercise (for the muscle viewer). */
+    /** Every catalog and custom exercise, A-Z. */
+    val catalogExercises: StateFlow<List<Exercise>> = training.observeExercises()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** One catalog exercise (for the exercise viewer). */
     suspend fun exercise(id: Long): Exercise? = training.exercise(id)
+
+    /** One exercise's finished sets from every session, empty workouts included. */
+    suspend fun loggedSetsForExercise(exerciseId: Long): List<LoggedSetData> =
+        training.loggedSetDataForExercise(exerciseId)
 
     suspend fun saveWorkoutRecord(id: Long?, name: String): Long =
         dao.saveWorkoutRecord(id, name)
@@ -146,6 +155,10 @@ class WorkoutViewModel(
         val high = rows.maxOf { it.targetMax ?: it.targetMin ?: 0 }
         return if (high >= low) low..high else null
     }
+
+    /** The catalog exercises this workout's template uses, A-Z (what its stats can be asked about). */
+    suspend fun workoutCatalogExercises(workoutId: Long): List<Exercise> =
+        templateView(workoutId).exercises.values.sortedBy { it.name.lowercase() }
 
     suspend fun templateView(workoutId: Long): TemplateView {
         val rows = SetTree.dropUnsetRows(training.templateRows(workoutId))

@@ -9,7 +9,9 @@ package com.ashrdev.aznd.ui.navigation
  *  |     |- Workouts page: Start on a card ------------- WorkoutLogger -- Finish --> (back)
  *  |     |                 a workout ------------------- WorkoutView
  *  |     |                                                 |- Start ---- WorkoutLogger
- *  |     |                                                 '- exercise -- ExerciseMuscles (muscle viewer)
+ *  |     |                                                 '- exercise -- ExerciseViewer
+ *  |     |- Exercises page: an exercise ---------------- ExerciseViewer (pager: Tutorial | Exercise | Stats; Edit on custom exercises -> CustomExercise)
+ *  |     |                   Add custom exercise ------- CustomExercise
  *  |     |- Add workout button (Workouts page; "Empty workout" beside it starts a session with no template) or Edit in WorkoutView --------- WorkoutEditor (Add exercise opens the picker,
  *  |     |                                                 which has "Add custom exercise" -> CustomExercise)
  *  |     |- Stats page: a workout ---------------------- WorkoutStats (pager: Stats | Exercises; exercise menu on the 2nd)
@@ -62,8 +64,8 @@ sealed class Screen(val route: String) {
     object ExerciseView : Screen("exercise_view/{workoutId}/{exerciseId}") {
         fun createRoute(workoutId: Long, exerciseId: Long) = "exercise_view/$workoutId/$exerciseId"
     }
-    object ExerciseMuscles : Screen("exercise_muscles/{exerciseId}") {
-        fun createRoute(exerciseId: Long) = "exercise_muscles/$exerciseId"
+    object ExerciseViewer : Screen("exercise_viewer/{exerciseId}") {
+        fun createRoute(exerciseId: Long) = "exercise_viewer/$exerciseId"
     }
     object WorkoutEditor : Screen("workout_editor?workoutId={workoutId}") {
         fun createRoute(workoutId: Long?) = "workout_editor?workoutId=${workoutId ?: -1}"
