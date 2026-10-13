@@ -80,3 +80,6 @@ progress:
 
     22/08/2026-29/08/2026:
         -optimised data schema, better UI, better image handling, better navigation, dedicated history and dashboard screen, theming and customization of appq
+
+    20/08/2026-13/10/2026:
+        -added macro tracker, body composition tracker and testing a swipe/gesture based UX. exercise list with custom exercises, framework for a 3d wireframe muscle model to display exercises, target muscles and interactive menus (not implemented).
