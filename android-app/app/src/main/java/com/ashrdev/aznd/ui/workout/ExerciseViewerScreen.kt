@@ -1,10 +1,6 @@
 package com.ashrdev.aznd.ui.workout
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -15,8 +11,6 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -47,7 +40,7 @@ private val ViewerPages = listOf(
  * The exercise viewer, opened from the Exercises page and from an exercise inside a workout.
  * Three swipable pages, opening on the middle one:
  *   Tutorial | Exercise | Stats
- *  - Tutorial: placeholder.
+ *  - Tutorial: looping demo frames and written steps (see ExerciseTutorialPage), when the exercise has one.
  *  - Exercise: the muscles the exercise trains.
  *  - Stats: graphs over every session of every workout, empty workouts included.
  * Custom exercises get an Edit button in the top bar; catalog exercises are read-only.
@@ -95,35 +88,11 @@ fun ExerciseViewerScreen(
         val bottom = padding.calculateBottomPadding()
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
             when (index) {
-                VIEWER_TUTORIAL -> TutorialPage(bottomPadding = bottom)
+                VIEWER_TUTORIAL -> ExerciseTutorialPage(exercise = item, bottomPadding = bottom)
                 VIEWER_STATS -> ViewerStatsPage(item = item, viewModel = viewModel, bottomPadding = bottom)
                 else -> ExerciseMusclesPage(item = item, bottomPadding = bottom)
             }
         }
-    }
-}
-
-@Composable
-private fun TutorialPage(bottomPadding: Dp) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("Tutorial", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Coming soon.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
