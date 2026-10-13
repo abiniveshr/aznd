@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import kotlinx.coroutines.launch
 
@@ -51,11 +53,23 @@ fun WorkoutBuilderScreen(
     val settings by viewModel.settings.collectAsState()
     var name by rememberSaveable { mutableStateOf(initialName) }
     var showDelete by remember { mutableStateOf(false) }
+    var showAddPicker by remember { mutableStateOf(false) }
     // Blocks a second tap on Save while the first one is still writing (it would create a second workout).
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     if (!ready) return
+
+    if (showAddPicker) {
+        ExercisePickerDialog(
+            exercises = exercises,
+            onDismiss = { showAddPicker = false },
+            onPick = {
+                showAddPicker = false
+                viewModel.addCardWithExercise(it.id)
+            }
+        )
+    }
 
     if (showDelete && workoutId != null && onDelete != null) {
         AlertDialog(
@@ -80,6 +94,11 @@ fun WorkoutBuilderScreen(
         onBack = onDone,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
+        // Edit / View toggle: this is the Edit side (existing workouts only); View returns to
+        // the read-only screen without saving. Delete shows top right while editing.
+        third = if (workoutId != null) {
+            ThirdAction(icon = Icons.Default.Visibility, label = "View", onClick = onDone)
+        } else null,
         topBarActions = {
             if (workoutId != null && onDelete != null) {
                 IconButton(onClick = { showDelete = true }) {
@@ -124,7 +143,8 @@ fun WorkoutBuilderScreen(
                 state = state,
                 exercises = exercises,
                 showTargets = settings.targetReps,
-                actions = viewModel.actions
+                actions = viewModel.actions,
+                onAddExercise = { showAddPicker = true }
             )
         }
     }

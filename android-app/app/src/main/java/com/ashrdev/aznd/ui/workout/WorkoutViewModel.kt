@@ -3,6 +3,7 @@ package com.ashrdev.aznd.ui.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
 import com.ashrdev.aznd.data.workout.ExerciseSetPoint
 import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.ExerciseWithSets
@@ -14,6 +15,7 @@ import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.WorkoutHistorySummary
 import com.ashrdev.aznd.data.workout.RecentWorkoutSession
 import com.ashrdev.aznd.domain.SetCard
+import com.ashrdev.aznd.domain.SetKind
 import com.ashrdev.aznd.domain.SetTree
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +48,7 @@ class WorkoutViewModel(
     val activeSession: StateFlow<ActiveSessionInfo?> =
         combine(training.observeActiveSession(), Workouts) { session, workouts ->
             session?.let { s ->
+                if (s.workoutId == EMPTY_WORKOUT_ID) return@let ActiveSessionInfo(s.workoutId, "Empty workout", s.startedAt)
                 workouts.firstOrNull { it.Workout.id == s.workoutId }
                     ?.let { ActiveSessionInfo(s.workoutId, it.Workout.name, s.startedAt) }
             }
@@ -60,6 +63,9 @@ class WorkoutViewModel(
     suspend fun getMostRecentSession(): RecentWorkoutSession? = dao.getMostRecentSession()
     suspend fun getWorkout(id: Long): WorkoutWithExercises? =
         dao.getWorkoutWithExercises(id)
+
+    /** One catalog exercise (for the muscle viewer). */
+    suspend fun exercise(id: Long): Exercise? = training.exercise(id)
 
     suspend fun saveWorkoutRecord(id: Long?, name: String): Long =
         dao.saveWorkoutRecord(id, name)
@@ -127,6 +133,18 @@ class WorkoutViewModel(
             dao.deleteSessionsForWorkout(WorkoutId)
             training.deleteCompletedForWorkout(WorkoutId)
         }
+    }
+
+    suspend fun repRangeFor(workoutId: Long, exerciseName: String): IntRange? {
+        val view = templateView(workoutId)
+        val rows = view.cards
+            .filter { card -> card.exerciseId?.let { view.exercises[it]?.name } == exerciseName }
+            .flatMap { it.rows }
+            .filter { it.kind != SetKind.DROP && it.targetMin != null }
+        if (rows.isEmpty()) return null
+        val low = rows.minOf { it.targetMin ?: 0 }
+        val high = rows.maxOf { it.targetMax ?: it.targetMin ?: 0 }
+        return if (high >= low) low..high else null
     }
 
     suspend fun templateView(workoutId: Long): TemplateView {

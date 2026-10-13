@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import com.ashrdev.aznd.domain.PointTint
+import com.ashrdev.aznd.ui.components.OutlinedButton
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -90,9 +101,14 @@ fun rememberGraphRangeState(): GraphRangeState {
 fun StatsGraph(
     modes: List<GraphMode>,
     modifier: Modifier = Modifier,
-    title: String = "Progress",
+    title: String? = "Progress",
     footnote: String? = null,
-    nowMs: Long = System.currentTimeMillis()
+    nowMs: Long = System.currentTimeMillis(),
+    // false: no card around it (the content sits directly on the screen).
+    bordered: Boolean = true,
+    // true: the chart takes all the height it is given instead of a fixed 200dp, so the page needs
+    // no vertical scrolling. Give the graph a bounded height (e.g. Modifier.fillMaxSize()).
+    fillHeight: Boolean = false
 ) {
     if (modes.isEmpty()) return
     var modeId by rememberSaveable { mutableStateOf(modes.first().id) }
@@ -105,9 +121,12 @@ fun StatsGraph(
         GraphWindow.coversAll(mode.points, range, nowMs) { it.timeMs }
     }
 
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+    val body: @Composable () -> Unit = {
+        Column(
+            (if (bordered) Modifier else modifier).then(if (fillHeight) Modifier.fillMaxSize() else Modifier).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (title != null) Text(title, style = MaterialTheme.typography.titleMedium)
 
             if (modes.size > 1) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -116,9 +135,22 @@ fun StatsGraph(
                     }
                 }
             }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(GraphRange.values().toList(), key = { it.name }) { r ->
-                    FilterChip(selected = r == range, onClick = { rangeState.select(r) }, label = { Text(r.label) })
+            var rangeMenu by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { rangeMenu = true }) {
+                    Text(range.label)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = rangeMenu, onDismissRequest = { rangeMenu = false }) {
+                    GraphRange.values().forEach { r ->
+                        DropdownMenuItem(
+                            text = { Text(r.label) },
+                            onClick = {
+                                rangeMenu = false
+                                rangeState.select(r)
+                            }
+                        )
+                    }
                 }
             }
 
@@ -150,7 +182,9 @@ fun StatsGraph(
                     mode = mode,
                     selected = selected.coerceIn(0, shown.lastIndex),
                     onSelect = { selected = it },
-                    modifier = Modifier.fillMaxWidth().height(200.dp)
+                    modifier = Modifier.fillMaxWidth().then(
+                        if (fillHeight) Modifier.weight(1f) else Modifier.height(200.dp)
+                    )
                 )
                 if (range.months != null && coversAll) {
                     Text(
@@ -165,6 +199,7 @@ fun StatsGraph(
             }
         }
     }
+    if (bordered) Card(modifier = modifier.fillMaxWidth()) { body() } else body()
 }
 
 @Composable
@@ -182,10 +217,17 @@ private fun GraphCanvas(
     val density = LocalDensity.current
     val n = points.size
     val bars = mode.style == GraphStyle.BARS
+    val darker = lerp(primary, Color.Black, 0.45f)
+    val brighter = lerp(primary, Color.White, 0.55f)
+    fun colorFor(point: GraphPoint): Color = when (point.tint) {
+        PointTint.NORMAL -> primary
+        PointTint.BELOW -> darker
+        PointTint.ABOVE -> brighter
+    }
 
     // vertical scale
-    val maxV = points.maxOf { it.value }
-    val minV = points.minOf { it.value }
+    val maxV = maxOf(points.maxOf { it.value }, mode.bandMax ?: Double.NEGATIVE_INFINITY)
+    val minV = minOf(points.minOf { it.value }, mode.bandMin ?: Double.POSITIVE_INFINITY)
     val yMin: Double
     val yMax: Double
     if (mode.startAtZero) {
@@ -254,13 +296,25 @@ private fun GraphCanvas(
             )
         }
 
+        val bandMin = mode.bandMin
+        val bandMax = mode.bandMax
+        if (bandMin != null && bandMax != null) {
+            val bandTop = yAt(bandMax)
+            val bandBottom = yAt(bandMin)
+            drawRect(
+                color = primary.copy(alpha = 0.12f),
+                topLeft = Offset(leftPad, bandTop),
+                size = Size(w - rightPad - leftPad, (bandBottom - bandTop).coerceAtLeast(2.dp.toPx()))
+            )
+        }
+
         if (bars) {
             val half = barHalf(w)
             for (i in 0 until n) {
                 val x = xAt(i, w)
                 val top = yAt(points[i].value)
                 drawRoundRect(
-                    color = if (i == selected) primary else primary.copy(alpha = 0.55f),
+                    color = if (i == selected) colorFor(points[i]) else colorFor(points[i]).copy(alpha = 0.55f),
                     topLeft = Offset(x - half, top),
                     size = Size(half * 2, (bottom - top).coerceAtLeast(1f)),
                     cornerRadius = CornerRadius(3.dp.toPx())
@@ -277,11 +331,11 @@ private fun GraphCanvas(
                 drawPath(path, primary, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
             if (n <= 60) {
-                for (i in 0 until n) drawCircle(primary, 3.dp.toPx(), Offset(xAt(i, w), yAt(points[i].value)))
+                for (i in 0 until n) drawCircle(colorFor(points[i]), 4.dp.toPx(), Offset(xAt(i, w), yAt(points[i].value)))
             }
             val sx = xAt(selected, w)
             drawLine(primary.copy(alpha = 0.35f), Offset(sx, topPad), Offset(sx, bottom), strokeWidth = 1.dp.toPx())
-            drawCircle(primary, 6.dp.toPx(), Offset(sx, yAt(points[selected].value)))
+            drawCircle(colorFor(points[selected]), 6.dp.toPx(), Offset(sx, yAt(points[selected].value)))
         }
 
         // x labels: first and last date

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,6 +68,14 @@ fun HistoryPage(
                 title = "Workout History",
                 subtitle = workoutSubtitle,
                 onClick = { onNavigate(Screen.History.route) }
+            )
+        }
+        item(key = "weight-history") {
+            HistoryEntryCard(
+                icon = Icons.Default.MonitorWeight,
+                title = "Weight History",
+                subtitle = "Weight, body fat and lean mass trends.",
+                onClick = { onNavigate(Screen.WeightHistory.route) }
             )
         }
         item(key = "saved-streaks") {

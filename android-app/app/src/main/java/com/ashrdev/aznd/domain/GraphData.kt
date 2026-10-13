@@ -9,18 +9,22 @@ import java.util.Locale
  * Asking for more than there is data for simply shows everything (same as MAX).
  */
 enum class GraphRange(val label: String, val months: Int? = null, val recent: Int? = null) {
-    RECENT_5("Recent 5", recent = 5),
+    RECENT_5("Past 5 sessions", recent = 5),
+    MONTHS_1("1 month", months = 1),
+    MONTHS_2("2 months", months = 2),
     MONTHS_3("3 months", months = 3),
     MONTHS_6("6 months", months = 6),
     YEAR_1("1 year", months = 12),
     YEARS_2("2 years", months = 24),
-    YEARS_3("3 years", months = 36),
-    MAX("Max");
+    YEARS_5("5 years", months = 60),
+    MAX("Lifetime");
 
     companion object {
         fun fromName(name: String?): GraphRange = values().firstOrNull { it.name == name } ?: MONTHS_3
     }
 }
+
+enum class PointTint { NORMAL, BELOW, ABOVE }
 
 /**
  * One dot / bar of a graph. [detail] is the small second line shown when the point is selected;
@@ -30,7 +34,8 @@ data class GraphPoint(
     val timeMs: Long,
     val value: Double,
     val detail: String? = null,
-    val valueText: String? = null
+    val valueText: String? = null,
+    val tint: PointTint = PointTint.NORMAL
 )
 
 enum class GraphStyle { LINE, BARS }
@@ -45,7 +50,9 @@ data class GraphMode(
     val unit: String,
     val style: GraphStyle,
     val points: List<GraphPoint>,
-    val startAtZero: Boolean = true
+    val startAtZero: Boolean = true,
+    val bandMin: Double? = null,
+    val bandMax: Double? = null
 )
 
 /** Picking the part of a series a [GraphRange] shows. Pure, so any page can reuse it. */

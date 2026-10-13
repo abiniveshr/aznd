@@ -1,8 +1,12 @@
 package com.ashrdev.aznd.domain
 
-/** Things measured on the body: tape sites in centimetres, plus body fat in percent. */
+/**
+ * Things measured on the body: tape sites in centimetres, height, and body fat in percent.
+ * Body fat belongs to the Composition page of the Body screen; everything else is on Measurements.
+ */
 enum class MeasurementSite(val label: String, val unit: String = "cm") {
     BODY_FAT("Body fat", "%"),
+    HEIGHT("Height"),
     NECK("Neck"),
     SHOULDERS("Shoulders"),
     CHEST("Chest"),
@@ -32,9 +36,44 @@ object BodyStats {
     const val MAX_CM = 300.0
     const val MIN_BODY_FAT = 2.0
     const val MAX_BODY_FAT = 70.0
+    const val MIN_HEIGHT_CM = 50.0
+    const val MAX_HEIGHT_CM = 260.0
 
-    fun min(site: MeasurementSite) = if (site == MeasurementSite.BODY_FAT) MIN_BODY_FAT else MIN_CM
-    fun max(site: MeasurementSite) = if (site == MeasurementSite.BODY_FAT) MAX_BODY_FAT else MAX_CM
+    fun min(site: MeasurementSite) = when (site) {
+        MeasurementSite.BODY_FAT -> MIN_BODY_FAT
+        MeasurementSite.HEIGHT -> MIN_HEIGHT_CM
+        else -> MIN_CM
+    }
+
+    fun max(site: MeasurementSite) = when (site) {
+        MeasurementSite.BODY_FAT -> MAX_BODY_FAT
+        MeasurementSite.HEIGHT -> MAX_HEIGHT_CM
+        else -> MAX_CM
+    }
+
+    /** Fat part of the bodyweight, from a bodyweight in kg and a body fat percentage. */
+    fun fatMassKg(weightKg: Double, bodyFatPercent: Double): Double = weightKg * bodyFatPercent / 100.0
+
+    /**
+     * The bodyweight you would have at [goalBodyFatPercent] if your lean mass stayed exactly where it
+     * is now (goal weight = lean mass / (1 - goal body fat)). Null for an impossible goal.
+     */
+    fun goalWeightKg(weightKg: Double, bodyFatPercent: Double, goalBodyFatPercent: Double): Double? {
+        if (goalBodyFatPercent < MIN_BODY_FAT || goalBodyFatPercent > MAX_BODY_FAT) return null
+        return leanMassKg(weightKg, bodyFatPercent) / (1.0 - goalBodyFatPercent / 100.0)
+    }
+
+    /**
+     * Lean mass at each weight reading, using the latest body fat reading taken at or before it (the
+     * earliest reading for weights that come before any). Both lists oldest first; empty without any body fat.
+     */
+    fun leanMassSeries(weights: List<GraphPoint>, bodyFat: List<GraphPoint>): List<GraphPoint> {
+        if (bodyFat.isEmpty()) return emptyList()
+        return weights.map { w ->
+            val fat = bodyFat.lastOrNull { it.timeMs <= w.timeMs } ?: bodyFat.first()
+            GraphPoint(w.timeMs, leanMassKg(w.value, fat.value))
+        }
+    }
 
     /** Weight minus fat, from a bodyweight in kg and a body fat percentage. */
     fun leanMassKg(weightKg: Double, bodyFatPercent: Double): Double = weightKg * (1.0 - bodyFatPercent / 100.0)

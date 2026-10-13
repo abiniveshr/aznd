@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -34,49 +31,59 @@ data class PrimaryAction(
     val onClick: () -> Unit
 )
 
+/**
+ * The bar every screen except the Home pager sits above. Back lives in the top bar.
+ *
+ *  - With [subPages]: the closed bar shows the subpage tabs.
+ *  - Without: the closed bar shows the screen's actions ([third] plus [extraActions]), or just
+ *    the pull handle when there are none.
+ *  - Pulling up reveals Home / Settings / Manage data.
+ */
 @Composable
 fun ScreenBottomBar(
-    onBack: () -> Unit,
     onHome: () -> Unit,
     tray: Animatable<Float, AnimationVector1D>,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     third: ThirdAction? = null,
-    settingsEnabled: Boolean = true
+    extraActions: List<ThirdAction> = emptyList(),
+    settingsEnabled: Boolean = true,
+    subPages: SubPageBar? = null
 ) {
+    val actions = listOfNotNull(third) + extraActions
+    val mainRow: (@Composable () -> Unit)? = when {
+        subPages != null -> {
+            { SubPageTabs(subPages) }
+        }
+        actions.isNotEmpty() -> {
+            {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(TabsHeight)
+                        .padding(horizontal = 12.dp)
+                ) {
+                    actions.forEach { action ->
+                        ActionTile(
+                            icon = action.icon,
+                            label = action.label,
+                            tint = if (action.enabled) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            onClick = if (action.enabled) action.onClick else null
+                        )
+                    }
+                }
+            }
+        }
+        else -> null
+    }
+
     BottomBarShell(
         tray = tray,
         onOpenSettings = onOpenSettings,
         modifier = modifier,
-        settingsEnabled = settingsEnabled
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(TabsHeight)
-                .padding(horizontal = 12.dp)
-        ) {
-            ActionTile(
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                label = "Back",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onBack
-            )
-            ActionTile(
-                icon = Icons.Default.Home,
-                label = "Home",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onHome
-            )
-            if (third != null) {
-                ActionTile(
-                    icon = third.icon,
-                    label = third.label,
-                    tint = if (third.enabled) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    onClick = if (third.enabled) third.onClick else null
-                )
-            }
-        }
-    }
+        settingsEnabled = settingsEnabled,
+        onHome = onHome,
+        row1 = mainRow
+    )
 }

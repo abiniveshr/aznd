@@ -3,6 +3,7 @@ package com.ashrdev.aznd.data.macro
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.room.Dao
 import androidx.room.Entity
@@ -12,6 +13,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.ashrdev.aznd.domain.CalorieGoal
+import com.ashrdev.aznd.domain.CalorieTarget
 import kotlinx.coroutines.flow.Flow
 
 /** One thing eaten. [eatenAt] is epoch millis; calories in kcal, macros in grams. */
@@ -50,11 +53,14 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
     }
 }
 
-/** Daily targets. 0 = not set (the screen then just shows totals). */
 class MacroTargetsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("macro_targets", Context.MODE_PRIVATE)
 
-    var calories: Int by mutableIntStateOf(prefs.getInt("kcal", 0))
+    var goal: CalorieGoal by mutableStateOf(
+        runCatching { CalorieGoal.valueOf(prefs.getString("goal", null) ?: "") }.getOrDefault(CalorieGoal.MAINTAIN)
+    )
+        private set
+    var advancedOffset: Int by mutableIntStateOf(prefs.getInt("advanced_offset", 0))
         private set
     var proteinG: Int by mutableIntStateOf(prefs.getInt("protein", 0))
         private set
@@ -63,14 +69,28 @@ class MacroTargetsStore(context: Context) {
     var fatG: Int by mutableIntStateOf(prefs.getInt("fat", 0))
         private set
 
-    fun save(calories: Int, proteinG: Int, carbsG: Int, fatG: Int) {
-        this.calories = calories.coerceAtLeast(0)
+    /** Body fat % the goal aims for (null = not set). Used to estimate a goal bodyweight. */
+    var goalBodyFat: Double? by mutableStateOf(
+        prefs.getFloat("goal_body_fat", -1f).takeIf { it > 0f }?.toDouble()
+    )
+        private set
+
+    fun saveGoalBodyFat(percent: Double?) {
+        goalBodyFat = percent
+        prefs.edit().apply {
+            if (percent == null) remove("goal_body_fat") else putFloat("goal_body_fat", percent.toFloat())
+        }.apply()
+    }
+
+    fun save(goal: CalorieGoal, advancedOffset: Int, proteinG: Int, carbsG: Int, fatG: Int) {
+        this.goal = goal
+        this.advancedOffset = advancedOffset.coerceIn(-CalorieTarget.MAX_ADVANCED_OFFSET, CalorieTarget.MAX_ADVANCED_OFFSET)
         this.proteinG = proteinG.coerceAtLeast(0)
         this.carbsG = carbsG.coerceAtLeast(0)
         this.fatG = fatG.coerceAtLeast(0)
         prefs.edit()
-            .putInt("kcal", this.calories).putInt("protein", this.proteinG)
-            .putInt("carbs", this.carbsG).putInt("fat", this.fatG)
+            .putString("goal", this.goal.name).putInt("advanced_offset", this.advancedOffset)
+            .putInt("protein", this.proteinG).putInt("carbs", this.carbsG).putInt("fat", this.fatG)
             .apply()
     }
 }

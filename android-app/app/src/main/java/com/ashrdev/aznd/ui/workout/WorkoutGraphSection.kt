@@ -1,6 +1,5 @@
 package com.ashrdev.aznd.ui.workout
 
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,7 +15,6 @@ import com.ashrdev.aznd.domain.GraphStyle
 import com.ashrdev.aznd.domain.GraphWindow
 import com.ashrdev.aznd.domain.SessionStat
 import com.ashrdev.aznd.ui.common.StatsGraph
-import com.ashrdev.aznd.ui.components.Card
 
 /** The graph at the top of a workout's stats screen. Modes are local to this page. */
 @Composable
@@ -24,13 +22,11 @@ fun WorkoutGraphSection(viewModel: WorkoutGraphViewModel, modifier: Modifier = M
     val sessions by viewModel.sessions.collectAsState()
     val list = sessions ?: return
     if (list.isEmpty()) {
-        Card(modifier = modifier.fillMaxWidth()) {
-            Text(
-                "Graphs appear after you finish a session of this workout.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(16.dp)
-            )
-        }
+        Text(
+            "Graphs appear after you finish a session of this workout.",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = modifier.padding(16.dp)
+        )
         return
     }
     val modes = remember(list) {
@@ -56,6 +52,8 @@ fun WorkoutGraphSection(viewModel: WorkoutGraphViewModel, modifier: Modifier = M
         modes = modes,
         modifier = modifier,
         title = "Progress per session",
+        bordered = false,
+        fillHeight = true,
         footnote = "Total volume = added weight × reps. Weight moved also counts the bodyweight you lift. " +
             "Calories are an estimate. Only sessions logged with the current logger are included."
     )

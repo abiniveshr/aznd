@@ -6,16 +6,25 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -33,20 +42,42 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
+import com.ashrdev.aznd.ui.common.BarPage
+import com.ashrdev.aznd.ui.common.PrimaryAction
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.common.rememberSubPageBar
+import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 
+private const val PAGE_EXERCISES = 0
+private const val PAGE_VIEW = 1
+private const val PAGE_STATS = 2
+
+private val WorkoutPages = listOf(
+    BarPage("Exercises", Icons.AutoMirrored.Filled.List),
+    BarPage("Workouts", Icons.Default.FitnessCenter),
+    BarPage("Stats", Icons.Default.BarChart)
+)
+
+/**
+ * The Workouts module: three swipable pages, opening on the middle one.
+ *   Exercises | Workouts | Stats
+ *  - Workouts: every workout with a Start button; tap a workout to see what is in it.
+ *  - Exercises (swipe left): placeholder for now. Workouts are edited from their own screen.
+ *  - Stats (swipe right): pick a workout to open its stats.
+ */
 @Composable
 fun WorkoutLogScreen(
     viewModel: WorkoutViewModel,
     onOpenWorkout: (Long) -> Unit,
-    onEditWorkout: (Long) -> Unit,
     onAddWorkout: () -> Unit,
     onOpenSession: (Long) -> Unit,
-    onDeleteWorkout: (Long) -> Unit,
+    onOpenWorkoutStats: (Long) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -55,32 +86,69 @@ fun WorkoutLogScreen(
 ) {
     val workouts by viewModel.Workouts.collectAsState()
     val active by viewModel.activeSession.collectAsState()
-    var workoutToDelete by remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    var blockedDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(initialPage = PAGE_VIEW) { WorkoutPages.size }
+    val subPages = rememberSubPageBar(pagerState, WorkoutPages)
 
-    workoutToDelete?.let { target ->
+    if (blockedDialog) {
+        val running = active
         AlertDialog(
-            onDismissRequest = { workoutToDelete = null },
-            title = { Text("Delete workout?") },
-            text = { Text("\"${target.Workout.name}\" and its exercises will be deleted. This can't be undone.") },
+            onDismissRequest = { blockedDialog = false },
+            title = { Text("Session already running") },
+            text = {
+                Text("You have an unfinished ${running?.workoutName.orEmpty()} session. Finish or discard it before starting another.")
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    onDeleteWorkout(target.Workout.id)
-                    workoutToDelete = null
-                }) { Text("Delete") }
+                    blockedDialog = false
+                    if (running != null) onOpenSession(running.workoutId)
+                }) { Text("Go to session") }
             },
             dismissButton = {
-                TextButton(onClick = { workoutToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { blockedDialog = false }) { Text("Cancel") }
             }
         )
     }
 
+    // Only one session can run at a time: starting another workout is blocked while one is open.
+    val start: (WorkoutWithExercises) -> Unit = { item ->
+        val running = active
+        if (running != null && running.workoutId != item.Workout.id) blockedDialog = true
+        else onOpenSession(item.Workout.id)
+    }
+
+    // Empty workout: a session with no template, exercises added as you go. Same one-session rule.
+    val startEmpty: () -> Unit = {
+        val running = active
+        if (running != null && running.workoutId != EMPTY_WORKOUT_ID) blockedDialog = true
+        else onOpenSession(EMPTY_WORKOUT_ID)
+    }
+
+    val page = pagerState.currentPage
     ScreenScaffold(
-        title = "Workouts",
+        title = when (page) {
+            PAGE_EXERCISES -> "Exercises"
+            PAGE_STATS -> "Workout stats"
+            else -> "Workouts"
+        },
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        third = ThirdAction(icon = Icons.Default.Add, label = "Add workout", onClick = onAddWorkout),
+        subPages = subPages,
+        // The big bottom button, split in two, only on the Workouts page. Its space stays reserved
+        // on the other pages so their lists don't jump while swiping.
+        reservePrimarySpace = true,
+        primaryAction = if (page == PAGE_VIEW) PrimaryAction(
+            icon = Icons.Default.Add,
+            label = "Add workout",
+            onClick = onAddWorkout
+        ) else null,
+        secondaryAction = if (page == PAGE_VIEW) PrimaryAction(
+            icon = Icons.Default.PlayArrow,
+            label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume empty" else "Empty workout",
+            onClick = startEmpty
+        ) else null,
         topBarActions = {
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
@@ -105,112 +173,169 @@ fun WorkoutLogScreen(
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            active?.let { running ->
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = { onOpenSession(running.workoutId) })
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Session in progress", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                "${running.workoutName} · started ${formatClock(running.startedAt)}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+        val bottom = padding.calculateBottomPadding()
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
+            when (index) {
+                PAGE_EXERCISES -> ExercisesPage(bottomPadding = bottom)
+                PAGE_STATS -> StatsPickerPage(
+                    workouts = workouts,
+                    bottomPadding = bottom,
+                    onOpen = onOpenWorkoutStats
+                )
+                else -> ViewPage(
+                    workouts = workouts,
+                    bottomPadding = bottom,
+                    runningSession = active,
+                    onOpenWorkout = onOpenWorkout,
+                    onOpenSession = onOpenSession,
+                    onStart = start
+                )
+            }
+        }
+    }
+}
+
+// ---- Workouts page: view mode ----
+
+@Composable
+private fun ViewPage(
+    workouts: List<WorkoutWithExercises>,
+    bottomPadding: Dp,
+    runningSession: ActiveSessionInfo?,
+    onOpenWorkout: (Long) -> Unit,
+    onOpenSession: (Long) -> Unit,
+    onStart: (WorkoutWithExercises) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        runningSession?.let { running ->
+            item(key = "running") {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = { onOpenSession(running.workoutId) })
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Session in progress", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${running.workoutName} · started ${formatClock(running.startedAt)}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }
-            if (workouts.isEmpty()) {
-                item {
-                    Text(
-                        "No workouts yet — tap Add workout to create one.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            } else {
-                items(workouts, key = { it.Workout.id }) { item ->
-                    WorkoutCard(
-                        item = item,
-                        onOpen = { onOpenWorkout(item.Workout.id) },
-                        onEdit = { onEditWorkout(item.Workout.id) },
-                        onRequestDelete = { workoutToDelete = item }
-                    )
+        }
+        if (workouts.isEmpty()) {
+            item(key = "empty") {
+                Text("No workouts yet.", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            items(workouts, key = { it.Workout.id }) { item ->
+                val isRunning = runningSession?.workoutId == item.Workout.id
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenWorkout(item.Workout.id) }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(item.Workout.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${item.exercises.size} exercises · ${item.exercises.sumOf { it.sets.size }} sets",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = { onStart(item) },
+                            enabled = item.exercises.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (isRunning) "Resume" else "Start")
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun WorkoutCard(
-    item: WorkoutWithExercises,
-    onOpen: () -> Unit,
-    onEdit: () -> Unit,
-    onRequestDelete: () -> Unit
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
+// ---- Exercises page: placeholder ----
 
-    Card(
+@Composable
+private fun ExercisesPage(bottomPadding: Dp) {
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .fillMaxSize()
+            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = bottomPadding),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(item.Workout.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${item.exercises.size} exercises · ${item.exercises.sumOf { it.sets.size }} sets",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Workout options")
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
+        Icon(
+            Icons.Default.FitnessCenter,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("Exercises", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Coming soon.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// ---- Stats page: pick a workout ----
+
+@Composable
+private fun StatsPickerPage(
+    workouts: List<WorkoutWithExercises>,
+    bottomPadding: Dp,
+    onOpen: (Long) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (workouts.isEmpty()) {
+            item(key = "empty") { Text("No workouts yet.", style = MaterialTheme.typography.bodyMedium) }
+        }
+        items(workouts, key = { it.Workout.id }) { item ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(item.Workout.id) }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Edit") },
-                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onEdit()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onRequestDelete()
-                        }
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(item.Workout.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${item.exercises.size} exercises",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null)
                 }
             }
         }

@@ -91,9 +91,30 @@ interface SessionDao {
             "ls.bodyweightKgSnapshot AS bodyweightKg, ss.kind AS kind, ss.weightKg AS weightKg, " +
             "ss.reps AS reps, ss.durationSec AS durationSec, ss.rpe AS rpe " +
             "FROM session_set ss INNER JOIN logged_session ls ON ls.id = ss.sessionId " +
-            "WHERE ls.finishedAt IS NOT NULL"
+            "WHERE ls.finishedAt IS NOT NULL AND ls.workoutId != 0"
     )
     suspend fun completedSetData(): List<LoggedSetData>
+
+    /**
+     * Every finished set of ONE exercise from ANY session, empty-workout sessions included. This is
+     * the source for the per-exercise statistics (the planned exercise page).
+     */
+    @Query(
+        "SELECT ss.exerciseId AS exerciseId, ss.sessionId AS sessionId, ls.workoutId AS workoutId, " +
+            "ls.startedAt AS startedAt, ls.finishedAt AS finishedAt, " +
+            "ls.bodyweightKgSnapshot AS bodyweightKg, ss.kind AS kind, ss.weightKg AS weightKg, " +
+            "ss.reps AS reps, ss.durationSec AS durationSec, ss.rpe AS rpe " +
+            "FROM session_set ss INNER JOIN logged_session ls ON ls.id = ss.sessionId " +
+            "WHERE ls.finishedAt IS NOT NULL AND ss.exerciseId = :exerciseId"
+    )
+    suspend fun completedSetDataForExercise(exerciseId: Long): List<LoggedSetData>
+
+    /** A session with no template: the exercises are added while logging. */
+    @Transaction
+    suspend fun startEmptySession(bodyweightKg: Double, startedAt: Long): Long =
+        insertSession(
+            LoggedSession(workoutId = EMPTY_WORKOUT_ID, startedAt = startedAt, bodyweightKgSnapshot = bodyweightKg)
+        )
 
     /**
      * Create a session from a workout's template rows: bodyweight snapshot taken now, empty

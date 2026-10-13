@@ -41,7 +41,7 @@ fun HomeScreen(
     onNavigate: (String) -> Unit
 ) {
     val pages = HomePageId.entries
-    val homeIndex = HomePageId.HOME.ordinal
+    val homeIndex = HomePageId.DASHBOARD.ordinal
     // Back from a screen lands on the page you left (History / Home / Dashboard).
     var lastPage by rememberSaveable { mutableIntStateOf(homeIndex) }
     val pagerState = rememberPagerState(initialPage = lastPage, pageCount = { pages.size })
@@ -49,7 +49,7 @@ fun HomeScreen(
         snapshotFlow { pagerState.currentPage }.collect { lastPage = it }
     }
 
-    // The Home button on other screens asks for the middle Home page specifically.
+    // The Home button on other screens asks for the middle Dashboard page specifically.
     var handledSignal by rememberSaveable { mutableIntStateOf(homeSignal) }
     LaunchedEffect(homeSignal) {
         if (homeSignal != handledSignal) {
@@ -58,6 +58,8 @@ fun HomeScreen(
         }
     }
     val tray = rememberTrayState()
+    // This screen has no Back button, so a pending "keep the bar pulled up" ends here.
+    LaunchedEffect(Unit) { TrayMemory.clear() }
     val scope = rememberCoroutineScope()
     val bottomClearance = bottomBarClearance()
 
@@ -108,14 +110,14 @@ fun HomeScreen(
                         onNavigate = onNavigate,
                         bottomPadding = bottomClearance
                     )
-                    HomePageId.HOME -> HomePage(
-                        onNavigate = onNavigate,
-                        bottomPadding = bottomClearance
-                    )
                     HomePageId.DASHBOARD -> DashboardPage(
                         runningStreaks = runningStreaks,
                         topExercises = topExercises,
                         topExercisesLoaded = topExercisesLoaded,
+                        onNavigate = onNavigate,
+                        bottomPadding = bottomClearance
+                    )
+                    HomePageId.APPS -> HomePage(
                         onNavigate = onNavigate,
                         bottomPadding = bottomClearance
                     )

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -41,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -55,7 +57,14 @@ import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.searchExercises
 import com.ashrdev.aznd.domain.ExerciseType
 import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField as FieldBox
+
+/**
+ * Opens the "new custom exercise" form. Provided by MainActivity around the screens that can pick
+ * exercises; when it is null the picker simply has no "Add custom exercise" button.
+ */
+val LocalOpenCustomExercise = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * Exercise field. Looks like a text field showing the selected name, but tapping it opens a
@@ -71,6 +80,7 @@ fun ExercisePicker(
     label: String = "Exercise"
 ) {
     var open by remember { mutableStateOf(false) }
+    val openCustom = LocalOpenCustomExercise.current
 
     Box(modifier) {
         FieldBox(
@@ -92,6 +102,12 @@ fun ExercisePicker(
             onPick = {
                 open = false
                 onPick(it)
+            },
+            onAddCustom = openCustom?.let { go ->
+                {
+                    open = false
+                    go()
+                }
             }
         )
     }
@@ -112,7 +128,8 @@ private fun ExerciseSearchScreen(
     selected: Exercise?,
     exercises: List<Exercise>,
     onDismiss: () -> Unit,
-    onPick: (Exercise) -> Unit
+    onPick: (Exercise) -> Unit,
+    onAddCustom: (() -> Unit)?
 ) {
     var query by remember { mutableStateOf("") }
     var muscle by remember { mutableStateOf<Muscle?>(null) }
@@ -170,6 +187,18 @@ private fun ExerciseSearchScreen(
                         .padding(horizontal = 16.dp)
                         .focusRequester(focus)
                 )
+
+                if (onAddCustom != null) {
+                    OutlinedButton(
+                        onClick = onAddCustom,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Text("Add custom exercise")
+                    }
+                }
 
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -289,4 +318,25 @@ private fun ExerciseRow(exercise: Exercise, isSelected: Boolean, onClick: () -> 
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     }
+}
+
+@Composable
+fun ExercisePickerDialog(
+    exercises: List<Exercise>,
+    onDismiss: () -> Unit,
+    onPick: (Exercise) -> Unit
+) {
+    val openCustom = LocalOpenCustomExercise.current
+    ExerciseSearchScreen(
+        selected = null,
+        exercises = exercises,
+        onDismiss = onDismiss,
+        onPick = onPick,
+        onAddCustom = openCustom?.let { go ->
+            {
+                onDismiss()
+                go()
+            }
+        }
+    )
 }

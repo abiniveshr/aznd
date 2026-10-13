@@ -19,3 +19,8 @@
 
 14. progressive overload suggestions, target rep range for exercises, calculate recommended weight for target rep range based on previous sessions add standard exercises data, with diagrams, and ability to add custom exercise. remove the share thing for each set of each exercise and each exercise. only whole workout share (redundant feature)
 
+15. in exercise stats page, make the exercise selector the universal one, and when under workout stats-exercises stats it should run a intersection so only exercises from that workout are available
+
+16. add multiple calendar modes (year mode like github)
+
+

@@ -130,9 +130,10 @@ private fun LoggerCard(card: SetCard, data: LoggerData, actions: LoggerActions) 
             }
             if (card.exerciseId != null) {
                 val labels = setLabels(card)
+                val connectors = connectorInfo(card.rows)
                 card.rows.forEach { row ->
                     key(row.id) {
-                        LoggerRow(row, data.depth[row.id] ?: 0, labels[row.id].orEmpty(), data, actions)
+                        LoggerRow(row, data.depth[row.id] ?: 0, labels[row.id].orEmpty(), connectors[row.id], data, actions)
                     }
                 }
             }
@@ -141,15 +142,21 @@ private fun LoggerCard(card: SetCard, data: LoggerData, actions: LoggerActions) 
 }
 
 @Composable
-private fun LoggerRow(row: SetRow, depth: Int, label: String, data: LoggerData, actions: LoggerActions) {
+private fun LoggerRow(
+    row: SetRow,
+    depth: Int,
+    label: String,
+    connector: ConnectorInfo?,
+    data: LoggerData,
+    actions: LoggerActions
+) {
     val exercise = row.exerciseId?.let { data.byId[it] }
-    val connector = MaterialTheme.colorScheme.outline
-    val nested = if (depth > 0) {
-        Modifier.drawBehind {
-            val x = -(Indent / 2).toPx()
-            drawLine(connector, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
-            drawLine(connector, Offset(x, size.height / 2), Offset(0f, size.height / 2), strokeWidth = 2.dp.toPx())
-        }
+    val lineColor = MaterialTheme.colorScheme.outline
+    val nested = if (depth > 0 && connector != null) {
+        Modifier.treeConnector(
+            lineColor, Indent, connector, gap = 10.dp,
+            elbowY = if (row.kind == SetKind.SUPERSET) 28.dp else SmallIcon / 2
+        )
     } else {
         Modifier
     }

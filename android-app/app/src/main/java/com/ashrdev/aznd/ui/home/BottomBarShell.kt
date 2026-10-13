@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.home
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
@@ -22,14 +23,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ImportExport
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,36 +72,70 @@ private val TrayMotion = spring<Float>(
     stiffness = Spring.StiffnessMediumLow
 )
 
-/** Pull-up state, clamped to 0..1 so a bouncy spring can never leave a dim scrim half-drawn. */
+/**
+ * Pull-up state, clamped to 0..1 so a bouncy spring can never leave a dim scrim half-drawn.
+ * [openInitially] starts the bar already pulled up (see [TrayMemory]).
+ */
 @Composable
-fun rememberTrayState(): Animatable<Float, AnimationVector1D> =
-    remember { Animatable(0f).also { it.updateBounds(0f, 1f) } }
+fun rememberTrayState(openInitially: Boolean = false): Animatable<Float, AnimationVector1D> =
+    remember { Animatable(if (openInitially) 1f else 0f).also { it.updateBounds(0f, 1f) } }
+
+/**
+ * Lets "Back" keep the bar pulled up on the screen it returns to, so several Backs in a row are
+ * one tap each. The Back button calls [mark]; the next screen that is created within a moment
+ * calls [consume] and starts pulled up. Anything else (Home, a plain navigation) never marks, and
+ * a mark that nobody picked up expires on its own, so an unrelated screen can't open by accident.
+ */
+object TrayMemory {
+    private const val WINDOW_MS = 1500L
+    private var markedAt = 0L
+
+    fun mark() {
+        markedAt = SystemClock.uptimeMillis()
+    }
+
+    fun clear() {
+        markedAt = 0L
+    }
+
+    /** True once if a Back press just happened; the mark is used up either way. */
+    fun consume(): Boolean {
+        val hit = markedAt != 0L && SystemClock.uptimeMillis() - markedAt < WINDOW_MS
+        markedAt = 0L
+        return hit
+    }
+}
 
 suspend fun Animatable<Float, AnimationVector1D>.settleTo(target: Float) {
     animateTo(target, TrayMotion)
 }
 
 // Height of the bar when closed, including the gesture-navigation inset underneath it.
+// [hasMainRow] is false for screens whose closed bar is just the pull handle.
 @Composable
-fun bottomBarHeight(): Dp {
+fun bottomBarHeight(hasMainRow: Boolean = true): Dp {
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    return HandleAreaHeight + TabsHeight + BarBottomMargin + navInset
+    return HandleAreaHeight + (if (hasMainRow) TabsHeight else 0.dp) + BarBottomMargin + navInset
 }
 
 // How much space a page must leave at the bottom so nothing hides behind the closed bar.
 @Composable
-fun bottomBarClearance(): Dp = bottomBarHeight() + 16.dp
+fun bottomBarClearance(hasMainRow: Boolean = true): Dp = bottomBarHeight(hasMainRow) + 16.dp
 
-// Shared shell: rounded-top surface, drag-to-reveal handle, and the Settings / Export / Delete
-// row. `row1` is whatever a screen wants as its main row.
+// Shared shell: rounded-top surface, drag-to-reveal handle, and the Home / Settings / Manage data
+// row. `row1` is whatever a screen wants as its main row (always visible); null leaves just the
+// handle. Pulling the bar up reveals the Home / Settings / Manage data row. [onHome] is null on
+// the Home pager itself, which hides the Home tile.
 @Composable
 fun BottomBarShell(
     tray: Animatable<Float, AnimationVector1D>,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     settingsEnabled: Boolean = true,
-    row1: @Composable () -> Unit
+    onHome: (() -> Unit)? = null,
+    row1: (@Composable () -> Unit)? = null
 ) {
+    var showManageData by remember { mutableStateOf(false) }
     val style = LocalAzndStyle.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -114,6 +155,15 @@ fun BottomBarShell(
         bottomStart = ZeroCornerSize,
         bottomEnd = ZeroCornerSize
     )
+
+    if (showManageData) {
+        AlertDialog(
+            onDismissRequest = { showManageData = false },
+            title = { Text("Manage data") },
+            text = { Text("Export, import and delete are coming soon.") },
+            confirmButton = { TextButton(onClick = { showManageData = false }) { Text("OK") } }
+        )
+    }
 
     Surface(
         modifier = modifier
@@ -164,7 +214,7 @@ fun BottomBarShell(
                 )
             }
 
-            row1()
+            row1?.invoke()
 
             val trayHeight = with(density) { (trayHeightPx * tray.value).toDp() }
             Box(
@@ -173,40 +223,49 @@ fun BottomBarShell(
                     .height(trayHeight)
                     .clipToBounds()
             ) {
-                Row(
+                // Full size always; the box above just uncovers it from the top downwards.
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(TabsHeight)
-                        .padding(horizontal = 12.dp)
+                        .requiredHeight(TabsHeight)
                 ) {
-                    val mutedTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    // Grayed out and inert while you're already inside Settings.
-                    ActionTile(
-                        icon = Icons.Default.Settings,
-                        label = "Settings",
-                        tint = if (settingsEnabled) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
-                        onClick = if (settingsEnabled) {
-                            {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(TabsHeight)
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        val mutedTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        if (onHome != null) {
+                            ActionTile(
+                                icon = Icons.Default.Home,
+                                label = "Home",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            ) {
                                 collapseTray()
-                                onOpenSettings()
+                                onHome()
                             }
-                        } else null
-                    )
-                    ActionTile(
-                        icon = Icons.Default.ImportExport,
-                        label = "Import / Export",
-                        tint = mutedTint
-                    ) {
-                        collapseTray()
-                        // TODO: export / import data
-                    }
-                    ActionTile(
-                        icon = Icons.Default.Delete,
-                        label = "Delete data",
-                        tint = mutedTint
-                    ) {
-                        collapseTray()
-                        // TODO: delete data
+                        }
+                        // Grayed out and inert while you're already inside Settings.
+                        ActionTile(
+                            icon = Icons.Default.Settings,
+                            label = "Settings",
+                            tint = if (settingsEnabled) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
+                            onClick = if (settingsEnabled) {
+                                {
+                                    collapseTray()
+                                    onOpenSettings()
+                                }
+                            } else null
+                        )
+                        ActionTile(
+                            icon = Icons.Default.ImportExport,
+                            label = "Manage data",
+                            tint = mutedTint
+                        ) {
+                            collapseTray()
+                            showManageData = true // TODO: export / import / delete data
+                        }
                     }
                 }
             }

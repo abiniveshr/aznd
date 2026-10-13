@@ -16,7 +16,10 @@ import com.ashrdev.aznd.data.body.BodyWeightEntry
 import com.ashrdev.aznd.data.body.MIGRATION_13_14
 import com.ashrdev.aznd.data.macro.FoodDao
 import com.ashrdev.aznd.data.macro.FoodEntry
+import com.ashrdev.aznd.data.macro.Ingredient
+import com.ashrdev.aznd.data.macro.IngredientDao
 import com.ashrdev.aznd.data.macro.MIGRATION_14_15
+import com.ashrdev.aznd.data.macro.MIGRATION_15_16
 import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
@@ -64,9 +67,10 @@ import java.util.Locale
         LoggedSet::class,
         BodyWeightEntry::class,
         BodyMeasurement::class,
-        FoodEntry::class
+        FoodEntry::class,
+        Ingredient::class
     ],
-    version = 15
+    version = 16
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -77,6 +81,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sessionDao(): SessionDao
     abstract fun bodyDao(): BodyDao
     abstract fun foodDao(): FoodDao
+    abstract fun ingredientDao(): IngredientDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -87,7 +92,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aznd.db"
-                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15)
+                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .fallbackToDestructiveMigration(true)
                     .addCallback(object : RoomDatabase.Callback() {
                         // Runs on every open, before the first query: the old single "SHOULDERS"

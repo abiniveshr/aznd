@@ -23,6 +23,12 @@ data class TemplateSet(
     val targetMax: Int?
 )
 
+/**
+ * workoutId of a session started from "Empty workout" (no template). Real workouts start at 1.
+ * Such sessions feed only the per-exercise statistics: no history entry, no workout or muscle stats.
+ */
+const val EMPTY_WORKOUT_ID = 0L
+
 @Entity(tableName = "logged_session", indices = [Index("workoutId"), Index("finishedAt"), Index("legacySessionId")])
 data class LoggedSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

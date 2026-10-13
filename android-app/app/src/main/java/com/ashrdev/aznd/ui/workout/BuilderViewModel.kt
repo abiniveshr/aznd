@@ -67,6 +67,14 @@ class BuilderViewModel(
         repository.saveTemplate(workoutId, _state.value.rowsForSave())
     }
 
+    fun addCardWithExercise(exerciseId: Long) {
+        _state.update { current ->
+            val withCard = current.addCard()
+            val firstRowId = withCard.cards.lastOrNull()?.rows?.firstOrNull()?.id
+            if (firstRowId == null) withCard else withCard.pickCardExercise(firstRowId, exerciseId)
+        }
+    }
+
     val actions = BuilderActions(
         onPickCardExercise = { row, ex -> _state.update { it.pickCardExercise(row, ex) } },
         onPickRowExercise = { row, ex -> _state.update { it.pickRowExercise(row, ex) } },

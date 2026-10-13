@@ -69,7 +69,8 @@ fun LazyListScope.builderItems(
     state: BuilderState,
     exercises: List<Exercise>,
     showTargets: Boolean,
-    actions: BuilderActions
+    actions: BuilderActions,
+    onAddExercise: () -> Unit = actions.onAddCard
 ) {
     val byId = exercises.associateBy { it.id }
     val depth = state.depthById
@@ -77,7 +78,7 @@ fun LazyListScope.builderItems(
         ExerciseCard(card, byId, exercises, depth, showTargets, actions)
     }
     item(key = "add-exercise") {
-        OutlinedButton(onClick = actions.onAddCard, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) {
             Text("Add exercise")
         }
     }
@@ -116,10 +117,12 @@ private fun ExerciseCard(
             }
             if (card.exerciseId != null) {
                 val labels = setLabels(card)
+                val connectors = connectorInfo(card.rows)
                 card.rows.forEach { row ->
                     key(row.id) {
                         SetRowLine(
                             row = row,
+                            connector = connectors[row.id],
                             depth = depth[row.id] ?: 0,
                             label = labels[row.id].orEmpty(),
                             exercise = row.exerciseId?.let { byId[it] },
@@ -137,6 +140,7 @@ private fun ExerciseCard(
 @Composable
 private fun SetRowLine(
     row: SetRow,
+    connector: ConnectorInfo?,
     depth: Int,
     label: String,
     exercise: Exercise?,
@@ -144,14 +148,9 @@ private fun SetRowLine(
     showTargets: Boolean,
     actions: BuilderActions
 ) {
-    val connector = MaterialTheme.colorScheme.outline
-    val nested = if (depth > 0) {
-        Modifier.drawBehind {
-            // vertical connector line in the left gutter + a short tick to this row
-            val x = -(Indent / 2).toPx()
-            drawLine(connector, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
-            drawLine(connector, Offset(x, size.height / 2), Offset(0f, size.height / 2), strokeWidth = 2.dp.toPx())
-        }
+    val lineColor = MaterialTheme.colorScheme.outline
+    val nested = if (depth > 0 && connector != null) {
+        Modifier.treeConnector(lineColor, Indent, connector, gap = 8.dp, elbowY = 28.dp)
     } else {
         Modifier
     }

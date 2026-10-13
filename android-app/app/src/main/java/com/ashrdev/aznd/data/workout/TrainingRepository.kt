@@ -79,6 +79,10 @@ class TrainingRepository(
 
     suspend fun loggedSetData(): List<LoggedSetData> = sessions.completedSetData()
 
+    /** One exercise's finished sets from every session, empty workouts included (per-exercise stats). */
+    suspend fun loggedSetDataForExercise(exerciseId: Long): List<LoggedSetData> =
+        sessions.completedSetDataForExercise(exerciseId)
+
     suspend fun statsExercises(): Map<Long, StatsExercise> =
         exercises.allOnce().associate {
             it.id to StatsExercise(it.id, it.name, it.type, it.bodyweightShare, it.primaryMuscle, it.secondaryMuscles)
@@ -109,7 +113,8 @@ class TrainingRepository(
 
     /** Starts a session from the workout's template. Null if the template has no usable rows. */
     suspend fun startSession(workoutId: Long): Long? =
-        sessions.startSession(workoutId, bodyweight.currentKg(), clock(), templateRows(workoutId))
+        if (workoutId == EMPTY_WORKOUT_ID) sessions.startEmptySession(bodyweight.currentKg(), clock())
+        else sessions.startSession(workoutId, bodyweight.currentKg(), clock(), templateRows(workoutId))
 
     fun observeActiveSession(): Flow<LoggedSession?> = sessions.observeActive()
 
@@ -132,6 +137,11 @@ class TrainingRepository(
     suspend fun finishSession(sessionId: Long) {
         val s = sessions.getSession(sessionId) ?: return
         if (s.finishedAt != null) return
+        // An empty workout in which nothing was logged leaves nothing behind.
+        if (s.workoutId == EMPTY_WORKOUT_ID && sessions.setsFor(sessionId).isEmpty()) {
+            sessions.deleteSession(sessionId)
+            return
+        }
         val finishedAt = clock()
         sessions.setFinished(sessionId, finishedAt)
         mirrorSession(s.copy(finishedAt = finishedAt))
@@ -151,6 +161,7 @@ class TrainingRepository(
 
     /** Rows of the most recent completed session of this workout (for the "Previous:" lines). */
     suspend fun previousSessionRows(workoutId: Long): List<SetRow> {
+        if (workoutId == EMPTY_WORKOUT_ID) return emptyList()
         val last = sessions.lastCompletedForWorkout(workoutId) ?: return emptyList()
         return SetTree.ordered(sessions.setsFor(last.id).map { it.toRow() })
     }
@@ -198,6 +209,7 @@ class TrainingRepository(
     private suspend fun mirrorSession(session: LoggedSession) {
         val old = legacy ?: return
         val finishedAt = session.finishedAt ?: return
+        if (session.workoutId == EMPTY_WORKOUT_ID) return // per-exercise stats only, no history entry
         val workout = old.getWorkoutWithExercises(session.workoutId)?.Workout ?: return
         val rows = SetTree.ordered(sessions.setsFor(session.id).map { it.toRow() })
         val byId = exercisesById(rows.mapNotNull { it.exerciseId })

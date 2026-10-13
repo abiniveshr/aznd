@@ -2,26 +2,31 @@ package com.ashrdev.aznd.ui.navigation
 
 /*
  * Route map (what opens what). Back always returns to the screen you came from;
- * the Home button returns to the Home page.
+ * the Home button returns to the Dashboard page of the Home pager.
  *
- * Home (pager: History | Home | Dashboard)
- *  |- Workouts -------- WorkoutLog
- *  |                     |- Add workout ------ WorkoutEditor
- *  |                     |- (menu) Custom exercises -- CustomExercises -- CustomExercise (add / edit)
- *  |                     |- a workout -------- WorkoutView
- *  |                     |                       |- Start ---- WorkoutLogger -- Finish --> (back)
- *  |                     |                       |- Stats ---- WorkoutStats -- ExerciseView -- SessionDetail
- *  |                     |                       |- Edit ----- WorkoutEditor
- *  |                     |                       '- exercise -- ExerciseView
- *  |                     '- session in progress - WorkoutLogger
+ * Home (pager: History | Dashboard | Apps) - opens on Dashboard
+ *  |- Workouts (pager: Exercises | Workouts | Stats) -------- WorkoutLog
+ *  |     |- Workouts page: Start on a card ------------- WorkoutLogger -- Finish --> (back)
+ *  |     |                 a workout ------------------- WorkoutView
+ *  |     |                                                 |- Start ---- WorkoutLogger
+ *  |     |                                                 '- exercise -- ExerciseMuscles (muscle viewer)
+ *  |     |- Add workout button (Workouts page; "Empty workout" beside it starts a session with no template) or Edit in WorkoutView --------- WorkoutEditor (Add exercise opens the picker,
+ *  |     |                                                 which has "Add custom exercise" -> CustomExercise)
+ *  |     |- Stats page: a workout ---------------------- WorkoutStats (pager: Stats | Exercises; exercise menu on the 2nd)
+ *  |     |- (menu) Custom exercises -- CustomExercises -- CustomExercise (add / edit)
+ *  |     '- session in progress ------------------------- WorkoutLogger
  *  |- Streaks --------- Streaks
  *  |                     |- Add streak ------- StreakEditor
  *  |                     '- a streak ---------- StreakDetail
  *  |                                             |- Saved (book) -- SavedDaysForStreak -- SavedDayDetail
  *  |                                             '- Save today ---- SavedDayDetail
+ *  |- Macros (pager: Graphs | Today | Edit) ------------- Macros
+ *  |- Body (pager: Measurements | Strength | Composition) - BodyMeasurements
+ *  |                     '- Strength page: a muscle ---- MuscleStats
  *  |- History page
  *  |    |- Workout History -- History (pick a workout) -- WorkoutHistory (calendar) -- SessionDetail
  *  |    |                                                   '- Stats -- WorkoutStats
+ *  |    |- Weight History (trend graphs of weight, body fat, lean mass)
  *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
  *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseView,
  *                     Muscle data (dropdown) -> MuscleStats
@@ -57,6 +62,9 @@ sealed class Screen(val route: String) {
     object ExerciseView : Screen("exercise_view/{workoutId}/{exerciseId}") {
         fun createRoute(workoutId: Long, exerciseId: Long) = "exercise_view/$workoutId/$exerciseId"
     }
+    object ExerciseMuscles : Screen("exercise_muscles/{exerciseId}") {
+        fun createRoute(exerciseId: Long) = "exercise_muscles/$exerciseId"
+    }
     object WorkoutEditor : Screen("workout_editor?workoutId={workoutId}") {
         fun createRoute(workoutId: Long?) = "workout_editor?workoutId=${workoutId ?: -1}"
     }
@@ -67,6 +75,7 @@ sealed class Screen(val route: String) {
     object Streaks : Screen("streaks")
     object Macros : Screen("macros")
     object BodyMeasurements : Screen("body_measurements")
+    object WeightHistory : Screen("weight_history")
     object StreakEditor : Screen("streak_editor")
     object StreakDetail : Screen("streak_detail/{streakId}") {
         fun createRoute(streakId: Long) = "streak_detail/$streakId"

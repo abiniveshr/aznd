@@ -4,7 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
@@ -18,6 +20,9 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -45,8 +50,10 @@ import kotlinx.coroutines.launch
 private val PrimaryButtonHeight = 64.dp
 private val PrimaryButtonGap = 12.dp
 
-// Every screen except the Home pager sits inside this: top bar with a title, content, and the
-// persistent bottom bar (Back / Home / optional third action, pull up for Settings etc.).
+// Every screen except the Home pager sits inside this: top bar with a title and a Back button on
+// its left, content, and the persistent bottom bar (optional actions, pull up for Home /
+// Settings / Manage data). Pass [subPages] on screens with swipable subpages: the bar then shows
+// their tabs instead of [third] / [extraActions].
 // `content` receives padding whose bottom value keeps your list clear of the bar (and of the
 // big primary button when there is one).
 @OptIn(ExperimentalLayoutApi::class)
@@ -57,8 +64,14 @@ fun ScreenScaffold(
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
     third: ThirdAction? = null,
+    extraActions: List<ThirdAction> = emptyList(),
     primaryAction: PrimaryAction? = null,
+    // Shown next to [primaryAction], splitting the big button in two (e.g. Add workout | Empty workout).
+    secondaryAction: PrimaryAction? = null,
+    // Keep the space for the big button even when it is not shown (pager pages that don't have it).
+    reservePrimarySpace: Boolean = primaryAction != null,
     settingsEnabled: Boolean = true,
+    subPages: SubPageBar? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
@@ -66,15 +79,26 @@ fun ScreenScaffold(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val imeVisible = WindowInsets.isImeVisible
-    val clearance = bottomBarClearance()
-    val barHeight = bottomBarHeight()
+    val hasMainRow = subPages != null || third != null || extraActions.isNotEmpty()
+    val clearance = bottomBarClearance(hasMainRow)
+    val barHeight = bottomBarHeight(hasMainRow)
     val trayTravelPx = with(density) { TabsHeight.toPx() }
-    val reserve = if (primaryAction != null) PrimaryButtonHeight + PrimaryButtonGap else 0.dp
+    val reserve = if (reservePrimarySpace) PrimaryButtonHeight + PrimaryButtonGap else 0.dp
 
     BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(title) }, actions = topBarActions) }
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = { topBarActions() }
+            )
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -95,16 +119,23 @@ fun ScreenScaffold(
                             .offset { IntOffset(0, -(trayTravelPx * tray.value).roundToInt()) }
                             .graphicsLayer { alpha = (1f - tray.value).coerceIn(0f, 1f) }
                     ) {
-                        Button(
-                            onClick = primaryAction.onClick,
-                            enabled = primaryAction.enabled,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(PrimaryButtonHeight)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(primaryAction.icon, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(primaryAction.label, style = MaterialTheme.typography.titleMedium)
+                            for (action in listOfNotNull(primaryAction, secondaryAction)) {
+                                Button(
+                                    onClick = action.onClick,
+                                    enabled = action.enabled,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(PrimaryButtonHeight)
+                                ) {
+                                    Icon(action.icon, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(action.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                }
+                            }
                         }
                     }
                 }
@@ -121,12 +152,13 @@ fun ScreenScaffold(
                     )
                 }
                 ScreenBottomBar(
-                    onBack = onBack,
                     onHome = onHome,
                     tray = tray,
                     onOpenSettings = onOpenSettings,
                     third = third,
+                    extraActions = extraActions,
                     settingsEnabled = settingsEnabled,
+                    subPages = subPages,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }

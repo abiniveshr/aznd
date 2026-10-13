@@ -9,6 +9,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -31,12 +32,16 @@ import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
 import com.ashrdev.aznd.ui.workout.BuilderViewModel
 import com.ashrdev.aznd.ui.workout.CustomExerciseScreen
 import com.ashrdev.aznd.data.body.RoomBodyweightProvider
+import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
 import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.data.macro.MacroTargetsStore
 import com.ashrdev.aznd.ui.body.BodyViewModel
 import com.ashrdev.aznd.ui.macro.MacroScreen
 import com.ashrdev.aznd.ui.macro.MacroViewModel
-import com.ashrdev.aznd.ui.body.MeasurementsScreen
+import com.ashrdev.aznd.ui.body.BodyScreen
+import com.ashrdev.aznd.ui.body.WeightHistoryScreen
+import com.ashrdev.aznd.ui.workout.ExerciseMusclesScreen
+import com.ashrdev.aznd.ui.workout.LocalOpenCustomExercise
 import com.ashrdev.aznd.ui.workout.CustomExerciseViewModel
 import com.ashrdev.aznd.ui.workout.MuscleStatsScreen
 import com.ashrdev.aznd.ui.workout.MuscleStatsViewModel
@@ -172,14 +177,11 @@ class MainActivity : ComponentActivity() {
                             onOpenWorkout = { id ->
                                 navigateTo(Screen.WorkoutView.createRoute(id))
                             },
-                            onEditWorkout = { id ->
-                                navigateTo(Screen.WorkoutEditor.createRoute(id))
-                            },
                             onAddWorkout = {
                                 navigateTo(Screen.WorkoutEditor.createRoute(null))
                             },
                             onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
-                            onDeleteWorkout = { id -> workoutViewModel.deleteWorkout(id) },
+                            onOpenWorkoutStats = { id -> navigateTo(Screen.WorkoutStats.createRoute(id)) },
                             onManageCustomExercises = { navigateTo(Screen.CustomExercises.route) },
                             onBack = goBack,
                             onHome = goHome,
@@ -233,9 +235,7 @@ class MainActivity : ComponentActivity() {
                             onBack = goBack,
                             onHome = goHome,
                             onOpenSettings = openSettings,
-                            onOpenExercise = { wId, exId ->
-                                navigateTo(Screen.ExerciseView.createRoute(wId, exId))
-                            }
+                            useTargets = workoutSettings.settings.value.targetReps
                         )
                     }
                     composable(
@@ -251,10 +251,22 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = openSettings,
                             onEdit = { id -> navigateTo(Screen.WorkoutEditor.createRoute(id)) },
                             onOpenSession = { id -> navigateTo(Screen.WorkoutLogger.createRoute(id)) },
-                            onViewExercise = { wId, exId ->
-                                navigateTo(Screen.ExerciseView.createRoute(wId, exId))
-                            },
-                            onOpenStats = { id -> navigateTo(Screen.WorkoutStats.createRoute(id)) }
+                            onViewExercise = { exId ->
+                                navigateTo(Screen.ExerciseMuscles.createRoute(exId))
+                            }
+                        )
+                    }
+                    composable(
+                        route = Screen.ExerciseMuscles.route,
+                        arguments = listOf(navArgument("exerciseId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
+                        ExerciseMusclesScreen(
+                            exerciseId = exerciseId,
+                            viewModel = workoutViewModel,
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
                         )
                     }
                     composable(
@@ -273,7 +285,7 @@ class MainActivity : ComponentActivity() {
                             onBack = goBack,
                             onHome = goHome,
                             onOpenSettings = openSettings,
-                            onOpenSession = { id -> navigateTo(Screen.SessionDetail.createRoute(id)) }
+                            useTargets = workoutSettings.settings.value.targetReps
                         )
                     }
                     composable(
@@ -282,7 +294,8 @@ class MainActivity : ComponentActivity() {
                     ) { backStackEntry ->
                         val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
                         val workoutName by produceState(initialValue = "", workoutId) {
-                            value = workoutViewModel.getWorkout(workoutId)?.Workout?.name.orEmpty()
+                            value = if (workoutId == EMPTY_WORKOUT_ID) "Empty workout"
+                            else workoutViewModel.getWorkout(workoutId)?.Workout?.name.orEmpty()
                         }
                         val loggerVm: LoggerViewModel =
                             viewModel(factory = LoggerViewModel.factory(trainingRepository, workoutSettings))
@@ -333,6 +346,9 @@ class MainActivity : ComponentActivity() {
                             value = workoutId?.let { workoutViewModel.getWorkout(it)?.Workout?.name.orEmpty() }.orEmpty()
                         }
                         initialName?.let { loadedName ->
+                          CompositionLocalProvider(
+                            LocalOpenCustomExercise provides { navigateTo(Screen.CustomExercise.createRoute(null)) }
+                          ) {
                             WorkoutBuilderScreen(
                                 workoutId = workoutId,
                                 initialName = loadedName,
@@ -347,6 +363,7 @@ class MainActivity : ComponentActivity() {
                                 onHome = goHome,
                                 onOpenSettings = openSettings
                             )
+                          }
                         }
                     }
 
@@ -373,7 +390,7 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Macros.route) {
                         val macroVm: MacroViewModel = viewModel(
                             factory = MacroViewModel.factory(
-                                database.foodDao(), trainingRepository, workoutSettings.settings.value.trackRpe
+                                database.foodDao(), database.ingredientDao(), database.bodyDao(), trainingRepository, workoutSettings.settings.value.trackRpe
                             )
                         )
                         MacroScreen(
@@ -384,9 +401,24 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = openSettings
                         )
                     }
+                    composable(Screen.WeightHistory.route) {
+                        val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                        WeightHistoryScreen(
+                            viewModel = bodyVm,
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
+                        )
+                    }
                     composable(Screen.BodyMeasurements.route) {
                         val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
-                        MeasurementsScreen(viewModel = bodyVm, onBack = goBack, onHome = goHome, onOpenSettings = openSettings)
+                        BodyScreen(
+                            viewModel = bodyVm,
+                            onOpenMuscle = { muscle -> navigateTo(Screen.MuscleStats.createRoute(muscle)) },
+                            onBack = goBack,
+                            onHome = goHome,
+                            onOpenSettings = openSettings
+                        )
                     }
                     composable(Screen.CustomExercises.route) {
                         val listVm: CustomExercisesViewModel =

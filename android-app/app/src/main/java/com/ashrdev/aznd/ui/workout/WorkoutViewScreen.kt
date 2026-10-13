@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -41,7 +40,7 @@ import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
 
 /**
- * Read-only view of a workout's template. Start opens the logger, which starts a new session or
+ * Read-only view of a workout's template. Tapping an exercise opens the muscle viewer. Start opens the logger, which starts a new session or
  * resumes the unfinished one of this workout. Only one session can run at a time, so while a
  * session of ANOTHER workout is unfinished, Start offers to go there instead.
  *
@@ -56,8 +55,8 @@ fun WorkoutViewScreen(
     onOpenSettings: () -> Unit,
     onEdit: (Long) -> Unit,
     onOpenSession: (Long) -> Unit,
-    onViewExercise: (Long, Long) -> Unit,
-    onOpenStats: (Long) -> Unit
+    // Opens the muscle viewer for a catalog exercise id.
+    onViewExercise: (Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
     var workout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
@@ -105,10 +104,11 @@ fun WorkoutViewScreen(
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
+        // Edit / View toggle: this is the View side; the editor shows "View" in the same slot.
         third = ThirdAction(
-            icon = Icons.AutoMirrored.Filled.MenuBook,
-            label = "Stats",
-            onClick = { onOpenStats(item.Workout.id) }
+            icon = Icons.Default.Edit,
+            label = "Edit",
+            onClick = { onEdit(item.Workout.id) }
         ),
         primaryAction = PrimaryAction(
             icon = Icons.Default.PlayArrow,
@@ -119,12 +119,7 @@ fun WorkoutViewScreen(
                 if (running != null && running.workoutId != item.Workout.id) blockedDialog = true
                 else onOpenSession(item.Workout.id)
             }
-        ),
-        topBarActions = {
-            IconButton(onClick = { onEdit(item.Workout.id) }) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit workout")
-            }
-        }
+        )
     ) { padding ->
         if (view == null || view.cards.isEmpty()) {
             Column(
@@ -133,7 +128,7 @@ fun WorkoutViewScreen(
                     .padding(24.dp)
             ) {
                 Text(
-                    "No exercises yet — tap Edit to add some.",
+                    "No exercises yet — tap Edit in the bar to add some.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -147,14 +142,14 @@ fun WorkoutViewScreen(
             ) {
                 items(view.cards, key = { it.rows.first().id }) { card ->
                     val exercise = card.exerciseId?.let { view.exercises[it] }
-                    // The History/Stats screens know exercises by their old per-workout id.
-                    val statsId = item.exercises.firstOrNull { it.exercise.name == exercise?.name }?.exercise?.id
                     val labels = setLabels(card)
+                    val exerciseId = card.exerciseId
+                    // Tapping an exercise opens the muscle viewer (which muscles it trains).
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(
-                                if (statsId != null) Modifier.clickable { onViewExercise(item.Workout.id, statsId) }
+                                if (exerciseId != null) Modifier.clickable { onViewExercise(exerciseId) }
                                 else Modifier
                             )
                     ) {
