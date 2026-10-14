@@ -86,7 +86,7 @@ object ExerciseSeedParser {
     }
 
     private fun muscle(name: String): Muscle =
-        Muscle.values().firstOrNull { it.name == name.trim().uppercase() }
+        Muscle.entries.firstOrNull { it.name == name.trim().uppercase() }
             ?: throw IllegalArgumentException("unknown muscle '$name'")
 
     private fun shareFromPercent(text: String): Double {

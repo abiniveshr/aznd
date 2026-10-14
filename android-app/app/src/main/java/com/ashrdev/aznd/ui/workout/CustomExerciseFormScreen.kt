@@ -39,7 +39,6 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
-import com.ashrdev.aznd.data.workout.CustomExerciseForm
 import com.ashrdev.aznd.data.workout.FormError
 import com.ashrdev.aznd.data.workout.formLabel
 import com.ashrdev.aznd.data.workout.message
@@ -60,8 +59,8 @@ import java.io.File
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun CustomExerciseScreen(
-    viewModel: CustomExerciseViewModel,
+fun CustomExerciseFormScreen(
+    viewModel: CustomExerciseFormViewModel,
     onSaved: () -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
@@ -124,7 +123,7 @@ fun CustomExerciseScreen(
 
             Section("Type")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExerciseType.values().forEach { t ->
+                ExerciseType.entries.forEach { t ->
                     FilterChip(
                         selected = form.type == t,
                         onClick = { viewModel.update { it.withType(t) } },
@@ -159,7 +158,7 @@ fun CustomExerciseScreen(
                 ) { Icon(Icons.Default.Add, contentDescription = "Allow more muscles") }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Muscle.values().forEach { m ->
+                Muscle.entries.forEach { m ->
                     FilterChip(
                         selected = m in form.muscles,
                         onClick = { viewModel.update { it.toggleMuscle(m) } },

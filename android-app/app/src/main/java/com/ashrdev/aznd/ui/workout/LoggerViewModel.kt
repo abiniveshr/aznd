@@ -217,6 +217,15 @@ class LoggerViewModel(
         }
     }
 
+    /** "Add exercise": appends a card with [exercise] already chosen (picked before the card exists). */
+    fun addCardWithExercise(exercise: Exercise) {
+        structural { current ->
+            val withCard = current.addCard()
+            val firstRowId = withCard.cards.lastOrNull()?.rows?.firstOrNull()?.id
+            if (firstRowId == null) withCard else withCard.pickCardExercise(firstRowId, exercise.id)
+        }
+    }
+
     val actions = LoggerActions(
         onPickCardExercise = { row, ex ->
             val old = exerciseOf(row)

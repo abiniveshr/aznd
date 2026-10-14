@@ -56,7 +56,7 @@ private val MacroPages = listOf(
 )
 
 /**
- * Macros: three swipable pages, opening on the middle one.
+ * Macros: three swipeable pages, opening on the middle one.
  *   Graphs | Today | Edit
  *  - Today: target and progress on an open ring (Net / Eaten), the meals, a button to log a meal.
  *  - Graphs (swipe left): per-day history.

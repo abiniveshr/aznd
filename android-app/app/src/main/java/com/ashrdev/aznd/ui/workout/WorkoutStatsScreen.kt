@@ -32,7 +32,7 @@ private val StatsPages = listOf(
 )
 
 /**
- * One workout's statistics, two swipable pages: Stats (the workout's graph views) and
+ * One workout's statistics, two swipeable pages: Stats (the workout's graph views) and
  * Exercises (pick an exercise from the menu to see its graph views, swipe right).
  */
 @Composable
@@ -52,7 +52,7 @@ fun WorkoutStatsScreen(
     LaunchedEffect(workoutId) {
         val workout = viewModel.getWorkout(workoutId)
         if (workout != null) {
-            workoutName = workout.Workout.name
+            workoutName = workout.workout.name
             exercises = workout.exercises.sortedBy { it.exercise.orderIndex }.map { it.exercise }
         }
         loaded = true

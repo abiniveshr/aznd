@@ -27,7 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.ashrdev.aznd.ui.components.TopAppBar
-import com.ashrdev.aznd.ui.navigation.Screen
+import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
@@ -117,7 +117,7 @@ fun HomeScreen(
                         onNavigate = onNavigate,
                         bottomPadding = bottomClearance
                     )
-                    HomePageId.APPS -> HomePage(
+                    HomePageId.APPS -> AppsPage(
                         onNavigate = onNavigate,
                         bottomPadding = bottomClearance
                     )
@@ -140,7 +140,7 @@ fun HomeScreen(
                 pagerState = pagerState,
                 tray = tray,
                 onSelectPage = { goToPage(it) },
-                onOpenSettings = { onNavigate(Screen.Settings.route) },
+                onOpenSettings = { onNavigate(Destination.Settings.route) },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }

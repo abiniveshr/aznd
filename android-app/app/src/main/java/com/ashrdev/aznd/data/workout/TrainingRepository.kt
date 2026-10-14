@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.map
  * Wire-up:
  *  - AppDatabase lists Exercise, TemplateSet, LoggedSession and LoggedSet and exposes exerciseDao(),
  *    templateDao() and sessionDao().
- *  - Build one: TrainingRepository(db.exerciseDao(), db.templateDao(), db.sessionDao(), legacy = db.WorkoutDao()).
+ *  - Build one: TrainingRepository(db.exerciseDao(), db.templateDao(), db.sessionDao(), legacy = db.workoutDao()).
  *  - Deleting a workout must also call deleteTemplate(workoutId) (workoutId has no foreign key);
  *    WorkoutViewModel.deleteWorkout does that.
  *
@@ -198,7 +198,7 @@ class TrainingRepository(
         used.groupBy { it.exerciseId }.entries.forEachIndexed { index, (exerciseId, list) ->
             val ex = byId[exerciseId] ?: return@forEachIndexed
             val mode = if (ex.type == ExerciseType.TIME_HELD) SetMode.TIME else SetMode.REPS
-            val id = old.insertExercise(ExerciseEntity(WorkoutId = workoutId, name = ex.name, orderIndex = index))
+            val id = old.insertExercise(ExerciseEntity(workoutId = workoutId, name = ex.name, orderIndex = index))
             old.insertExerciseSets(
                 list.mapIndexed { i, _ -> ExerciseSetEntity(exerciseId = id, mode = mode, orderIndex = i) }
             )
@@ -210,13 +210,13 @@ class TrainingRepository(
         val old = legacy ?: return
         val finishedAt = session.finishedAt ?: return
         if (session.workoutId == EMPTY_WORKOUT_ID) return // per-exercise stats only, no history entry
-        val workout = old.getWorkoutWithExercises(session.workoutId)?.Workout ?: return
+        val workout = old.getWorkoutWithExercises(session.workoutId)?.workout ?: return
         val rows = SetTree.ordered(sessions.setsFor(session.id).map { it.toRow() })
         val byId = exercisesById(rows.mapNotNull { it.exerciseId })
         val legacyId = old.insertSession(
             SessionEntity(
-                WorkoutId = workout.id,
-                WorkoutName = workout.name,
+                workoutId = workout.id,
+                workoutName = workout.name,
                 startedAt = session.startedAt,
                 finishedAt = finishedAt
             )

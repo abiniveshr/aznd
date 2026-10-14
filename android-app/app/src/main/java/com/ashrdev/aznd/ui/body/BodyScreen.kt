@@ -41,7 +41,6 @@ import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.domain.displayName
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.BodyModelPlaceholder
-import com.ashrdev.aznd.ui.common.DropdownField
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.StatsGraph
 import com.ashrdev.aznd.ui.common.rememberGraphRangeState
@@ -58,7 +57,7 @@ private val BodyPages = listOf(
 )
 
 /**
- * The Body screen (was "Measurements"): three swipable pages, opening on the middle one.
+ * The Body screen (was "Measurements"): three swipeable pages, opening on the middle one.
  *   Measure | Strength | Composition
  *  - Strength: the body model; pick a muscle to open its stats.
  *  - Measure (swipe left): height and tape measurements, also shown on the model.

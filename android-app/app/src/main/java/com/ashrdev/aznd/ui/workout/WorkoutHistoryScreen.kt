@@ -43,7 +43,7 @@ import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
 
 @Composable
-fun SessionHistoryScreen(
+fun WorkoutHistoryScreen(
     workoutId: Long,
     viewModel: WorkoutViewModel,
     onOpenSession: (Long) -> Unit,
@@ -58,9 +58,9 @@ fun SessionHistoryScreen(
     // Name for the title: from the logged sessions, or the workout itself while none exist yet.
     var workoutName by remember { mutableStateOf("") }
     LaunchedEffect(workoutId) {
-        workoutName = viewModel.getWorkout(workoutId)?.Workout?.name ?: ""
+        workoutName = viewModel.getWorkout(workoutId)?.workout?.name ?: ""
     }
-    val displayName = sessions.firstOrNull()?.session?.WorkoutName
+    val displayName = sessions.firstOrNull()?.session?.workoutName
         ?: workoutName.ifEmpty { "Workout" }
 
     val favorites = rememberFavoriteDays("workout:$workoutId")

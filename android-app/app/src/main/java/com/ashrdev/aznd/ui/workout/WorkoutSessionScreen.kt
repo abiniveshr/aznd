@@ -47,6 +47,18 @@ fun WorkoutSessionScreen(
     val suggestions by viewModel.suggestions.collectAsState()
     val settings by viewModel.settings.collectAsState()
     var confirmDiscard by remember { mutableStateOf(false) }
+    var showAddPicker by remember { mutableStateOf(false) }
+
+    if (showAddPicker) {
+        ExercisePickerDialog(
+            exercises = exercises,
+            onDismiss = { showAddPicker = false },
+            onPick = {
+                showAddPicker = false
+                viewModel.addCardWithExercise(it)
+            }
+        )
+    }
 
     LaunchedEffect(phase) { if (phase == LoggerPhase.Closed) onFinished() }
 
@@ -104,7 +116,7 @@ fun WorkoutSessionScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    loggerItems(data, viewModel.actions)
+                    loggerItems(data, viewModel.actions, onAddExercise = { showAddPicker = true })
                 }
             }
             else -> Unit

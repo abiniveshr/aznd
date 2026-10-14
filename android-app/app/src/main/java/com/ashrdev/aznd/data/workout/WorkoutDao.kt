@@ -9,11 +9,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkoutDao {
-    @Query("SELECT WorkoutName, startedAt FROM sessions ORDER BY startedAt DESC LIMIT 1")
+    @Query("SELECT workoutName, startedAt FROM sessions ORDER BY startedAt DESC LIMIT 1")
     suspend fun getMostRecentSession(): RecentWorkoutSession?
     
     @Insert
-    suspend fun insertWorkout(Workout: WorkoutEntity): Long
+    suspend fun insertWorkout(workout: WorkoutEntity): Long
 
     /** Save only the workout record for the new template-based builder and return its real id. */
     @Transaction
@@ -24,27 +24,27 @@ interface WorkoutDao {
         return id
     }
 
-    @Query("SELECT DISTINCT WorkoutId, WorkoutName FROM sessions ORDER BY WorkoutName")
+    @Query("SELECT DISTINCT workoutId, workoutName FROM sessions ORDER BY workoutName")
     fun getWorkoutHistorySummaries(): Flow<List<WorkoutHistorySummary>>
 
     @Transaction
-    @Query("SELECT * FROM Workouts ORDER BY name")
+    @Query("SELECT * FROM workouts ORDER BY name")
     fun getWorkoutsWithExercises(): Flow<List<WorkoutWithExercises>>
 
     @Transaction
-    @Query("SELECT * FROM Workouts ORDER BY name")
+    @Query("SELECT * FROM workouts ORDER BY name")
     suspend fun getAllWorkoutsWithExercisesOnce(): List<WorkoutWithExercises>
 
     @Transaction
-    @Query("SELECT * FROM sessions WHERE WorkoutId = :WorkoutId ORDER BY startedAt DESC LIMIT 1")
-    suspend fun getLatestSessionForWorkout(WorkoutId: Long): SessionWithSets?
+    @Query("SELECT * FROM sessions WHERE workoutId = :workoutId ORDER BY startedAt DESC LIMIT 1")
+    suspend fun getLatestSessionForWorkout(workoutId: Long): SessionWithSets?
 
     @Transaction
-    @Query("SELECT * FROM sessions WHERE WorkoutId = :WorkoutId ORDER BY startedAt DESC")
-    fun getSessionsForWorkout(WorkoutId: Long): Flow<List<SessionWithSets>>
+    @Query("SELECT * FROM sessions WHERE workoutId = :workoutId ORDER BY startedAt DESC")
+    fun getSessionsForWorkout(workoutId: Long): Flow<List<SessionWithSets>>
 
-    @Query("DELETE FROM sessions WHERE WorkoutId = :WorkoutId")
-    suspend fun deleteSessionsForWorkout(WorkoutId: Long)
+    @Query("DELETE FROM sessions WHERE workoutId = :workoutId")
+    suspend fun deleteSessionsForWorkout(workoutId: Long)
 
     @Query("""
         SELECT sessions.id AS sessionId, sessions.startedAt AS startedAt,
@@ -52,14 +52,14 @@ interface WorkoutDao {
         FROM logged_sets
         INNER JOIN sessions ON logged_sets.sessionId = sessions.id
         WHERE logged_sets.exerciseName = :exerciseName
-          AND sessions.WorkoutId = :WorkoutId
+          AND sessions.workoutId = :workoutId
           AND logged_sets.mode = 'REPS'
         ORDER BY sessions.startedAt ASC
     """)
-    suspend fun getExerciseHistory(WorkoutId: Long, exerciseName: String): List<ExerciseSetPoint>
+    suspend fun getExerciseHistory(workoutId: Long, exerciseName: String): List<ExerciseSetPoint>
 
     @Update
-    suspend fun updateWorkout(Workout: WorkoutEntity)
+    suspend fun updateWorkout(workout: WorkoutEntity)
 
     @Insert
     suspend fun insertExercise(exercise: ExerciseEntity): Long
@@ -67,18 +67,18 @@ interface WorkoutDao {
     @Insert
     suspend fun insertExerciseSets(sets: List<ExerciseSetEntity>)
 
-    @Query("DELETE FROM exercises WHERE WorkoutId = :WorkoutId")
-    suspend fun deleteExercisesForWorkout(WorkoutId: Long)
+    @Query("DELETE FROM exercises WHERE workoutId = :workoutId")
+    suspend fun deleteExercisesForWorkout(workoutId: Long)
 
-    @Query("DELETE FROM Workouts WHERE id = :WorkoutId")
-    suspend fun deleteWorkout(WorkoutId: Long)
+    @Query("DELETE FROM workouts WHERE id = :workoutId")
+    suspend fun deleteWorkout(workoutId: Long)
 
-    @Query("SELECT COUNT(*) FROM Workouts")
-    suspend fun WorkoutCount(): Int
+    @Query("SELECT COUNT(*) FROM workouts")
+    suspend fun workoutCount(): Int
 
     @Transaction
-    @Query("SELECT * FROM Workouts WHERE id = :WorkoutId")
-    suspend fun getWorkoutWithExercises(WorkoutId: Long): WorkoutWithExercises?
+    @Query("SELECT * FROM workouts WHERE id = :workoutId")
+    suspend fun getWorkoutWithExercises(workoutId: Long): WorkoutWithExercises?
 
     @Insert
     suspend fun insertSession(session: SessionEntity): Long
@@ -101,16 +101,16 @@ interface WorkoutDao {
     suspend fun getRecentSets(name: String, limit: Int): List<LoggedSetEntity>
 
     @Transaction
-    suspend fun saveWorkout(Workout: WorkoutEntity, exercises: List<ExerciseWithSets>) {
-        val WorkoutId = if (Workout.id == 0L) {
-            insertWorkout(Workout)
+    suspend fun saveWorkout(workout: WorkoutEntity, exercises: List<ExerciseWithSets>) {
+        val workoutId = if (workout.id == 0L) {
+            insertWorkout(workout)
         } else {
-            updateWorkout(Workout)
-            deleteExercisesForWorkout(Workout.id)
-            Workout.id
+            updateWorkout(workout)
+            deleteExercisesForWorkout(workout.id)
+            workout.id
         }
         exercises.forEachIndexed { exIndex, ews ->
-            val exId = insertExercise(ews.exercise.copy(WorkoutId = WorkoutId, orderIndex = exIndex))
+            val exId = insertExercise(ews.exercise.copy(workoutId = workoutId, orderIndex = exIndex))
             val setEntities = ews.sets.mapIndexed { setIndex, set ->
                 set.copy(exerciseId = exId, orderIndex = setIndex)
             }
@@ -153,8 +153,8 @@ interface WorkoutDao {
         val active = getActiveSessionOnce() ?: return null
         val sessionId = insertSession(
             SessionEntity(
-                WorkoutId = active.session.WorkoutId,
-                WorkoutName = active.session.WorkoutName,
+                workoutId = active.session.workoutId,
+                workoutName = active.session.workoutName,
                 startedAt = active.session.startedAt,
                 finishedAt = System.currentTimeMillis(),
                 photoUri = active.session.photoUri

@@ -10,7 +10,7 @@ data class SessionStat(
     val volumeKg: Double,
     /** Sum of total load x reps: bodyweight x share + added weight for bodyweight exercises. */
     val weightMovedKg: Double,
-    /** Estimated, see CalorieCalculator. */
+    /** Estimated, see WorkoutCalorieEstimator. */
     val kcal: Double,
     val durationMin: Double
 )
@@ -61,7 +61,7 @@ object SessionStatsCalculator {
                     sets = sets.size,
                     volumeKg = volume,
                     weightMovedKg = moved,
-                    kcal = CalorieCalculator.sessionKcal(works, head.bodyweightKg),
+                    kcal = WorkoutCalorieEstimator.sessionKcal(works, head.bodyweightKg),
                     durationMin = ((head.finishedAt - head.startedAt) / 60_000.0).coerceAtLeast(0.0)
                 )
             }

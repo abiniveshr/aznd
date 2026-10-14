@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.ScreenScaffold
@@ -38,7 +37,7 @@ private val ViewerPages = listOf(
 
 /**
  * The exercise viewer, opened from the Exercises page and from an exercise inside a workout.
- * Three swipable pages, opening on the middle one:
+ * Three swipeable pages, opening on the middle one:
  *   Tutorial | Exercise | Stats
  *  - Tutorial: looping demo frames and written steps (see ExerciseTutorialPage), when the exercise has one.
  *  - Exercise: the muscles the exercise trains.

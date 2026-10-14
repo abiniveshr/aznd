@@ -14,8 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -101,7 +99,7 @@ fun WorkoutDetailScreen(
     }
 
     ScreenScaffold(
-        title = item.Workout.name,
+        title = item.workout.name,
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
@@ -109,16 +107,16 @@ fun WorkoutDetailScreen(
         third = ThirdAction(
             icon = Icons.Default.Edit,
             label = "Edit",
-            onClick = { onEdit(item.Workout.id) }
+            onClick = { onEdit(item.workout.id) }
         ),
         primaryAction = PrimaryAction(
             icon = Icons.Default.PlayArrow,
-            label = if (active?.workoutId == item.Workout.id) "Resume" else "Start",
+            label = if (active?.workoutId == item.workout.id) "Resume" else "Start",
             enabled = hasRows,
             onClick = {
                 val running = active
-                if (running != null && running.workoutId != item.Workout.id) blockedDialog = true
-                else onOpenSession(item.Workout.id)
+                if (running != null && running.workoutId != item.workout.id) blockedDialog = true
+                else onOpenSession(item.workout.id)
             }
         )
     ) { padding ->

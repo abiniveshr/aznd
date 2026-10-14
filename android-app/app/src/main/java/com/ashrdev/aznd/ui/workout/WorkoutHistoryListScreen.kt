@@ -38,7 +38,7 @@ import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
 
 @Composable
-fun HistoryScreen(
+fun WorkoutHistoryListScreen(
     viewModel: WorkoutViewModel,
     onOpenWorkout: (Long) -> Unit,
     onBack: () -> Unit,
@@ -52,10 +52,10 @@ fun HistoryScreen(
         AlertDialog(
             onDismissRequest = { toDelete = null },
             title = { Text("Delete history?") },
-            text = { Text("This deletes every logged session for \"${target.WorkoutName}\". The workout itself won't be deleted. This can't be undone.") },
+            text = { Text("This deletes every logged session for \"${target.workoutName}\". The workout itself won't be deleted. This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteHistoryForWorkout(target.WorkoutId)
+                    viewModel.deleteHistoryForWorkout(target.workoutId)
                     toDelete = null
                 }) { Text("Delete") }
             },
@@ -88,10 +88,10 @@ fun HistoryScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(summaries, key = { it.WorkoutId }) { summary ->
+                items(summaries, key = { it.workoutId }) { summary ->
                     HistoryRow(
                         summary = summary,
-                        onOpen = { onOpenWorkout(summary.WorkoutId) },
+                        onOpen = { onOpenWorkout(summary.workoutId) },
                         onRequestDelete = { toDelete = summary }
                     )
                 }
@@ -120,7 +120,7 @@ private fun HistoryRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(summary.WorkoutName, style = MaterialTheme.typography.titleMedium)
+            Text(summary.workoutName, style = MaterialTheme.typography.titleMedium)
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "History options")

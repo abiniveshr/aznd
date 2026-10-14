@@ -142,7 +142,7 @@ fun StatsGraph(
                     Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                 }
                 DropdownMenu(expanded = rangeMenu, onDismissRequest = { rangeMenu = false }) {
-                    GraphRange.values().forEach { r ->
+                    GraphRange.entries.forEach { r ->
                         DropdownMenuItem(
                             text = { Text(r.label) },
                             onClick = {

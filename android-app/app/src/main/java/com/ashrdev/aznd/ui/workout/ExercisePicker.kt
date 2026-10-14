@@ -22,7 +22,7 @@ val LocalOpenCustomExercise = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * Exercise field. Looks like a text field showing the selected name, but tapping it opens the
- * full-screen exercise browser (ExerciseBrowser.kt; no dropdown, so the keyboard stays up while typing).
+ * full-screen exercise browser (ExerciseSearchScreen.kt; no dropdown, so the keyboard stays up while typing).
  */
 @Composable
 fun ExercisePicker(

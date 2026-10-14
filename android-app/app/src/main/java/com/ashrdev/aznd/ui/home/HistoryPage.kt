@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.RecentWorkoutSession
 import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.navigation.Screen
+import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.formatTimestamp
 
@@ -67,7 +67,7 @@ fun HistoryPage(
                 icon = Icons.Default.FitnessCenter,
                 title = "Workout History",
                 subtitle = workoutSubtitle,
-                onClick = { onNavigate(Screen.History.route) }
+                onClick = { onNavigate(Destination.WorkoutHistoryList.route) }
             )
         }
         item(key = "weight-history") {
@@ -75,7 +75,7 @@ fun HistoryPage(
                 icon = Icons.Default.MonitorWeight,
                 title = "Weight History",
                 subtitle = "Weight, body fat and lean mass trends.",
-                onClick = { onNavigate(Screen.WeightHistory.route) }
+                onClick = { onNavigate(Destination.WeightHistory.route) }
             )
         }
         item(key = "saved-streaks") {
@@ -83,7 +83,7 @@ fun HistoryPage(
                 icon = Icons.AutoMirrored.Filled.MenuBook,
                 title = "Saved Streaks",
                 subtitle = "Photos and remarks from your streak days.",
-                onClick = { onNavigate(Screen.SavedDays.route) }
+                onClick = { onNavigate(Destination.SavedDays.route) }
             )
         }
     }

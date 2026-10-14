@@ -334,7 +334,7 @@ private fun ExerciseFilterScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(ExerciseType.values().toList(), key = { it.name }) { t ->
+                    items(ExerciseType.entries.toList(), key = { it.name }) { t ->
                         FilterChip(
                             selected = t in types,
                             onClick = { onTypes(if (t in types) types - t else types + t) },

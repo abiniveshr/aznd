@@ -45,7 +45,7 @@ class MuscleListConverter {
         if (text.isBlank()) {
             emptyList()
         } else {
-            text.split(",").mapNotNull { n -> Muscle.values().firstOrNull { it.name == n } }
+            text.split(",").mapNotNull { n -> Muscle.entries.firstOrNull { it.name == n } }
         }
 }
 

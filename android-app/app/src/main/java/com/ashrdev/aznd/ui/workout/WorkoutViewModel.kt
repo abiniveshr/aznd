@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class TopExerciseStat(
-    val WorkoutId: Long,
+    val workoutId: Long,
     val exerciseId: Long,
     val exerciseName: String,
     val bestPoint: SessionE1rmPoint
@@ -42,16 +42,16 @@ class WorkoutViewModel(
     private val dao: WorkoutDao,
     private val training: TrainingRepository
 ) : ViewModel() {
-    val Workouts: StateFlow<List<WorkoutWithExercises>> = dao.getWorkoutsWithExercises()
+    val workouts: StateFlow<List<WorkoutWithExercises>> = dao.getWorkoutsWithExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Null when nothing is running, or when the running session's workout no longer exists. */
     val activeSession: StateFlow<ActiveSessionInfo?> =
-        combine(training.observeActiveSession(), Workouts) { session, workouts ->
+        combine(training.observeActiveSession(), workouts) { session, workouts ->
             session?.let { s ->
                 if (s.workoutId == EMPTY_WORKOUT_ID) return@let ActiveSessionInfo(s.workoutId, "Empty workout", s.startedAt)
-                workouts.firstOrNull { it.Workout.id == s.workoutId }
-                    ?.let { ActiveSessionInfo(s.workoutId, it.Workout.name, s.startedAt) }
+                workouts.firstOrNull { it.workout.id == s.workoutId }
+                    ?.let { ActiveSessionInfo(s.workoutId, it.workout.name, s.startedAt) }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -59,8 +59,8 @@ class WorkoutViewModel(
         dao.getWorkoutHistorySummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun sessionsForWorkout(WorkoutId: Long): Flow<List<SessionWithSets>> =
-        dao.getSessionsForWorkout(WorkoutId)
+    fun sessionsForWorkout(workoutId: Long): Flow<List<SessionWithSets>> =
+        dao.getSessionsForWorkout(workoutId)
     suspend fun getMostRecentSession(): RecentWorkoutSession? = dao.getMostRecentSession()
     suspend fun getWorkout(id: Long): WorkoutWithExercises? =
         dao.getWorkoutWithExercises(id)
@@ -82,24 +82,24 @@ class WorkoutViewModel(
     suspend fun getSession(id: Long): SessionWithSets? =
         dao.getSession(id)
 
-    suspend fun getPreviousSession(WorkoutId: Long): SessionWithSets? =
-        dao.getLatestSessionForWorkout(WorkoutId)
+    suspend fun getPreviousSession(workoutId: Long): SessionWithSets? =
+        dao.getLatestSessionForWorkout(workoutId)
 
     suspend fun getExerciseHistory(
-        WorkoutId: Long,
+        workoutId: Long,
         exerciseName: String
     ): List<ExerciseSetPoint> =
-        dao.getExerciseHistory(WorkoutId, exerciseName)
+        dao.getExerciseHistory(workoutId, exerciseName)
 
-    // Best estimated-1RM set per exercise, across every Workout, heaviest first.
+    // Best estimated-1RM set per exercise, across every workout, heaviest first.
     suspend fun getTopExercises(limit: Int = 3): List<TopExerciseStat> {
-        val Workouts = dao.getAllWorkoutsWithExercisesOnce()
-        return Workouts
-            .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.Workout.id, ews.exercise.id, ews.exercise.name) } }
-            .mapNotNull { (WorkoutId, exerciseId, exerciseName) ->
-                val best = buildSessionE1rmPoints(dao.getExerciseHistory(WorkoutId, exerciseName))
+        val workouts = dao.getAllWorkoutsWithExercisesOnce()
+        return workouts
+            .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.workout.id, ews.exercise.id, ews.exercise.name) } }
+            .mapNotNull { (workoutId, exerciseId, exerciseName) ->
+                val best = buildSessionE1rmPoints(dao.getExerciseHistory(workoutId, exerciseName))
                     .maxByOrNull { it.e1rm }
-                best?.let { TopExerciseStat(WorkoutId, exerciseId, exerciseName, it) }
+                best?.let { TopExerciseStat(workoutId, exerciseId, exerciseName, it) }
             }
             .sortedByDescending { it.bestPoint.e1rm }
             .take(limit)
@@ -137,10 +137,10 @@ class WorkoutViewModel(
         }
     }
 
-    fun deleteHistoryForWorkout(WorkoutId: Long) {
+    fun deleteHistoryForWorkout(workoutId: Long) {
         viewModelScope.launch {
-            dao.deleteSessionsForWorkout(WorkoutId)
-            training.deleteCompletedForWorkout(WorkoutId)
+            dao.deleteSessionsForWorkout(workoutId)
+            training.deleteCompletedForWorkout(workoutId)
         }
     }
 

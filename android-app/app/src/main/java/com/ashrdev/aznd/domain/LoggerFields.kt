@@ -188,7 +188,7 @@ fun rowsKcal(rows: List<SetRow>, meta: (Long) -> ExerciseMeta?, bodyweightKg: Do
     val works = rows.filter { it.exerciseId != null }.groupBy { it.exerciseId!! }.mapNotNull { (id, list) ->
         meta(id)?.let { ExerciseWork(it.type, it.secondaryMuscleCount, list.map { r -> r.toEntry() }) }
     }
-    return CalorieCalculator.sessionKcal(works, bodyweightKg)
+    return WorkoutCalorieEstimator.sessionKcal(works, bodyweightKg)
 }
 
 fun formatKcal(kcal: Double): String = "${kcal.roundToInt()} kcal"

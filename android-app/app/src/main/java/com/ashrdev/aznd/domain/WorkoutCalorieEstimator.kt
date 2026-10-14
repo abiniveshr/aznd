@@ -17,7 +17,7 @@ data class ExerciseWork(
  * MET values are gross Compendium-style numbers (rest included), accurate to about +-25%.
  * Afterburn (EPOC) is ignored.
  */
-object CalorieCalculator {
+object WorkoutCalorieEstimator {
 
     fun met(type: ExerciseType, secondaryMuscleCount: Int): Double = when (type) {
         ExerciseType.WEIGHTED -> if (secondaryMuscleCount > 0) 5.0 else 3.5

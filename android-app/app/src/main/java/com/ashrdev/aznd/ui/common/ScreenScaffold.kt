@@ -52,7 +52,7 @@ private val PrimaryButtonGap = 12.dp
 
 // Every screen except the Home pager sits inside this: top bar with a title and a Back button on
 // its left, content, and the persistent bottom bar (optional actions, pull up for Home /
-// Settings / Manage data). Pass [subPages] on screens with swipable subpages: the bar then shows
+// Settings / Manage data). Pass [subPages] on screens with swipeable subpages: the bar then shows
 // their tabs instead of [third] / [extraActions].
 // `content` receives padding whose bottom value keeps your list clear of the bar (and of the
 // big primary button when there is one).

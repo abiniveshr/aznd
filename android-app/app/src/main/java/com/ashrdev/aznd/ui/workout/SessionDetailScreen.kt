@@ -64,7 +64,7 @@ fun SessionDetailScreen(
     val elapsed = ((item.session.finishedAt - item.session.startedAt) / 1000L).toInt()
 
     ScreenScaffold(
-        title = item.session.WorkoutName,
+        title = item.session.workoutName,
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
@@ -74,7 +74,7 @@ fun SessionDetailScreen(
             onClick = {
                 SessionShare.share(
                     context = context,
-                    subject = "${item.session.WorkoutName} · ${formatTimestamp(item.session.startedAt)}",
+                    subject = "${item.session.workoutName} · ${formatTimestamp(item.session.startedAt)}",
                     body = formatSessionText(item.session, item.sets),
                     photoUri = item.session.photoUri?.toUri()
                 )

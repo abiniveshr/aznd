@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
  * updates it in place (same id, so workouts and history follow). The type can only be changed
  * while nothing uses the exercise yet, because logged values mean different things per type.
  */
-class CustomExerciseViewModel(
+class CustomExerciseFormViewModel(
     private val repository: TrainingRepository,
     private val editId: Long? = null
 ) : ViewModel() {
@@ -95,6 +95,6 @@ class CustomExerciseViewModel(
 
     companion object {
         fun factory(repository: TrainingRepository, editId: Long? = null): ViewModelProvider.Factory =
-            viewModelFactory { initializer { CustomExerciseViewModel(repository, editId) } }
+            viewModelFactory { initializer { CustomExerciseFormViewModel(repository, editId) } }
     }
 }

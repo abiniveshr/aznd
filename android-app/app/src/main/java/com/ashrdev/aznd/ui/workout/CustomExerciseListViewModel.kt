@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** The "Custom exercises" list: every user-made exercise, with delete. Editing is the form screen. */
-class CustomExercisesViewModel(private val repository: TrainingRepository) : ViewModel() {
+class CustomExerciseListViewModel(private val repository: TrainingRepository) : ViewModel() {
 
     val exercises: StateFlow<List<Exercise>> =
         repository.observeCustomExercises().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -25,6 +25,6 @@ class CustomExercisesViewModel(private val repository: TrainingRepository) : Vie
 
     companion object {
         fun factory(repository: TrainingRepository): ViewModelProvider.Factory =
-            viewModelFactory { initializer { CustomExercisesViewModel(repository) } }
+            viewModelFactory { initializer { CustomExerciseListViewModel(repository) } }
     }
 }

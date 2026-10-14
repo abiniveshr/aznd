@@ -61,7 +61,7 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ThemeSettingsScreen(
+fun AppearanceScreen(
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit

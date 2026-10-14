@@ -35,7 +35,7 @@ import com.ashrdev.aznd.domain.Muscle
 import com.ashrdev.aznd.domain.displayName
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.navigation.Screen
+import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakWithCount
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.formatE1rm
@@ -67,7 +67,7 @@ fun DashboardPage(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Button(onClick = { onNavigate(Screen.StreakEditor.route) }) {
+                    Button(onClick = { onNavigate(Destination.StreakEditor.route) }) {
                         Text("Add streak")
                     }
                 }
@@ -82,7 +82,7 @@ fun DashboardPage(
                     items(runningStreaks, key = { it.streak.id }) { item ->
                         StreakSummaryCard(
                             item = item,
-                            onClick = { onNavigate(Screen.StreakDetail.createRoute(item.streak.id)) }
+                            onClick = { onNavigate(Destination.StreakDetail.createRoute(item.streak.id)) }
                         )
                     }
                 }
@@ -94,7 +94,7 @@ fun DashboardPage(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Muscle data", style = MaterialTheme.typography.titleLarge)
-                MuscleDataMenu(onPick = { onNavigate(Screen.MuscleStats.createRoute(it)) })
+                MuscleDataMenu(onPick = { onNavigate(Destination.MuscleStats.createRoute(it)) })
             }
         }
         item {
@@ -115,19 +115,18 @@ fun DashboardPage(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Button(onClick = { onNavigate(Screen.Workouts.route) }) {
+                    Button(onClick = { onNavigate(Destination.Workouts.route) }) {
                         Text("Go to workouts")
                     }
                 }
             }
         }
-        // NOTE: the repo's TopExerciseStat field is WorkoutId (capital W) after the rename.
         items(topExercises, key = { it.exerciseId }) { stat ->
             TopExerciseCard(
                 stat = stat,
                 modifier = Modifier.padding(horizontal = 16.dp),
                 onClick = {
-                    onNavigate(Screen.ExerciseView.createRoute(stat.WorkoutId, stat.exerciseId))
+                    onNavigate(Destination.ExerciseProgress.createRoute(stat.workoutId, stat.exerciseId))
                 }
             )
         }
@@ -144,7 +143,7 @@ private fun MuscleDataMenu(onPick: (Muscle) -> Unit) {
             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            Muscle.values().forEach { muscle ->
+            Muscle.entries.forEach { muscle ->
                 DropdownMenuItem(
                     text = { Text(muscle.displayName()) },
                     onClick = {

@@ -31,9 +31,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Card
@@ -84,8 +82,14 @@ class LoggerData(
 /**
  * Emits the estimated total under the session title, one card per exercise, and "Add exercise"
  * into the caller's LazyColumn. Rows are inline: no dialogs, no focus moves, no scrolling.
+ * [onAddExercise] is what the "Add exercise" button does; the session screen opens the exercise
+ * picker there, so no empty card is created.
  */
-fun LazyListScope.loggerItems(data: LoggerData, actions: LoggerActions) {
+fun LazyListScope.loggerItems(
+    data: LoggerData,
+    actions: LoggerActions,
+    onAddExercise: () -> Unit = actions.onAddCard
+) {
     item(key = "total") {
         Text(
             text = "Estimated total: ${formatKcal(data.totalKcal)}",
@@ -95,7 +99,7 @@ fun LazyListScope.loggerItems(data: LoggerData, actions: LoggerActions) {
     }
     items(data.cards, key = { it.rows.first().id }) { card -> LoggerCard(card, data, actions) }
     item(key = "add-exercise") {
-        OutlinedButton(onClick = actions.onAddCard, modifier = Modifier.fillMaxWidth()) { Text("Add exercise") }
+        OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Text("Add exercise") }
     }
 }
 

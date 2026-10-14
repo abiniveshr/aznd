@@ -2,14 +2,12 @@ package com.ashrdev.aznd.ui.workout
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,7 +44,6 @@ import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.PrimaryAction
 import com.ashrdev.aznd.ui.common.ScreenScaffold
-import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
@@ -63,7 +59,7 @@ private val WorkoutPages = listOf(
 )
 
 /**
- * The Workouts module: three swipable pages, opening on the middle one.
+ * The Workouts module: three swipeable pages, opening on the middle one.
  *   Exercises | Workouts | Stats
  *  - Workouts: every workout with a Start button; tap a workout to see what is in it.
  *  - Exercises (swipe left): every catalog exercise, A-Z, in the same searcher as the add-exercise
@@ -83,7 +79,7 @@ fun WorkoutsScreen(
     onOpenSettings: () -> Unit
 ) {
     val openCustom = LocalOpenCustomExercise.current
-    val workouts by viewModel.Workouts.collectAsState()
+    val workouts by viewModel.workouts.collectAsState()
     val catalog by viewModel.catalogExercises.collectAsState()
     val active by viewModel.activeSession.collectAsState()
     var blockedDialog by remember { mutableStateOf(false) }
@@ -113,8 +109,8 @@ fun WorkoutsScreen(
     // Only one session can run at a time: starting another workout is blocked while one is open.
     val start: (WorkoutWithExercises) -> Unit = { item ->
         val running = active
-        if (running != null && running.workoutId != item.Workout.id) blockedDialog = true
-        else onOpenSession(item.Workout.id)
+        if (running != null && running.workoutId != item.workout.id) blockedDialog = true
+        else onOpenSession(item.workout.id)
     }
 
     // Empty workout: a session with no template, exercises added as you go. Same one-session rule.
@@ -225,12 +221,12 @@ private fun ViewPage(
                 Text("No workouts yet.", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
-            items(workouts, key = { it.Workout.id }) { item ->
-                val isRunning = runningSession?.workoutId == item.Workout.id
+            items(workouts, key = { it.workout.id }) { item ->
+                val isRunning = runningSession?.workoutId == item.workout.id
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenWorkout(item.Workout.id) }
+                        .clickable { onOpenWorkout(item.workout.id) }
                 ) {
                     Row(
                         modifier = Modifier
@@ -239,7 +235,7 @@ private fun ViewPage(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(item.Workout.name, style = MaterialTheme.typography.titleMedium)
+                            Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
                             Text(
                                 "${item.exercises.size} exercises · ${item.exercises.sumOf { it.sets.size }} sets",
                                 style = MaterialTheme.typography.bodySmall,
@@ -297,11 +293,11 @@ private fun StatsPickerPage(
         if (workouts.isEmpty()) {
             item(key = "empty") { Text("No workouts yet.", style = MaterialTheme.typography.bodyMedium) }
         }
-        items(workouts, key = { it.Workout.id }) { item ->
+        items(workouts, key = { it.workout.id }) { item ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpen(item.Workout.id) }
+                    .clickable { onOpen(item.workout.id) }
             ) {
                 Row(
                     modifier = Modifier
@@ -310,7 +306,7 @@ private fun StatsPickerPage(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(item.Workout.name, style = MaterialTheme.typography.titleMedium)
+                        Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
                         Text(
                             "${item.exercises.size} exercises",
                             style = MaterialTheme.typography.bodySmall,

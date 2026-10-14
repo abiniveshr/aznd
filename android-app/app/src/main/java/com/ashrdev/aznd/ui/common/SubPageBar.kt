@@ -29,7 +29,7 @@ import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/** One swipable subpage of a screen, as shown in the bottom bar. */
+/** One swipeable subpage of a screen, as shown in the bottom bar. */
 data class BarPage(val title: String, val icon: ImageVector)
 
 /**

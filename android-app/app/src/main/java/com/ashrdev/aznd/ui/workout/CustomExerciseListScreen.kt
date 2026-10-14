@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.Exercise
-import com.ashrdev.aznd.data.workout.formLabel
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
@@ -43,8 +42,8 @@ import com.ashrdev.aznd.ui.components.Card
  * confirmation), the + at the bottom to add a new one. Catalog exercises are not listed.
  */
 @Composable
-fun CustomExercisesScreen(
-    viewModel: CustomExercisesViewModel,
+fun CustomExerciseListScreen(
+    viewModel: CustomExerciseListViewModel,
     onAdd: () -> Unit,
     onEdit: (Long) -> Unit,
     onBack: () -> Unit,

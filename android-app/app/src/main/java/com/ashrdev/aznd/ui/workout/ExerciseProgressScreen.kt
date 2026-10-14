@@ -14,7 +14,7 @@ import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberGraphRangeState
 
 @Composable
-fun ExerciseViewScreen(
+fun ExerciseProgressScreen(
     workoutId: Long,
     exerciseId: Long,
     viewModel: WorkoutViewModel,
