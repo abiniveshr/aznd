@@ -17,6 +17,7 @@ import com.ashrdev.aznd.data.workout.RecentWorkoutSession
 import com.ashrdev.aznd.domain.LoggedSetData
 import com.ashrdev.aznd.domain.SetCard
 import com.ashrdev.aznd.domain.SetKind
+import com.ashrdev.aznd.domain.SetRow
 import com.ashrdev.aznd.domain.SetTree
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
@@ -163,6 +164,9 @@ class WorkoutViewModel(
     /** The catalog exercises this workout's template uses, A-Z (what its stats can be asked about). */
     suspend fun workoutCatalogExercises(workoutId: Long): List<Exercise> =
         templateView(workoutId).exercises.values.sortedBy { it.name.lowercase() }
+
+    /** Rows of the last completed session of this workout, for the "Previous:" lines before starting. */
+    suspend fun previousRows(workoutId: Long): List<SetRow> = training.previousSessionRows(workoutId)
 
     suspend fun templateView(workoutId: Long): TemplateView {
         val rows = SetTree.dropUnsetRows(training.templateRows(workoutId))

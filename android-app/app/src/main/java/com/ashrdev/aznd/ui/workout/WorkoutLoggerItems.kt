@@ -7,32 +7,44 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
@@ -50,7 +62,6 @@ import com.ashrdev.aznd.domain.fieldLabelWithTarget
 import com.ashrdev.aznd.domain.fieldLayout
 import com.ashrdev.aznd.domain.fieldText
 import com.ashrdev.aznd.domain.formatKcal
-import com.ashrdev.aznd.domain.formatPrevious
 import com.ashrdev.aznd.domain.label
 import com.ashrdev.aznd.domain.previousRowFor
 import com.ashrdev.aznd.domain.rowsKcal
@@ -80,26 +91,142 @@ class LoggerData(
 }
 
 /**
- * Emits the estimated total under the session title, one card per exercise, and "Add exercise"
- * into the caller's LazyColumn. Rows are inline: no dialogs, no focus moves, no scrolling.
- * [onAddExercise] is what the "Add exercise" button does; the session screen opens the exercise
- * picker there, so no empty card is created.
+ * The running workout: one exercise card per page, swiped horizontally with snapping, so a whole
+ * exercise is always in view (the next and previous cards peek in at the edges). A card taller
+ * than the screen scrolls vertically on its own page.
+ *
+ * Under each card sit "Add set" and "Delete exercise" (skips the exercise in this session only).
+ * They follow the last set; once the sets fill the screen they stay pinned just above the bottom
+ * bar while the sets scroll. The last page holds "Add exercise"; adding one swipes to the new
+ * card. A header shows the estimated total and which exercise this is.
+ * [bottomPadding] keeps the content clear of the bottom bar. The caller owns [pagerState] (it
+ * needs the current page for the top bar title) and must give it cards.size + 1 pages.
  */
-fun LazyListScope.loggerItems(
+@Composable
+fun LoggerPager(
     data: LoggerData,
     actions: LoggerActions,
-    onAddExercise: () -> Unit = actions.onAddCard
+    pagerState: PagerState,
+    bottomPadding: Dp,
+    onAddExercise: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    item(key = "total") {
-        Text(
-            text = "Estimated total: ${formatKcal(data.totalKcal)}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+    val cards = data.cards
+    var cardToDelete by remember { mutableStateOf<SetCard?>(null) }
+
+    cardToDelete?.let { card ->
+        val name = card.exerciseId?.let { data.byId[it]?.name } ?: "this exercise"
+        AlertDialog(
+            onDismissRequest = { cardToDelete = null },
+            title = { Text("Delete exercise?") },
+            text = { Text("$name and everything logged for it will be removed from this session. Your saved workout is not changed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    cardToDelete = null
+                    actions.onDeleteCard(card.rows.map { it.id })
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { cardToDelete = null }) { Text("Keep") } }
         )
     }
-    items(data.cards, key = { it.rows.first().id }) { card -> LoggerCard(card, data, actions) }
-    item(key = "add-exercise") {
-        OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Text("Add exercise") }
+
+    // A card was added: bring it into view.
+    var lastCount by remember { mutableIntStateOf(cards.size) }
+    LaunchedEffect(cards.size) {
+        if (cards.size > lastCount) pagerState.animateScrollToPage(cards.size - 1)
+        lastCount = cards.size
+    }
+
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Estimated total: ${formatKcal(data.totalKcal)}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = if (pagerState.currentPage < cards.size) "${pagerState.currentPage + 1} / ${cards.size}" else "Add",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            pageSpacing = 8.dp,
+            verticalAlignment = Alignment.Top,
+            key = { index ->
+                val k: Any = cards.getOrNull(index)?.rows?.firstOrNull()?.id ?: "add-exercise"
+                k
+            }
+        ) { page ->
+            val card = cards.getOrNull(page)
+            val hasButtons = card != null && card.exerciseId != null
+            val scroll = rememberScrollState()
+
+            // A set was added: scroll down to it.
+            if (card != null) {
+                var lastRows by remember { mutableIntStateOf(card.rows.size) }
+                LaunchedEffect(card.rows.size) {
+                    if (card.rows.size > lastRows) {
+                        withFrameNanos { }
+                        scroll.animateScrollTo(scroll.maxValue)
+                    }
+                    lastRows = card.rows.size
+                }
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                // fill = false: a short card keeps its buttons right under the last set; a tall one
+                // takes the free height, scrolls, and leaves the buttons pinned above the bar.
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(scroll)
+                        .padding(top = 4.dp, bottom = if (hasButtons) 0.dp else bottomPadding)
+                ) {
+                    if (card != null) {
+                        LoggerCard(card, data, actions)
+                    } else {
+                        OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Text("Add exercise") }
+                    }
+                }
+                if (card != null && hasButtons) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = bottomPadding),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { actions.onAddSet(card.rows.first().id) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Add set", maxLines = 1)
+                        }
+                        OutlinedButton(
+                            onClick = { cardToDelete = card },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Delete exercise", maxLines = 1, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -196,7 +323,7 @@ private fun LoggerRow(
         if (exercise != null) {
             LoggerFields(row, exercise, data, actions)
             val prev = previousRowFor(row, data.rows, data.previous)
-                ?.let { formatPrevious(exercise.type, it, data.showRpe) }
+                ?.let { formatPreviousSet(exercise.type, it, data.showRpe) }
             if (prev != null) {
                 Text(
                     text = "Previous: $prev",

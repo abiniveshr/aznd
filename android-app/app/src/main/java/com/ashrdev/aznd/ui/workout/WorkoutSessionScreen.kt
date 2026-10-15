@@ -1,17 +1,14 @@
 package com.ashrdev.aznd.ui.workout
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,11 +22,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 
 /**
- * Screen for logging an active workout session. Allows entering reps, weights, or durations
- * per set, adding photos, and completing or discarding the session.
+ * Screen for logging an active workout session. Exercises are swipeable cards (see [LoggerPager]).
+ * The bottom bar holds Photo, Discard and Finish. Photo adds a picture when there is none; once
+ * there is one it opens the picture with Replace / Remove / Save to gallery.
  */
 @Composable
 fun WorkoutSessionScreen(
@@ -51,6 +50,8 @@ fun WorkoutSessionScreen(
     val settings by viewModel.settings.collectAsState()
     var confirmDiscard by remember { mutableStateOf(false) }
     var showAddPicker by remember { mutableStateOf(false) }
+    var showPhoto by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState { state.cards.size + 1 }
     val photoPicker = rememberImagePicker { uri -> viewModel.setPhoto(uri.toString()) }
 
     if (showAddPicker) {
@@ -81,22 +82,47 @@ fun WorkoutSessionScreen(
         )
     }
 
+    val photoUri = session?.photoUri
+    if (showPhoto && photoUri != null) {
+        SessionPhotoDialog(
+            uriString = photoUri,
+            onDismiss = { showPhoto = false },
+            onReplace = {
+                showPhoto = false
+                photoPicker.launch()
+            },
+            onRemove = {
+                showPhoto = false
+                viewModel.setPhoto(null)
+            }
+        )
+    }
+
+    val barActions = if (phase == LoggerPhase.Active) {
+        listOf(
+            ThirdAction(
+                icon = if (photoUri == null) Icons.Default.AddAPhoto else Icons.Default.Photo,
+                label = "Photo",
+                onClick = { if (photoUri == null) photoPicker.launch() else showPhoto = true }
+            ),
+            ThirdAction(icon = Icons.Default.Delete, label = "Discard", onClick = { confirmDiscard = true }),
+            ThirdAction(icon = Icons.Default.Check, label = "Finish", onClick = viewModel::finish)
+        )
+    } else {
+        emptyList()
+    }
+
+    // The top bar shows the exercise on screen, with the workout name under it.
+    val currentExercise = state.cards.getOrNull(pagerState.currentPage)?.exerciseId
+        ?.let { id -> exercises.firstOrNull { it.id == id }?.name }
+
     ScreenScaffold(
-        title = workoutName,
+        title = currentExercise ?: workoutName,
+        subtitle = if (currentExercise != null) workoutName else null,
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        topBarActions = {
-            if (phase == LoggerPhase.Active) {
-                IconButton(onClick = photoPicker::launch) {
-                    Icon(Icons.Default.AddAPhoto, contentDescription = if (session?.photoUri == null) "Add photo" else "Change photo")
-                }
-                IconButton(onClick = { confirmDiscard = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Discard workout", tint = MaterialTheme.colorScheme.error)
-                }
-                TextButton(onClick = viewModel::finish) { Text("Finish") }
-            }
-        }
+        extraActions = barActions
     ) { padding ->
         when (phase) {
             LoggerPhase.EmptyWorkout -> Text(
@@ -116,23 +142,14 @@ fun WorkoutSessionScreen(
                     showRpe = settings.trackRpe,
                     showTargets = settings.targetReps
                 )
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    session?.photoUri?.let { uri ->
-                        item(key = "session_photo") {
-                            Column {
-                                SessionPhotoCard(uri)
-                                TextButton(onClick = { viewModel.setPhoto(null) }) { Text("Remove photo") }
-                            }
-                        }
-                    }
-                    loggerItems(data, viewModel.actions, onAddExercise = { showAddPicker = true })
-                }
+                LoggerPager(
+                    data = data,
+                    actions = viewModel.actions,
+                    pagerState = pagerState,
+                    bottomPadding = padding.calculateBottomPadding(),
+                    onAddExercise = { showAddPicker = true },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             else -> Unit
         }

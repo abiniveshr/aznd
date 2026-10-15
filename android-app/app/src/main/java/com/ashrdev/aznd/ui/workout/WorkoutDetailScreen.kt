@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.domain.ExerciseType
 import com.ashrdev.aznd.domain.SetKind
+import com.ashrdev.aznd.domain.SetRow
+import com.ashrdev.aznd.domain.previousRowFor
 import com.ashrdev.aznd.domain.setLabels
 import com.ashrdev.aznd.domain.targetLabel
 import com.ashrdev.aznd.ui.common.PrimaryAction
@@ -60,12 +62,14 @@ fun WorkoutDetailScreen(
     val active by viewModel.activeSession.collectAsState()
     var workout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
     var template by remember { mutableStateOf<TemplateView?>(null) }
+    var previous by remember { mutableStateOf<List<SetRow>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var blockedDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(workoutId) {
         workout = viewModel.getWorkout(workoutId)
         template = viewModel.templateView(workoutId)
+        previous = viewModel.previousRows(workoutId)
         loaded = true
     }
 
@@ -132,6 +136,8 @@ fun WorkoutDetailScreen(
                 )
             }
         } else {
+            // Depth-first rows of the whole template, to pair each set with the same set last time.
+            val allRows = remember(view) { view.cards.flatMap { it.rows } }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -162,11 +168,21 @@ fun WorkoutDetailScreen(
                                 val target = targetLabel(row, rowExercise?.type ?: ExerciseType.WEIGHTED, true)
                                 val label = labels[row.id].orEmpty()
                                 val name = if (row.kind == SetKind.SUPERSET) " · ${rowExercise?.name.orEmpty()}" else ""
-                                Text(
-                                    text = label + name + if (target != null) " · target $target" else "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(start = if (row.kind == SetKind.NORMAL) 0.dp else 12.dp)
-                                )
+                                val prev = previousRowFor(row, allRows, previous)
+                                    ?.let { formatPreviousSet(rowExercise?.type ?: ExerciseType.WEIGHTED, it, false) }
+                                Column(modifier = Modifier.padding(start = if (row.kind == SetKind.NORMAL) 0.dp else 12.dp)) {
+                                    Text(
+                                        text = label + name + if (target != null) " · target $target" else "",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    if (prev != null) {
+                                        Text(
+                                            text = "Previous: $prev",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

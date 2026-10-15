@@ -140,7 +140,7 @@ fun WorkoutsScreen(
         ) else null,
         secondaryAction = if (page == PAGE_VIEW) PrimaryAction(
             icon = Icons.Default.PlayArrow,
-            label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume empty" else "Blank",
+            label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume FS" else "Freestyle",
             onClick = startEmpty
         ) else null,
         topBarActions = if (page == PAGE_EXERCISES) {

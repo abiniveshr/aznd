@@ -24,7 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +62,8 @@ private val PrimaryButtonGap = 12.dp
 @Composable
 fun ScreenScaffold(
     title: String,
+    // Small second line under the title (e.g. the workout name under the exercise name).
+    subtitle: String? = null,
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -90,7 +94,22 @@ fun ScreenScaffold(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title) },
+                title = {
+                    if (subtitle == null) {
+                        Text(title)
+                    } else {
+                        Column {
+                            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                subtitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

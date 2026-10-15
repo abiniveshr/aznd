@@ -50,7 +50,9 @@ class LoggerActions(
     val onSuperset: (Long) -> Unit,
     val onField: (rowId: Long, field: LogField, text: String) -> Unit,
     val onSuggest: (rowId: Long, suggestion: Suggestion) -> Unit,
-    val onAddCard: () -> Unit
+    val onAddCard: () -> Unit,
+    val onAddSet: (anyRowIdInCard: Long) -> Unit,
+    val onDeleteCard: (rowIds: List<Long>) -> Unit
 )
 
 /**
@@ -252,7 +254,9 @@ class LoggerViewModel(
             val ex = exerciseOf(row)
             if (ex != null) valueEdit(row) { it.applySuggestion(row, ex.type, s.fieldKg) }
         },
-        onAddCard = { structural { it.addCard() } }
+        onAddCard = { structural { it.addCard() } },
+        onAddSet = { row -> structural { it.addSet(row) } },
+        onDeleteCard = { ids -> structural { it.deleteRows(ids) } }
     )
 
     companion object {

@@ -36,6 +36,12 @@ data class BuilderState(
     fun duplicate(rowId: Long): BuilderState = mutate { SetTree.duplicate(rows, rowId, it) }
     fun delete(rowId: Long): BuilderState = mutate { SetTree.delete(rows, rowId) }
 
+    /** New empty set at the bottom of the card that contains [anyRowIdInCard]. */
+    fun addSet(anyRowIdInCard: Long): BuilderState = mutate { SetTree.addSetToCard(rows, anyRowIdInCard, it) }
+
+    /** Removes a whole card: every one of its rows (drops and supersets included). */
+    fun deleteRows(rowIds: List<Long>): BuilderState = rowIds.fold(this) { state, id -> state.delete(id) }
+
     /** Store a parsed target. DROP rows never get targets. */
     fun setTarget(rowId: Long, min: Int?, max: Int?): BuilderState {
         val row = rows.firstOrNull { it.id == rowId } ?: return this

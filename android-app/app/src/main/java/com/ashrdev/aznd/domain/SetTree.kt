@@ -143,6 +143,15 @@ object SetTree {
         return t.flatten()
     }
 
+    /** Empty NORMAL set at the end of the card holding [anyRowIdInCard], same exercise. */
+    fun addSetToCard(rows: List<SetRow>, anyRowIdInCard: Long, ids: IdSource): List<SetRow> {
+        val t = Tree(rows)
+        val last = t.cardTops(anyRowIdInCard).lastOrNull() ?: return t.flatten()
+        val tops = t.kids(null)
+        tops.add(tops.indexOfFirst { it.id == last.id } + 1, SetRow(ids.next(), exerciseId = last.exerciseId))
+        return t.flatten()
+    }
+
     /**
      * Card dropdown: rewrite exerciseId on the card's top-level rows and their DROP children
      * (superset children keep theirs). [clearValues] = the exercise type changed, so logged values
