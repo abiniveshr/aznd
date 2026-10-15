@@ -40,6 +40,10 @@ class TrainingRepository(
 
     suspend fun exercise(id: Long): Exercise? = exercises.get(id)
 
+    /** Ids of exercises that have logged data in a finished session (the "Has data" filter). */
+    fun observeExerciseIdsWithData(): Flow<Set<Long>> =
+        sessions.observeExerciseIdsWithData().map { it.toSet() }
+
     suspend fun exercisesById(ids: Collection<Long>): Map<Long, Exercise> =
         if (ids.isEmpty()) emptyMap() else exercises.getByIds(ids.distinct()).associateBy { it.id }
 
@@ -148,6 +152,9 @@ class TrainingRepository(
     }
 
     suspend fun discardSession(sessionId: Long) = sessions.deleteSession(sessionId)
+
+    /** Attaches (or with null removes) the session's photo. */
+    suspend fun setSessionPhoto(sessionId: Long, uri: String?) = sessions.setPhoto(sessionId, uri)
 
     // ---- history screens ----
 

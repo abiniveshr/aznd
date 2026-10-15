@@ -81,6 +81,7 @@ fun WorkoutsScreen(
     val openCustom = LocalOpenCustomExercise.current
     val workouts by viewModel.workouts.collectAsState()
     val catalog by viewModel.catalogExercises.collectAsState()
+    val withData by viewModel.exerciseIdsWithData.collectAsState()
     val active by viewModel.activeSession.collectAsState()
     var blockedDialog by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(initialPage = PAGE_VIEW) { WorkoutPages.size }
@@ -159,6 +160,7 @@ fun WorkoutsScreen(
             when (index) {
                 PAGE_EXERCISES -> ExercisesPage(
                     exercises = catalog,
+                    dataIds = withData,
                     bottomPadding = bottom,
                     onOpen = { onOpenExercise(it.id) }
                 )
@@ -263,6 +265,7 @@ private fun ViewPage(
 @Composable
 private fun ExercisesPage(
     exercises: List<Exercise>,
+    dataIds: Set<Long>,
     bottomPadding: Dp,
     onOpen: (Exercise) -> Unit
 ) {
@@ -273,7 +276,8 @@ private fun ExercisesPage(
         onAddCustom = null,
         modifier = Modifier.fillMaxSize().padding(top = 8.dp),
         autoFocus = false,
-        bottomPadding = bottomPadding
+        bottomPadding = bottomPadding,
+        dataIds = dataIds
     )
 }
 

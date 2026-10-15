@@ -70,12 +70,12 @@ fun HistoryPage(
                 onClick = { onNavigate(Destination.WorkoutHistoryList.route) }
             )
         }
-        item(key = "weight-history") {
+        item(key = "body-history") {
             HistoryEntryCard(
                 icon = Icons.Default.MonitorWeight,
-                title = "Weight History",
-                subtitle = "Weight, body fat and lean mass trends.",
-                onClick = { onNavigate(Destination.WeightHistory.route) }
+                title = "Body Stats History",
+                subtitle = "Bodyweight and body fat: calendar, graph and logs.",
+                onClick = { onNavigate(Destination.BodyHistory.route) }
             )
         }
         item(key = "saved-streaks") {

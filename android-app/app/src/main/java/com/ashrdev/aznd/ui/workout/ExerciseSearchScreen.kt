@@ -130,6 +130,9 @@ fun ExerciseSearchScreen(
  * A-Z list. The filter popup takes any number of muscles and types: an exercise must match one of
  * the chosen muscles (its primary one) AND one of the chosen types; an empty choice means all.
  * [autoFocus] opens the keyboard on arrival; [bottomPadding] keeps the list clear of bars.
+ * [dataIds], when given, adds a "Has data" filter to the popup that keeps only exercises whose id
+ * is in it (the Exercises page passes the exercises with logged sets; the add-exercise picker
+ * passes null, so it has no such option).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -140,9 +143,11 @@ fun ExerciseSearchContent(
     onAddCustom: (() -> Unit)?,
     modifier: Modifier = Modifier,
     autoFocus: Boolean = true,
-    bottomPadding: Dp = 0.dp
+    bottomPadding: Dp = 0.dp,
+    dataIds: Set<Long>? = null
 ) {
     var query by remember { mutableStateOf("") }
+    var onlyWithData by remember { mutableStateOf(false) }
     var muscles by remember { mutableStateOf(emptySet<Muscle>()) }
     var types by remember { mutableStateOf(emptySet<ExerciseType>()) }
     val focus = remember { FocusRequester() }
@@ -150,9 +155,11 @@ fun ExerciseSearchContent(
     val listState = rememberLazyListState()
 
     // No result cap: every exercise is reachable, ranked when searching, A-Z when not.
-    val results = remember(exercises, query, muscles, types) {
+    val results = remember(exercises, query, muscles, types, onlyWithData, dataIds) {
         val pool = exercises.filter {
-            (muscles.isEmpty() || it.primaryMuscle in muscles) && (types.isEmpty() || it.type in types)
+            (muscles.isEmpty() || it.primaryMuscle in muscles) &&
+                (types.isEmpty() || it.type in types) &&
+                (!onlyWithData || dataIds?.contains(it.id) == true)
         }
         searchExercises(pool, query, limit = Int.MAX_VALUE)
     }
@@ -166,7 +173,7 @@ fun ExerciseSearchContent(
         snapshotFlow { listState.isScrollInProgress }.collect { if (it) keyboard?.hide() }
     }
     // jump back to the top whenever the filter changes
-    LaunchedEffect(query, muscles, types) { listState.scrollToItem(0) }
+    LaunchedEffect(query, muscles, types, onlyWithData) { listState.scrollToItem(0) }
 
     Column(modifier) {
         Row(
@@ -194,7 +201,10 @@ fun ExerciseSearchContent(
                 types = types,
                 resultCount = results.size,
                 onMuscles = { muscles = it },
-                onTypes = { types = it }
+                onTypes = { types = it },
+                showDataOption = dataIds != null,
+                onlyWithData = onlyWithData,
+                onOnlyWithData = { onlyWithData = it }
             )
         }
 
@@ -266,10 +276,13 @@ private fun ExerciseFilterButton(
     types: Set<ExerciseType>,
     resultCount: Int,
     onMuscles: (Set<Muscle>) -> Unit,
-    onTypes: (Set<ExerciseType>) -> Unit
+    onTypes: (Set<ExerciseType>) -> Unit,
+    showDataOption: Boolean,
+    onlyWithData: Boolean,
+    onOnlyWithData: (Boolean) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
-    val count = muscles.size + types.size
+    val count = muscles.size + types.size + if (onlyWithData) 1 else 0
 
     IconButton(onClick = { open = true }) {
         BadgedBox(badge = { if (count > 0) Badge { Text(count.toString()) } }) {
@@ -283,6 +296,9 @@ private fun ExerciseFilterButton(
             resultCount = resultCount,
             onMuscles = onMuscles,
             onTypes = onTypes,
+            showDataOption = showDataOption,
+            onlyWithData = onlyWithData,
+            onOnlyWithData = onOnlyWithData,
             onDismiss = { open = false }
         )
     }
@@ -299,11 +315,14 @@ private fun ExerciseFilterScreen(
     resultCount: Int,
     onMuscles: (Set<Muscle>) -> Unit,
     onTypes: (Set<ExerciseType>) -> Unit,
+    showDataOption: Boolean,
+    onlyWithData: Boolean,
+    onOnlyWithData: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     val shown = remember(query) { searchMuscles(query) }
-    val count = muscles.size + types.size
+    val count = muscles.size + types.size + if (onlyWithData) 1 else 0
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -321,8 +340,24 @@ private fun ExerciseFilterScreen(
                         onClick = {
                             onMuscles(emptySet())
                             onTypes(emptySet())
+                            onOnlyWithData(false)
                         }
                     ) { Text("Clear") }
+                }
+
+                if (showDataOption) {
+                    Text(
+                        "Data",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 0.dp)) {
+                        FilterChip(
+                            selected = onlyWithData,
+                            onClick = { onOnlyWithData(!onlyWithData) },
+                            label = { Text("Has data") }
+                        )
+                    }
                 }
 
                 Text(

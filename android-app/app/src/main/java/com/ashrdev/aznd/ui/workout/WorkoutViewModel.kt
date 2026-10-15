@@ -69,6 +69,10 @@ class WorkoutViewModel(
     val catalogExercises: StateFlow<List<Exercise>> = training.observeExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Ids of exercises with logged data, for the Exercises page's "Has data" filter. */
+    val exerciseIdsWithData: StateFlow<Set<Long>> = training.observeExerciseIdsWithData()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
     /** One catalog exercise (for the exercise viewer). */
     suspend fun exercise(id: Long): Exercise? = training.exercise(id)
 

@@ -39,7 +39,9 @@ import com.ashrdev.aznd.ui.body.BodyViewModel
 import com.ashrdev.aznd.ui.macro.MacroScreen
 import com.ashrdev.aznd.ui.macro.MacroViewModel
 import com.ashrdev.aznd.ui.body.BodyScreen
-import com.ashrdev.aznd.ui.body.WeightHistoryScreen
+import com.ashrdev.aznd.ui.body.BodyHistoryScreen
+import com.ashrdev.aznd.ui.body.CompositionHistoryScreen
+import com.ashrdev.aznd.ui.body.CompositionMetric
 import com.ashrdev.aznd.ui.workout.ExerciseViewerScreen
 import com.ashrdev.aznd.ui.workout.LocalOpenCustomExercise
 import com.ashrdev.aznd.ui.workout.CustomExerciseFormViewModel
@@ -406,9 +408,23 @@ class MainActivity : ComponentActivity() {
                               onOpenSettings = openSettings
                           )
                       }
-                      composable(Destination.WeightHistory.route) {
+                      composable(Destination.BodyHistory.route) {
                           val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
-                          WeightHistoryScreen(
+                          BodyHistoryScreen(
+                              viewModel = bodyVm,
+                              onOpenComposition = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
+                              onBack = goBack,
+                              onHome = goHome,
+                              onOpenSettings = openSettings
+                          )
+                      }
+                      composable(
+                          route = Destination.BodyCompositionHistory.route,
+                          arguments = listOf(navArgument("metric") { type = NavType.StringType })
+                      ) { entry ->
+                          val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                          CompositionHistoryScreen(
+                              metric = CompositionMetric.fromRouteId(entry.arguments?.getString("metric")),
                               viewModel = bodyVm,
                               onBack = goBack,
                               onHome = goHome,
@@ -420,6 +436,7 @@ class MainActivity : ComponentActivity() {
                           BodyScreen(
                               viewModel = bodyVm,
                               onOpenMuscle = { muscle -> navigateTo(Destination.MuscleStats.createRoute(muscle)) },
+                              onOpenCompositionHistory = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
                               onBack = goBack,
                               onHome = goHome,
                               onOpenSettings = openSettings

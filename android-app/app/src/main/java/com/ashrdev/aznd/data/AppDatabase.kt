@@ -26,6 +26,7 @@ import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
 import com.ashrdev.aznd.data.workout.ActiveSessionEntity
 import com.ashrdev.aznd.data.workout.MIGRATION_16_17
+import com.ashrdev.aznd.data.workout.MIGRATION_17_18
 import com.ashrdev.aznd.data.workout.ActiveSetEntity
 import com.ashrdev.aznd.data.workout.Converters
 import com.ashrdev.aznd.data.workout.ExerciseEntity
@@ -71,7 +72,7 @@ import java.util.Locale
         FoodEntry::class,
         Ingredient::class
     ],
-    version = 17
+    version = 18
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -93,7 +94,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aznd.db"
-                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
                     .fallbackToDestructiveMigration(true)
                     .addCallback(object : Callback() {
                         // Runs on every open, before the first query: the old single "SHOULDERS"

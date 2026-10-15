@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
@@ -27,10 +26,12 @@ import com.ashrdev.aznd.domain.GraphStyle
 import com.ashrdev.aznd.domain.GraphWindow
 import com.ashrdev.aznd.domain.MeasurementSite
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.OutlinedButton
 
 /**
  * The Composition page of the Body screen: log bodyweight and body fat %, see the latest numbers
- * with lean mass (calculated from the latest weight and body fat), the trends, and the history.
+ * with lean mass (calculated from the latest weight and body fat), and buttons that open the
+ * bodyweight / body fat history (calendar, graph, logs).
  * The latest bodyweight is what new workouts use; the Macros goal reads weight and body fat from here.
  */
 fun LazyListScope.compositionSection(
@@ -39,8 +40,7 @@ fun LazyListScope.compositionSection(
     range: GraphRange,
     onLogWeight: (kg: Double, atMs: Long) -> Unit,
     onLogBodyFat: (percent: Double, atMs: Long) -> Unit,
-    onDeleteWeight: (BodyWeightEntry) -> Unit,
-    onDeleteBodyFat: (BodyMeasurement) -> Unit
+    onOpenHistory: (CompositionMetric) -> Unit
 ) {
     item(key = "weight-log") {
         LogEntryCard(
@@ -62,7 +62,7 @@ fun LazyListScope.compositionSection(
         item(key = "weight-empty") {
             Text(
                 "Log your first weight above. New workouts use your latest weight for bodyweight " +
-                    "exercises (75 kg until you log one).",
+                    "exercises (75 kg is the default place holder).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -95,24 +95,18 @@ fun LazyListScope.compositionSection(
                 )
             }
         }
-        item(key = "weight-history-title") { Text("Weight history", style = MaterialTheme.typography.titleMedium) }
-        items(weightList, key = { "w${it.id}" }) { e ->
-            HistoryRow(
-                title = "${GraphWindow.formatValue(e.weightKg)} kg",
-                subtitle = entryLabel(e.measuredAt),
-                onDelete = { onDeleteWeight(e) }
-            )
-        }
     }
 
-    if (fatList.isNotEmpty()) {
-        item(key = "fat-history-title") { Text("Body fat history", style = MaterialTheme.typography.titleMedium) }
-        items(fatList, key = { "f${it.id}" }) { e ->
-            HistoryRow(
-                title = "${GraphWindow.formatValue(e.valueCm)} %",
-                subtitle = entryLabel(e.measuredAt),
-                onDelete = { onDeleteBodyFat(e) }
-            )
+    item(key = "history-buttons") {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { onOpenHistory(CompositionMetric.WEIGHT) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Bodyweight history", maxLines = 1) }
+            OutlinedButton(
+                onClick = { onOpenHistory(CompositionMetric.BODY_FAT) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Body fat history", maxLines = 1) }
         }
     }
 }

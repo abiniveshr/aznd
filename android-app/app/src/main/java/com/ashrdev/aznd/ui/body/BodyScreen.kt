@@ -68,6 +68,7 @@ private val BodyPages = listOf(
 fun BodyScreen(
     viewModel: BodyViewModel,
     onOpenMuscle: (Muscle) -> Unit,
+    onOpenCompositionHistory: (CompositionMetric) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit
@@ -75,21 +76,10 @@ fun BodyScreen(
     val weights by viewModel.weights.collectAsState()
     val all by viewModel.measurements.collectAsState()
     val range = rememberGraphRangeState().range
-    var weightToDelete by remember { mutableStateOf<BodyWeightEntry?>(null) }
     var measurementToDelete by remember { mutableStateOf<BodyMeasurement?>(null) }
     val pagerState = rememberPagerState(initialPage = PAGE_STRENGTH) { BodyPages.size }
     val subPages = rememberSubPageBar(pagerState, BodyPages)
 
-    weightToDelete?.let { e ->
-        ConfirmDeleteDialog(
-            what = "${GraphWindow.formatValue(e.weightKg)} kg on ${entryLabel(e.measuredAt)}",
-            onConfirm = {
-                viewModel.deleteWeight(e.id)
-                weightToDelete = null
-            },
-            onDismiss = { weightToDelete = null }
-        )
-    }
     measurementToDelete?.let { e ->
         val s = MeasurementSite.fromName(e.site)
         ConfirmDeleteDialog(
@@ -130,8 +120,7 @@ fun BodyScreen(
                     bottomPadding = bottom,
                     onLogWeight = { kg, at -> viewModel.addWeight(kg, at) },
                     onLogBodyFat = { pct, at -> viewModel.addMeasurement(MeasurementSite.BODY_FAT, pct, at) },
-                    onDeleteWeight = { weightToDelete = it },
-                    onDeleteBodyFat = { measurementToDelete = it }
+                    onOpenHistory = onOpenCompositionHistory
                 )
                 else -> StrengthPage(bottomPadding = bottom, onOpenMuscle = onOpenMuscle)
             }
@@ -308,8 +297,7 @@ private fun CompositionPage(
     bottomPadding: Dp,
     onLogWeight: (Double, Long) -> Unit,
     onLogBodyFat: (Double, Long) -> Unit,
-    onDeleteWeight: (BodyWeightEntry) -> Unit,
-    onDeleteBodyFat: (BodyMeasurement) -> Unit
+    onOpenHistory: (CompositionMetric) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -322,8 +310,7 @@ private fun CompositionPage(
             range = range,
             onLogWeight = onLogWeight,
             onLogBodyFat = onLogBodyFat,
-            onDeleteWeight = onDeleteWeight,
-            onDeleteBodyFat = onDeleteBodyFat
+            onOpenHistory = onOpenHistory
         )
     }
 }

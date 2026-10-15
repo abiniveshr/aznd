@@ -30,6 +30,9 @@ interface SessionDao {
     @Query("DELETE FROM logged_session WHERE id = :id")
     suspend fun deleteSession(id: Long)
 
+    @Query("UPDATE logged_session SET photoUri = :uri WHERE id = :id")
+    suspend fun setPhoto(id: Long, uri: String?)
+
     @Query("UPDATE logged_session SET legacySessionId = :legacyId WHERE id = :id")
     suspend fun setLegacySessionId(id: Long, legacyId: Long)
 
@@ -80,6 +83,16 @@ interface SessionDao {
             "ORDER BY ls.finishedAt DESC LIMIT :limit"
     )
     suspend fun completedWithExerciseForWorkout(exerciseId: Long, workoutId: Long, limit: Int): List<LoggedSession>
+
+    /**
+     * Ids of every exercise with at least one logged value (reps or time) in a FINISHED session,
+     * empty-workout sessions included. Feeds the "Has data" filter of the Exercises page.
+     */
+    @Query(
+        "SELECT DISTINCT ss.exerciseId FROM session_set ss INNER JOIN logged_session ls ON ls.id = ss.sessionId " +
+            "WHERE ls.finishedAt IS NOT NULL AND (ss.reps IS NOT NULL OR ss.durationSec IS NOT NULL)"
+    )
+    fun observeExerciseIdsWithData(): Flow<List<Long>>
 
     @Query("SELECT * FROM session_set WHERE exerciseId = :exerciseId AND sessionId IN (:sessionIds)")
     suspend fun setsForExercise(exerciseId: Long, sessionIds: List<Long>): List<LoggedSet>

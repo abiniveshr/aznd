@@ -30,7 +30,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** The running session. [bodyweightKg] is the snapshot taken when it started. */
-data class LoggerSession(val id: Long, val workoutId: Long, val bodyweightKg: Double)
+data class LoggerSession(val id: Long, val workoutId: Long, val bodyweightKg: Double, val photoUri: String? = null)
 
 sealed interface LoggerPhase {
     data object Loading : LoggerPhase
@@ -135,7 +135,7 @@ class LoggerViewModel(
             }
             _previous.value = repository.previousSessionRows(workoutId)
             _state.value = BuilderState(repository.observeSessionRows(id).first())
-            _session.value = LoggerSession(id, workoutId, s.bodyweightKgSnapshot)
+            _session.value = LoggerSession(id, workoutId, s.bodyweightKgSnapshot, s.photoUri)
             ensureHistory()
             _phase.value = LoggerPhase.Active
         }
@@ -151,6 +151,14 @@ class LoggerViewModel(
             repository.finishSession(s.id)
             _phase.value = LoggerPhase.Closed
         }
+    }
+
+    /** Attaches (or with null removes) the session photo; saved right away so it survives closing the app. */
+    fun setPhoto(uri: String?) {
+        val s = _session.value ?: return
+        if (closing) return
+        _session.value = s.copy(photoUri = uri)
+        viewModelScope.launch { writer.withLock { repository.setSessionPhoto(s.id, uri) } }
     }
 
     /** Delete the whole session (the screen asks for confirmation first). */

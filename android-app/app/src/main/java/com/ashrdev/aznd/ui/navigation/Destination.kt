@@ -1,6 +1,7 @@
 package com.ashrdev.aznd.ui.navigation
 
 import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.ui.body.CompositionMetric
 
 /*
  * Route map (what opens what). Back always returns to the screen you came from;
@@ -29,7 +30,8 @@ import com.ashrdev.aznd.domain.Muscle
  *  |- History page
  *  |    |- Workout History -- WorkoutHistoryList (pick a workout) -- WorkoutHistory (calendar) -- SessionDetail
  *  |    |                                                              '- Stats -- WorkoutStats
- *  |    |- Weight History (trend graphs of weight, body fat, lean mass)
+ *  |    |- Body Stats History (pager: Measurements | Strength | Composition; only Composition has content yet)
+ *  |    |     '- Composition: Bodyweight or Body fat -- BodyCompositionHistory (pager: Calendar | Graph | Logs)
  *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
  *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseProgress,
  *                     Muscle data (dropdown) -> MuscleStats
@@ -78,7 +80,10 @@ sealed class Destination(val route: String) {
     object Streaks : Destination("streaks")
     object Macro : Destination("macro")
     object Body : Destination("body")
-    object WeightHistory : Destination("weight_history")
+    object BodyHistory : Destination("body_history")
+    object BodyCompositionHistory : Destination("body_history_composition/{metric}") {
+        fun createRoute(metric: CompositionMetric) = "body_history_composition/${metric.routeId}"
+    }
     object StreakEditor : Destination("streak_editor")
     object StreakDetail : Destination("streak_detail/{streakId}") {
         fun createRoute(streakId: Long) = "streak_detail/$streakId"

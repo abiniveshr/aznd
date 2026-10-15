@@ -43,7 +43,9 @@ data class LoggedSession(
      * Id of the matching row in the history tables (`sessions`) that the History / Stats / Dashboard
      * screens read. Set when the session is finished; deleting that history row deletes this one too.
      */
-    val legacySessionId: Long? = null
+    val legacySessionId: Long? = null,
+    /** content:// URI of the photo attached from the live workout screen, if any. */
+    val photoUri: String? = null
 )
 
 /** One row of a session. Assisted rows store NEGATIVE weightKg. */
