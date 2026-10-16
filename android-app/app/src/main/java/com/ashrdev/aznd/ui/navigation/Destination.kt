@@ -19,11 +19,12 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *  |     |                                                 which has "Add custom exercise" -> CustomExerciseForm)
  *  |     |- Stats page: a workout ---------------------- WorkoutStats (pager: Stats | Exercises; exercise menu on the 2nd)
  *  |     '- session in progress ------------------------- WorkoutSession
- *  |- Streaks --------- Streaks
- *  |                     |- Add streak ------- StreakEditor
- *  |                     '- a streak ---------- StreakDetail
- *  |                                             |- Saved (book) -- SavedDaysForStreak -- SavedDayDetail
- *  |                                             '- Save today ---- SavedDayDetail
+ *  |- Streaks (pager: Discipline | Streaks | New) ------- Streaks
+ *  |     |- Streaks page: a streak ---------------------- StreakDetail (pager: Progress | Details | Calendar)
+ *  |     |                                                   |- Details page: Saved days -- SavedDaysForStreak -- SavedDayDetail
+ *  |     |                                                   '- Details page: Save today -- SavedDayDetail
+ *  |     |- Discipline page: placeholder (level system to come)
+ *  |     '- New page: create a streak in place (Dashboard's add button -> StreakEditor, same form)
  *  |- Macros (pager: Graphs | Today | Edit) ------------- Macro
  *  |- Body (pager: Measurements | Strength | Composition) - Body
  *  |                     '- Strength page: a muscle ---- MuscleStats

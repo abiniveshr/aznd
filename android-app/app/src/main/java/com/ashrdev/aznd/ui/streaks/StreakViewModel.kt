@@ -3,25 +3,28 @@ package com.ashrdev.aznd.ui.streaks
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.ashrdev.aznd.data.streaks.DEFAULT_MILESTONES
 import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
+import com.ashrdev.aznd.data.streaks.formatMilestones
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class StreakWithCount(val streak: StreakEntity, val currentStreak: Int)
 
 class StreakViewModel(private val dao: StreakDao) : ViewModel() {
-    val streaksWithCounts: StateFlow<List<StreakWithCount>> = dao.getStreaks()
-        .map { streaks ->
+    // Re-computed when streaks OR slips change, so counts on the Streaks screen never go stale.
+    val streaksWithCounts: StateFlow<List<StreakWithCount>> = combine(dao.getStreaks(), dao.getAllBreaks()) { streaks, allBreaks ->
             val today = todayKey()
+            val breaksByStreak = allBreaks.groupBy({ it.streakId }, { it.date })
             streaks.map { s ->
-                val breaks = dao.getBreaksForStreakOnce(s.id).toSet()
+                val breaks = breaksByStreak[s.id].orEmpty().toSet()
                 StreakWithCount(s, computeCurrentStreak(s.startDate, breaks, today))
             }
         }
@@ -32,14 +35,32 @@ class StreakViewModel(private val dao: StreakDao) : ViewModel() {
 
     suspend fun getStreak(id: Long): StreakEntity? = dao.getStreak(id)
 
-    fun createStreak(name: String, startDate: String, photoUri: String?) {
+    fun createStreak(
+        name: String,
+        startDate: String,
+        photoUri: String?,
+        quote: String? = null,
+        milestones: List<Int> = DEFAULT_MILESTONES
+    ) {
         viewModelScope.launch {
-            dao.insertStreak(StreakEntity(name = name, startDate = startDate, photoUri = photoUri))
+            dao.insertStreak(
+                StreakEntity(
+                    name = name,
+                    startDate = startDate,
+                    photoUri = photoUri,
+                    quote = quote?.trim()?.takeIf { it.isNotEmpty() },
+                    milestones = formatMilestones(milestones)
+                )
+            )
         }
     }
 
     fun updateStreakPhoto(streakId: Long, photoUri: String?) {
         viewModelScope.launch { dao.updateStreakPhoto(streakId, photoUri) }
+    }
+
+    fun updateStreakBanner(streakId: Long, bannerUri: String?) {
+        viewModelScope.launch { dao.updateStreakBanner(streakId, bannerUri) }
     }
 
     fun deleteStreak(id: Long) {

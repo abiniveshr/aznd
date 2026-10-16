@@ -478,7 +478,6 @@ class MainActivity : ComponentActivity() {
                           StreaksScreen(
                               viewModel = streakViewModel,
                               onOpenStreak = { id -> navigateTo(Destination.StreakDetail.createRoute(id)) },
-                              onAddStreak = { navigateTo(Destination.StreakEditor.route) },
                               onBack = goBack,
                               onHome = goHome,
                               onOpenSettings = openSettings

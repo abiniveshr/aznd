@@ -20,6 +20,8 @@ import com.ashrdev.aznd.data.macro.Ingredient
 import com.ashrdev.aznd.data.macro.IngredientDao
 import com.ashrdev.aznd.data.macro.MIGRATION_14_15
 import com.ashrdev.aznd.data.macro.MIGRATION_15_16
+import com.ashrdev.aznd.data.streaks.MIGRATION_18_19
+import com.ashrdev.aznd.data.streaks.MIGRATION_19_20
 import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
@@ -72,7 +74,7 @@ import java.util.Locale
         FoodEntry::class,
         Ingredient::class
     ],
-    version = 18
+    version = 20
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -94,7 +96,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aznd.db"
-                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
                     .fallbackToDestructiveMigration(true)
                     .addCallback(object : Callback() {
                         // Runs on every open, before the first query: the old single "SHOULDERS"

@@ -26,12 +26,10 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
 import com.ashrdev.aznd.ui.calendar.BottomAnchoredPage
 import com.ashrdev.aznd.ui.calendar.DayDecoration
-import com.ashrdev.aznd.ui.calendar.DayFill
 import com.ashrdev.aznd.ui.calendar.MonthCalendar
 import com.ashrdev.aznd.ui.calendar.SelectedDayHeader
 import com.ashrdev.aznd.ui.calendar.monthKeyOf
 import com.ashrdev.aznd.ui.calendar.rememberCalendarState
-import com.ashrdev.aznd.ui.calendar.rememberFavoriteDays
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
@@ -52,7 +50,6 @@ fun SavedDaysForStreakScreen(
     }
 
     val savedDays by viewModel.savedDaysForStreak(streakId).collectAsState(initial = emptyList())
-    val favorites = rememberFavoriteDays("streak:$streakId")
     val calendarState = rememberCalendarState()
     val savedByDay = remember(savedDays) { savedDays.associateBy { it.date } }
     val validMonths = remember(savedByDay) { savedByDay.keys.map { monthKeyOf(it) }.distinct() }
@@ -84,13 +81,7 @@ fun SavedDaysForStreakScreen(
                 val selected = calendarState.selectedDay
                 if (selected != null) {
                     val saved = savedByDay[selected]
-                    SelectedDayHeader(
-                        dayKey = selected,
-                        isFavorite = favorites.isFavorite(selected),
-                        onToggleFavorite = if (saved != null) {
-                            { favorites.toggle(selected) }
-                        } else null
-                    )
+                    SelectedDayHeader(dayKey = selected, isFavorite = false, onToggleFavorite = null)
                     if (saved == null) {
                         Text(
                             "Nothing saved on this day.",
@@ -107,11 +98,7 @@ fun SavedDaysForStreakScreen(
                 }
                 MonthCalendar(
                     decorate = { dayKey ->
-                        when {
-                            dayKey !in savedByDay -> DayDecoration.None
-                            favorites.isFavorite(dayKey) -> DayDecoration(outline = true, fill = DayFill.Highlight)
-                            else -> DayDecoration(outline = true)
-                        }
+                        if (dayKey in savedByDay) DayDecoration(outline = true) else DayDecoration.None
                     },
                     validMonths = validMonths,
                     state = calendarState

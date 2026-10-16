@@ -23,8 +23,14 @@ interface StreakDao {
     @Query("UPDATE streaks SET photoUri = :uri WHERE id = :id")
     suspend fun updateStreakPhoto(id: Long, uri: String?)
 
+    @Query("UPDATE streaks SET bannerUri = :uri WHERE id = :id")
+    suspend fun updateStreakBanner(id: Long, uri: String?)
+
     @Query("DELETE FROM streaks WHERE id = :id")
     suspend fun deleteStreak(id: Long)
+
+    @Query("SELECT * FROM streak_breaks")
+    fun getAllBreaks(): Flow<List<StreakBreakEntity>>
 
     @Query("SELECT date FROM streak_breaks WHERE streakId = :streakId")
     fun getBreaksForStreak(streakId: Long): Flow<List<String>>

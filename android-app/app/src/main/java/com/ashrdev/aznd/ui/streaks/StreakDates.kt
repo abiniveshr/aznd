@@ -8,6 +8,7 @@ import java.util.Locale
 private val keyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 private val displayFormat = SimpleDateFormat("EEE d MMM yyyy", Locale.getDefault())
 private val monthFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+private val shortFormat = SimpleDateFormat("d MMM yy", Locale.getDefault())
 
 fun todayKey(): String = keyFormat.format(Date())
 
@@ -68,3 +69,33 @@ fun monthsBetween(startKey: String, endKey: String): List<Pair<Int, Int>> {
     }
     return result
 }
+
+/** "5 Mar 26": compact label for graph axes. */
+fun shortDate(key: String): String {
+    val date = keyFormat.parse(key) ?: return key
+    return shortFormat.format(date)
+}
+
+fun addDaysKey(key: String, days: Int): String {
+    val cal = parseKey(key)
+    cal.add(Calendar.DAY_OF_YEAR, days)
+    return keyFormat.format(cal.time)
+}
+
+/** Every day key from [startKey] to [endKey], inclusive. Empty if start is after end. */
+fun dayKeysBetween(startKey: String, endKey: String): List<String> {
+    if (startKey > endKey) return emptyList()
+    val cal = parseKey(startKey)
+    val result = ArrayList<String>()
+    var key = keyFormat.format(cal.time)
+    while (key <= endKey) {
+        result.add(key)
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+        key = keyFormat.format(cal.time)
+    }
+    return result
+}
+
+/** Whole days from [fromKey] to [toKey] (negative if toKey is earlier). Rounds, so DST can't skew it. */
+fun daysBetween(fromKey: String, toKey: String): Int =
+    Math.round((parseKey(toKey).timeInMillis - parseKey(fromKey).timeInMillis) / 86_400_000.0).toInt()
