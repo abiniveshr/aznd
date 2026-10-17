@@ -27,6 +27,14 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material3.Icon
+import androidx.compose.ui.text.style.TextOverflow
+import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -244,6 +252,8 @@ fun ManageFilterDialog(
     onDismiss: () -> Unit
 ) {
     val bodyHeight = (LocalConfiguration.current.screenHeightDp * 0.55f).coerceAtMost(440f).dp
+    var categoriesOpen by rememberSaveable { mutableStateOf(false) }
+    var dateOpen by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(0.94f),
@@ -258,11 +268,22 @@ fun ManageFilterDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                CategorySection(state, apps)
+                FilterSection(
+                    title = "Data categories",
+                    summary = if (state.apps.isEmpty()) "All categories"
+                    else state.apps.sortedBy { it.ordinal }.joinToString(", ") { it.label },
+                    expanded = categoriesOpen,
+                    onToggle = { categoriesOpen = !categoriesOpen }
+                ) { CategorySection(state, apps) }
                 if (page == ManagePage.IMPORT) {
                     Hint("Dates don't apply to Import: the file decides what comes in.")
                 } else {
-                    DateSection(state, page)
+                    FilterSection(
+                        title = "Date",
+                        summary = state.periodLabel(),
+                        expanded = dateOpen,
+                        onToggle = { dateOpen = !dateOpen }
+                    ) { DateSection(state, page) }
                 }
             }
         },
@@ -271,10 +292,54 @@ fun ManageFilterDialog(
     )
 }
 
+/**
+ * A collapsible block: a tappable header (title, the current choice while closed, an arrow) that
+ * opens [content] underneath.
+ */
+@Composable
+private fun FilterSection(
+    title: String,
+    summary: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button, onClick = onToggle)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    if (!expanded) {
+                        Text(
+                            summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand"
+                )
+            }
+            if (expanded) {
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) { content() }
+            }
+        }
+    }
+}
+
 @Composable
 private fun CategorySection(state: ManageFilterState, apps: List<DataApp>) {
     Column {
-        Text("Data categories", style = MaterialTheme.typography.titleMedium)
         CheckRow(
             label = "All categories",
             checked = state.apps.isEmpty(),
@@ -293,8 +358,6 @@ private fun CategorySection(state: ManageFilterState, apps: List<DataApp>) {
 @Composable
 private fun DateSection(state: ManageFilterState, page: ManagePage) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Date", style = MaterialTheme.typography.titleMedium)
-
         if (state.useRange) {
             CustomRangeRow(state.rangeDates, buttonModifier = Modifier.height(ControlHeight), stacked = true)
         } else {

@@ -4,11 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarViewMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
@@ -30,17 +32,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
-import com.ashrdev.aznd.ui.theme.readableOn
 import java.util.Calendar
 
-private val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
+internal val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
 
 /**
  * The app's one calendar. It knows nothing about workouts or streaks:
@@ -51,6 +51,12 @@ private val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
  *  - [state] holds the visible month and selected day (hoist it to read or drive them).
  *  - [onDayClick] fires on every tap. [selectable] = false turns the selection highlight off.
  *  - [cellContent] replaces the default day square entirely, if a screen ever needs to.
+ *    (Month view only.)
+ *  - [CalendarState.mode] switches between the month grid and a GitHub-style year view. A
+ *    toggle sits in the header unless [showModeToggle] is false; set the state's mode to start
+ *    in either one. Year view draws each day's fill, outline and selection; fills such as
+ *    [DayFill.Intensity] give the heat-map shading. Tapping a day behaves exactly as in month
+ *    view, so the selected-day panel under the calendar works unchanged.
  *
  * Corner rounding follows the button rounding from Appearance, and cells are padded so squares
  * never merge.
@@ -63,6 +69,7 @@ fun MonthCalendar(
     state: CalendarState = rememberCalendarState(),
     selectable: Boolean = true,
     firstDayOfWeek: Int = Calendar.SUNDAY,
+    showModeToggle: Boolean = true,
     onDayClick: (String) -> Unit = {},
     cellContent: (@Composable BoxScope.(DayCellInfo) -> Unit)? = null
 ) {
@@ -89,33 +96,63 @@ fun MonthCalendar(
         )
     }
 
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { state.visibleMonth = month.previous() },
-                enabled = month > first
-            ) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month")
-            }
-            Text(
-                month.title(),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable { pickerOpen = true }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            )
-            IconButton(
-                onClick = { state.visibleMonth = month.next() },
-                enabled = month < last
-            ) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "Next month")
-            }
+    val isYear = state.mode == CalendarMode.YEAR
+    val onToggleMode: (() -> Unit)? = if (showModeToggle) {
+        {
+            state.mode = if (isYear) CalendarMode.MONTH else CalendarMode.YEAR
         }
+    } else null
+
+    if (isYear) {
+        Column(modifier = modifier) {
+            CalendarHeader(
+                title = month.year.toString(),
+                previousLabel = "Previous year",
+                nextLabel = "Next year",
+                canGoPrevious = month.year > first.year,
+                canGoNext = month.year < last.year,
+                onPrevious = {
+                    state.visibleMonth = MonthKey(month.year - 1, month.month).coerceIn(first, last)
+                },
+                onNext = {
+                    state.visibleMonth = MonthKey(month.year + 1, month.month).coerceIn(first, last)
+                },
+                onTitleClick = null,
+                mode = state.mode,
+                onToggleMode = onToggleMode
+            )
+            YearGrid(
+                year = month.year,
+                first = first,
+                last = last,
+                selectedDay = state.selectedDay,
+                selectable = selectable,
+                firstDayOfWeek = firstDayOfWeek,
+                decorate = decorate,
+                onDayClick = { dayKey ->
+                    if (selectable) state.selectedDay = dayKey
+                    // So switching back to month view lands on the day you tapped.
+                    state.visibleMonth = monthKeyOf(dayKey)
+                    onDayClick(dayKey)
+                }
+            )
+        }
+        return
+    }
+
+    Column(modifier = modifier) {
+        CalendarHeader(
+            title = month.title(),
+            previousLabel = "Previous month",
+            nextLabel = "Next month",
+            canGoPrevious = month > first,
+            canGoNext = month < last,
+            onPrevious = { state.visibleMonth = month.previous() },
+            onNext = { state.visibleMonth = month.next() },
+            onTitleClick = { pickerOpen = true },
+            mode = state.mode,
+            onToggleMode = onToggleMode
+        )
 
         Row(modifier = Modifier.fillMaxWidth()) {
             for (i in 0 until 7) {
@@ -198,17 +235,9 @@ fun BoxScope.DefaultDayCell(info: DayCellInfo) {
     val deco = info.decoration
     val colors = MaterialTheme.colorScheme
 
-    val fillColor = when (val fill = deco.fill) {
-        DayFill.None -> Color.Transparent
-        DayFill.Highlight -> colors.primaryContainer
-        is DayFill.Custom -> fill.color
-    }
+    val fillColor = deco.fill.resolveColor()
     val hasFill = deco.fill != DayFill.None
-    val textColor = deco.textColor ?: when {
-        deco.fill == DayFill.Highlight -> colors.onPrimaryContainer
-        deco.fill is DayFill.Custom -> readableOn(fillColor)
-        else -> colors.onSurface
-    }
+    val textColor = deco.textColor ?: deco.fill.defaultTextColor()
 
     Box(
         modifier = Modifier
@@ -257,6 +286,56 @@ fun BoxScope.DefaultDayCell(info: DayCellInfo) {
                     .padding(3.dp)
                     .size(10.dp)
             )
+        }
+    }
+}
+
+/**
+ * Prev / title / next, plus the month-year toggle on the right. When the toggle is shown, an
+ * equal spacer on the left keeps the title centred between the chevrons.
+ */
+@Composable
+private fun CalendarHeader(
+    title: String,
+    previousLabel: String,
+    nextLabel: String,
+    canGoPrevious: Boolean,
+    canGoNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onTitleClick: (() -> Unit)?,
+    mode: CalendarMode,
+    onToggleMode: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (onToggleMode != null) Spacer(modifier = Modifier.size(48.dp))
+        IconButton(onClick = onPrevious, enabled = canGoPrevious) {
+            Icon(Icons.Default.ChevronLeft, contentDescription = previousLabel)
+        }
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+        IconButton(onClick = onNext, enabled = canGoNext) {
+            Icon(Icons.Default.ChevronRight, contentDescription = nextLabel)
+        }
+        if (onToggleMode != null) {
+            IconButton(onClick = onToggleMode) {
+                if (mode == CalendarMode.MONTH) {
+                    Icon(Icons.Default.CalendarViewMonth, contentDescription = "Show full year")
+                } else {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = "Show single month")
+                }
+            }
         }
     }
 }

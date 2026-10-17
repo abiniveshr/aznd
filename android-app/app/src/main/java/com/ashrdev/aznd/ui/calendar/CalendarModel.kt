@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.calendar
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -10,8 +11,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.ashrdev.aznd.ui.theme.readableOn
 
 /** What fills the day's square. */
 sealed interface DayFill {
@@ -23,7 +26,24 @@ sealed interface DayFill {
 
     /** Any colour you like, e.g. a score colour on the Dashboard. Text colour adapts. */
     data class Custom(val color: Color) : DayFill
+
+    /**
+     * The theme's highlight colour at a strength from 0 to 1. The strength *is* the colour's
+     * opacity: 1 is solid (the brightest) and smaller values fade toward the background.
+     * Any non-zero [fraction] is kept at or above [minAlpha] so a tiny value never vanishes.
+     * Build it from raw numbers with [intensityFill], which does the normalising.
+     */
+    data class Intensity(
+        val fraction: Float,
+        val minAlpha: Float = DEFAULT_MIN_INTENSITY_ALPHA
+    ) : DayFill {
+        val alpha: Float
+            get() = if (fraction <= 0f) 0f else fraction.coerceIn(minAlpha, 1f)
+    }
 }
+
+/** Faintest opacity an [DayFill.Intensity] day can have (unless its value is zero). */
+const val DEFAULT_MIN_INTENSITY_ALPHA = 0.15f
 
 enum class BadgePosition { TOP_START, TOP_END, BOTTOM_CENTER }
 
@@ -75,19 +95,83 @@ data class DayCellInfo(
 fun scoreFill(score: Float, low: Color, high: Color): DayFill =
     DayFill.Custom(lerp(low, high, score.coerceIn(0f, 1f)))
 
-/** Which month is showing and which day is selected. Survives navigating away and back. */
+/**
+ * Highlight a day in proportion to [value] / [max], as opacity of the highlight colour.
+ * [max] is the value that should look brightest, e.g. the heaviest lift in the range being
+ * shown, so every day is judged against the same ceiling:
+ *
+ *     val best = bestLiftByDay.values.max()
+ *     decorate = { day -> DayDecoration(fill = intensityFill(bestLiftByDay[day] ?: 0f, best)) }
+ *
+ * Zero, negative or missing data (and a non-positive [max]) gives no fill at all.
+ */
+fun intensityFill(
+    value: Float,
+    max: Float,
+    minAlpha: Float = DEFAULT_MIN_INTENSITY_ALPHA
+): DayFill =
+    if (value <= 0f || max <= 0f) DayFill.None
+    else DayFill.Intensity(value / max, minAlpha)
+
+/** The colour a fill paints (transparent for none). Intensity keeps its opacity here. */
+@Composable
+internal fun DayFill.resolveColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return when (this) {
+        DayFill.None -> Color.Transparent
+        DayFill.Highlight -> colors.primaryContainer
+        is DayFill.Custom -> color
+        is DayFill.Intensity -> colors.primaryContainer.copy(alpha = alpha)
+    }
+}
+
+/** Readable text colour for a day with this fill. Faded fills are judged as they look on screen. */
+@Composable
+internal fun DayFill.defaultTextColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return when (this) {
+        DayFill.None -> colors.onSurface
+        DayFill.Highlight -> colors.onPrimaryContainer
+        is DayFill.Custom -> readableOn(color)
+        is DayFill.Intensity -> readableOn(resolveColor().compositeOver(colors.background))
+    }
+}
+
+/** Month grid, or the whole year as a GitHub-style contribution grid. */
+enum class CalendarMode { MONTH, YEAR }
+
+/**
+ * Which month is showing, which day is selected, and whether the calendar shows a month or the
+ * whole year. In year mode the year of [visibleMonth] is the year shown. Survives navigating
+ * away and back.
+ */
 @Stable
-class CalendarState(initialMonth: MonthKey, initialSelectedDay: String?) {
+class CalendarState(
+    initialMonth: MonthKey,
+    initialSelectedDay: String?,
+    initialMode: CalendarMode = CalendarMode.MONTH
+) {
     var visibleMonth by mutableStateOf(initialMonth)
     var selectedDay by mutableStateOf(initialSelectedDay)
+    var mode by mutableStateOf(initialMode)
 
     companion object {
         val Saver: Saver<CalendarState, Any> = listSaver<CalendarState, Any>(
-            save = { listOf(it.visibleMonth.year, it.visibleMonth.month, it.selectedDay ?: "") },
+            save = {
+                listOf(
+                    it.visibleMonth.year,
+                    it.visibleMonth.month,
+                    it.selectedDay ?: "",
+                    it.mode.name
+                )
+            },
             restore = {
                 CalendarState(
                     MonthKey(it[0] as Int, it[1] as Int),
-                    (it[2] as String).ifEmpty { null }
+                    (it[2] as String).ifEmpty { null },
+                    (it.getOrNull(3) as? String)
+                        ?.let { name -> CalendarMode.values().firstOrNull { m -> m.name == name } }
+                        ?: CalendarMode.MONTH
                 )
             }
         )
@@ -97,7 +181,8 @@ class CalendarState(initialMonth: MonthKey, initialSelectedDay: String?) {
 @Composable
 fun rememberCalendarState(
     initialMonth: MonthKey = currentMonth(),
-    initialSelectedDay: String? = todayDayKey()
+    initialSelectedDay: String? = todayDayKey(),
+    initialMode: CalendarMode = CalendarMode.MONTH
 ): CalendarState = rememberSaveable(saver = CalendarState.Saver) {
-    CalendarState(initialMonth, initialSelectedDay)
+    CalendarState(initialMonth, initialSelectedDay, initialMode)
 }
