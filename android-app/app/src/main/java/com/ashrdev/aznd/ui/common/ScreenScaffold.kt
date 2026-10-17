@@ -75,6 +75,7 @@ fun ScreenScaffold(
     // Keep the space for the big button even when it is not shown (pager pages that don't have it).
     reservePrimarySpace: Boolean = primaryAction != null,
     settingsEnabled: Boolean = true,
+    manageDataEnabled: Boolean = true,
     subPages: SubPageBar? = null,
     topBarActions: @Composable RowScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
@@ -177,6 +178,7 @@ fun ScreenScaffold(
                     third = third,
                     extraActions = extraActions,
                     settingsEnabled = settingsEnabled,
+                    manageDataEnabled = manageDataEnabled,
                     subPages = subPages,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )

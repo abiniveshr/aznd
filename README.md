@@ -1,6 +1,5 @@
 aznd (Ascend)
 by ashr (abinivesh)
-
 the plan:
 
 open-source all in one lifestyle app

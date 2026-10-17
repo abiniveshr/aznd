@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.ashrdev.aznd.data.body.BodyDao
+import com.ashrdev.aznd.data.manage.ManageDao
 import com.ashrdev.aznd.data.body.BodyMeasurement
 import com.ashrdev.aznd.data.body.BodyWeightEntry
 import com.ashrdev.aznd.data.body.MIGRATION_13_14
@@ -86,6 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bodyDao(): BodyDao
     abstract fun foodDao(): FoodDao
     abstract fun ingredientDao(): IngredientDao
+    abstract fun manageDao(): ManageDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -126,13 +128,20 @@ abstract class AppDatabase : RoomDatabase() {
                                     assetSeedReader(context),
                                     onSkippedLines = { Log.w("AppDatabase", "Skipped catalog lines: $it") }
                                 ).seedMissing()
-                                if (db.workoutDao().workoutCount() == 0) {
-                                    seedSampleWorkout(db)
+                                val seeded = context.applicationContext.getSharedPreferences("seed_state", Context.MODE_PRIVATE)
+                                if (!seeded.getBoolean("sample_workout", false)) {
+                                    if (db.workoutDao().workoutCount() == 0) {
+                                        seedSampleWorkout(db)
+                                    }
+                                    seeded.edit().putBoolean("sample_workout", true).apply()
                                 }
-                                if (db.streakDao().streakCount() == 0) {
-                                    db.streakDao().insertStreak(
-                                        StreakEntity(name = "My Streak", startDate = todayKeyForSeed())
-                                    )
+                                if (!seeded.getBoolean("sample_streak", false)) {
+                                    if (db.streakDao().streakCount() == 0) {
+                                        db.streakDao().insertStreak(
+                                            StreakEntity(name = "My Streak", startDate = todayKeyForSeed())
+                                        )
+                                    }
+                                    seeded.edit().putBoolean("sample_streak", true).apply()
                                 }
                             } catch (e: Exception) {
                                 Log.e("AppDatabase", "Seeding failed", e)

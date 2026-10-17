@@ -1,6 +1,8 @@
 package com.ashrdev.aznd.ui.navigation
 
+import com.ashrdev.aznd.data.manage.DataApp
 import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.ui.manage.ManagePage
 import com.ashrdev.aznd.ui.body.CompositionMetric
 
 /*
@@ -38,11 +40,18 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *                     Muscle data (dropdown) -> MuscleStats
  *
  * Settings -> Appearance opens from the pull-up bar on every screen.
+ * Manage data (Delete | Export | Import) opens from the pull-up bar on every screen: from Home,
+ * Settings and Appearance it lists all data, from a screen inside an app it is pre-filtered to
+ * that app (DataApp.fromRoute).
  */
 sealed class Destination(val route: String) {
     object Home : Destination("home")
     object Settings : Destination("settings")
     object Appearance : Destination("appearance")
+    object ManageData : Destination("manage_data?app={app}&page={page}") {
+        fun createRoute(app: DataApp?, page: ManagePage = ManagePage.DELETE) =
+            "manage_data?app=${app?.id ?: "all"}&page=${page.id}"
+    }
 
     object Workouts : Destination("workouts")
     object WorkoutHistoryList : Destination("workout_history_list")

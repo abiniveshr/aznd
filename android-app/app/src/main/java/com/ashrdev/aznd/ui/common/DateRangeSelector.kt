@@ -147,8 +147,17 @@ private fun YearStepper(state: DateRangeState, availableMonths: Collection<Month
     }
 }
 
+/**
+ * The From / To buttons (each opens the calendar) for a [DateRangeState] in CUSTOM kind. Side by
+ * side by default; [stacked] puts them on two full-width lines for narrow spaces such as dialogs.
+ * [buttonModifier] sizes each button (e.g. a fixed height).
+ */
 @Composable
-private fun CustomRangeRow(state: DateRangeState) {
+fun CustomRangeRow(
+    state: DateRangeState,
+    buttonModifier: Modifier = Modifier,
+    stacked: Boolean = false
+) {
     val context = LocalContext.current
     val fmt = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
 
@@ -170,7 +179,7 @@ private fun CustomRangeRow(state: DateRangeState) {
         ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+    val fromButton: @Composable (Modifier) -> Unit = { layout ->
         OutlinedButton(
             onClick = {
                 pick(state.customStart) { picked ->
@@ -178,8 +187,10 @@ private fun CustomRangeRow(state: DateRangeState) {
                     if (picked > state.customEnd) state.customEnd = picked
                 }
             },
-            modifier = Modifier.weight(1f)
+            modifier = layout.then(buttonModifier)
         ) { Text("From ${label(state.customStart)}", maxLines = 1) }
+    }
+    val toButton: @Composable (Modifier) -> Unit = { layout ->
         OutlinedButton(
             onClick = {
                 pick(state.customEnd) { picked ->
@@ -187,7 +198,19 @@ private fun CustomRangeRow(state: DateRangeState) {
                     if (picked < state.customStart) state.customStart = picked
                 }
             },
-            modifier = Modifier.weight(1f)
+            modifier = layout.then(buttonModifier)
         ) { Text("To ${label(state.customEnd)}", maxLines = 1) }
+    }
+
+    if (stacked) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            fromButton(Modifier.fillMaxWidth())
+            toButton(Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            fromButton(Modifier.weight(1f))
+            toButton(Modifier.weight(1f))
+        }
     }
 }

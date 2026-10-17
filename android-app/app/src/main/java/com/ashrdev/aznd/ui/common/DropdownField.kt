@@ -17,7 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import com.ashrdev.aznd.ui.components.OutlinedButton
 
-/** A button showing "label: value" that drops down [options]; picking one calls [onSelect]. */
+/**
+ * A button showing "label: value" that drops down [options]; picking one calls [onSelect]. A blank
+ * [label] shows just the value. [buttonModifier] sizes the button itself (e.g. a fixed height).
+ */
 @Composable
 fun <T> DropdownField(
     label: String,
@@ -25,13 +28,14 @@ fun <T> DropdownField(
     options: List<T>,
     optionText: (T) -> String,
     onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    buttonModifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().then(buttonModifier)) {
             Text(
-                "$label: $valueText",
+                if (label.isBlank()) valueText else "$label: $valueText",
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

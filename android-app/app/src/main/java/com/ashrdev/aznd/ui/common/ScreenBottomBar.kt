@@ -48,6 +48,7 @@ fun ScreenBottomBar(
     third: ThirdAction? = null,
     extraActions: List<ThirdAction> = emptyList(),
     settingsEnabled: Boolean = true,
+    manageDataEnabled: Boolean = true,
     subPages: SubPageBar? = null
 ) {
     val actions = listOfNotNull(third) + extraActions
@@ -83,6 +84,7 @@ fun ScreenBottomBar(
         onOpenSettings = onOpenSettings,
         modifier = modifier,
         settingsEnabled = settingsEnabled,
+        manageDataEnabled = manageDataEnabled,
         onHome = onHome,
         row1 = mainRow
     )

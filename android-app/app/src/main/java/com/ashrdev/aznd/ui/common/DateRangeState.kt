@@ -47,6 +47,13 @@ data class DayRange(val startKey: String?, val endKey: String?) {
     }
 }
 
+/** "All time", "From 1 Sep 2026" or "1 Sep 2026 – 30 Sep 2026": the caption for any range. */
+fun DayRange.describe(): String {
+    val start = startKey ?: return if (endKey == null) "All time" else "Until ${shortDay(endKey)}"
+    val end = endKey ?: return "From ${shortDay(start)}"
+    return "${shortDay(start)} – ${shortDay(end)}"
+}
+
 /** The items whose timestamp falls on a day inside [range], in their original order. */
 fun <T> List<T>.filterInRange(range: DayRange, time: (T) -> Long): List<T> =
     if (range == DayRange.All) this else filter { range.contains(dayKeyOf(time(it))) }
@@ -108,12 +115,7 @@ class DateRangeState(
         }
 
     /** "All time" or "1 Sep 2026 - 30 Sep 2026", for a caption under the selector. */
-    fun describe(): String {
-        val r = range
-        val start = r.startKey ?: return "All time"
-        val end = r.endKey ?: return "From ${shortDay(start)}"
-        return "${shortDay(start)} – ${shortDay(end)}"
-    }
+    fun describe(): String = range.describe()
 
     companion object {
         val Saver: Saver<DateRangeState, Any> = listSaver<DateRangeState, Any>(

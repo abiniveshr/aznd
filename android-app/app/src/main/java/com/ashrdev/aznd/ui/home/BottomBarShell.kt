@@ -32,11 +32,6 @@ import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ImportExport
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +54,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.manage.LocalManageData
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import kotlinx.coroutines.launch
 
@@ -132,10 +128,11 @@ fun BottomBarShell(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     settingsEnabled: Boolean = true,
+    manageDataEnabled: Boolean = true,
     onHome: (() -> Unit)? = null,
     row1: (@Composable () -> Unit)? = null
 ) {
-    var showManageData by remember { mutableStateOf(false) }
+    val openManageData = LocalManageData.current
     val style = LocalAzndStyle.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -155,15 +152,6 @@ fun BottomBarShell(
         bottomStart = ZeroCornerSize,
         bottomEnd = ZeroCornerSize
     )
-
-    if (showManageData) {
-        AlertDialog(
-            onDismissRequest = { showManageData = false },
-            title = { Text("Manage data") },
-            text = { Text("Export, import and delete are coming soon.") },
-            confirmButton = { TextButton(onClick = { showManageData = false }) { Text("OK") } }
-        )
-    }
 
     Surface(
         modifier = modifier
@@ -261,11 +249,14 @@ fun BottomBarShell(
                         ActionTile(
                             icon = Icons.Default.ImportExport,
                             label = "Manage data",
-                            tint = mutedTint
-                        ) {
-                            collapseTray()
-                            showManageData = true // TODO: export / import / delete data
-                        }
+                            tint = if (manageDataEnabled && openManageData != null) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
+                            onClick = if (manageDataEnabled && openManageData != null) {
+                                {
+                                    collapseTray()
+                                    openManageData.openForCurrentScreen()
+                                }
+                            } else null
+                        )
                     }
                 }
             }

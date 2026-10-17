@@ -23,7 +23,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ashrdev.aznd.data.AppDatabase
+import com.ashrdev.aznd.data.manage.DataApp
+import com.ashrdev.aznd.data.manage.DataRegistry
+import com.ashrdev.aznd.data.manage.DataTransfer
 import com.ashrdev.aznd.ui.home.HomeScreen
+import com.ashrdev.aznd.ui.manage.LocalDataTransfer
+import com.ashrdev.aznd.ui.manage.LocalManageData
+import com.ashrdev.aznd.ui.manage.ManageDataLauncher
+import com.ashrdev.aznd.ui.manage.ManageDataScreen
+import com.ashrdev.aznd.ui.manage.ManageDataViewModel
+import com.ashrdev.aznd.ui.manage.ManagePage
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.settings.SettingsScreen
 import com.ashrdev.aznd.ui.settings.AppearanceScreen
@@ -90,6 +99,7 @@ class MainActivity : ComponentActivity() {
         val workoutSettings = WorkoutSettingsStore(this)
         val graphRange = GraphRangeStore(this)
         val macroTargets = MacroTargetsStore(this)
+        val dataTransfer = DataTransfer(DataRegistry.create(this, database, trainingRepository, macroTargets))
         setContent {
             AzndTheme {
                 CompositionLocalProvider(LocalGraphRangeStore provides graphRange) {
@@ -139,422 +149,462 @@ class MainActivity : ComponentActivity() {
 
                   // Very subtle fade. The screen underneath is always fully opaque, so the window
                   // background (black) can never show through mid-transition.
-                  NavHost(
-                      navController = navController,
-                      startDestination = Destination.Home.route,
-                      enterTransition = { fadeIn(animationSpec = tween(140)) },
-                      exitTransition = { ExitTransition.None },
-                      popEnterTransition = { EnterTransition.None },
-                      popExitTransition = { fadeOut(animationSpec = tween(140)) }
+                  val manageLauncher = remember(navController) {
+                      ManageDataLauncher(
+                          openForCurrentScreen = {
+                              val route = navController.currentBackStackEntry?.destination?.route
+                              navigateTo(Destination.ManageData.createRoute(DataApp.fromRoute(route)))
+                          },
+                          open = { app, page -> navigateTo(Destination.ManageData.createRoute(app, page)) }
+                      )
+                  }
+
+                  CompositionLocalProvider(
+                      LocalManageData provides manageLauncher,
+                      LocalDataTransfer provides dataTransfer
                   ) {
-                      composable(Destination.Home.route) {
-                          HomeScreen(
-                              workoutViewModel = workoutViewModel,
-                              streakViewModel = streakViewModel,
-                              homeSignal = homeSignal,
-                              onNavigate = { route -> navigateTo(route) }
-                          )
-                      }
-                      composable(Destination.Settings.route) {
-                          SettingsScreen(
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings,
-                              onOpenAppearance = { navigateTo(Destination.Appearance.route) },
-                              workoutSettings = workoutSettings
-                          )
-                      }
-                      composable(Destination.Appearance.route) {
-                          AppearanceScreen(
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
+                    NavHost(
+                        navController = navController,
+                        startDestination = Destination.Home.route,
+                        enterTransition = { fadeIn(animationSpec = tween(140)) },
+                        exitTransition = { ExitTransition.None },
+                        popEnterTransition = { EnterTransition.None },
+                        popExitTransition = { fadeOut(animationSpec = tween(140)) }
+                    ) {
+                        composable(Destination.Home.route) {
+                            HomeScreen(
+                                workoutViewModel = workoutViewModel,
+                                streakViewModel = streakViewModel,
+                                homeSignal = homeSignal,
+                                onNavigate = { route -> navigateTo(route) }
+                            )
+                        }
+                        composable(Destination.Settings.route) {
+                            SettingsScreen(
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onOpenAppearance = { navigateTo(Destination.Appearance.route) },
+                                workoutSettings = workoutSettings
+                            )
+                        }
+                        composable(Destination.Appearance.route) {
+                            AppearanceScreen(
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
 
-                      // ---- Workouts ----
-                      composable(Destination.Workouts.route) {
-                          CompositionLocalProvider(
-                              LocalOpenCustomExercise provides { navigateTo(Destination.CustomExerciseForm.createRoute(null)) }
-                          ) {
-                              WorkoutsScreen(
-                                  viewModel = workoutViewModel,
-                                  onOpenWorkout = { id ->
-                                      navigateTo(Destination.WorkoutDetail.createRoute(id))
-                                  },
-                                  onAddWorkout = {
-                                      navigateTo(Destination.WorkoutBuilder.createRoute(null))
-                                  },
-                                  onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
-                                  onOpenWorkoutStats = { id -> navigateTo(Destination.WorkoutStats.createRoute(id)) },
-                                  onOpenExercise = { id -> navigateTo(Destination.ExerciseViewer.createRoute(id)) },
-                                  onBack = goBack,
-                                  onHome = goHome,
-                                  onOpenSettings = openSettings
-                              )
-                          }
-                      }
-                      composable(Destination.WorkoutHistoryList.route) {
-                          WorkoutHistoryListScreen(
-                              viewModel = workoutViewModel,
-                              onOpenWorkout = { id ->
-                                  navigateTo(Destination.WorkoutHistory.createRoute(id))
-                              },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.WorkoutHistory.route,
-                          arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
-                          WorkoutHistoryScreen(
-                              workoutId = workoutId,
-                              viewModel = workoutViewModel,
-                              onOpenSession = { id ->
-                                  navigateTo(Destination.SessionDetail.createRoute(id))
-                              },
-                              onOpenStats = { id ->
-                                  navigateTo(Destination.WorkoutStats.createRoute(id))
-                              },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.WorkoutStats.route,
-                          arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
-                          val graphVm: WorkoutGraphViewModel = viewModel(
-                              factory = WorkoutGraphViewModel.factory(
-                                  trainingRepository, workoutId, workoutSettings.settings.value.trackRpe
-                              )
-                          )
-                          WorkoutStatsScreen(
-                              graphViewModel = graphVm,
-                              workoutId = workoutId,
-                              viewModel = workoutViewModel,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings,
-                              useTargets = workoutSettings.settings.value.targetReps
-                          )
-                      }
-                      composable(
-                          route = Destination.WorkoutDetail.route,
-                          arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
-                          WorkoutDetailScreen(
-                              workoutId = workoutId,
-                              viewModel = workoutViewModel,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings,
-                              onEdit = { id -> navigateTo(Destination.WorkoutBuilder.createRoute(id)) },
-                              onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
-                              onViewExercise = { exId ->
-                                  navigateTo(Destination.ExerciseViewer.createRoute(exId))
-                              }
-                          )
-                      }
-                      composable(
-                          route = Destination.ExerciseViewer.route,
-                          arguments = listOf(navArgument("exerciseId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
-                          ExerciseViewerScreen(
-                              exerciseId = exerciseId,
-                              viewModel = workoutViewModel,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings,
-                              onEdit = { id -> navigateTo(Destination.CustomExerciseForm.createRoute(id)) }
-                          )
-                      }
-                      composable(
-                          route = Destination.ExerciseProgress.route,
-                          arguments = listOf(
-                              navArgument("workoutId") { type = NavType.LongType },
-                              navArgument("exerciseId") { type = NavType.LongType }
-                          )
-                      ) { backStackEntry ->
-                          val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
-                          val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
-                          ExerciseProgressScreen(
-                              workoutId = workoutId,
-                              exerciseId = exerciseId,
-                              viewModel = workoutViewModel,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings,
-                              useTargets = workoutSettings.settings.value.targetReps
-                          )
-                      }
-                      composable(
-                          route = Destination.WorkoutSession.route,
-                          arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
-                          val workoutName by produceState(initialValue = "", workoutId) {
-                              value = if (workoutId == EMPTY_WORKOUT_ID) "Empty workout"
-                              else workoutViewModel.getWorkout(workoutId)?.workout?.name.orEmpty()
-                          }
-                          val loggerVm: LoggerViewModel =
-                              viewModel(factory = LoggerViewModel.factory(trainingRepository, workoutSettings))
-                          WorkoutSessionScreen(
-                              workoutId = workoutId,
-                              workoutName = workoutName,
-                              viewModel = loggerVm,
-                              onFinished = goBack,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.SessionDetail.route,
-                          arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
-                          SessionDetailScreen(
-                              sessionId = sessionId,
-                              viewModel = workoutViewModel,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.WorkoutBuilder.route,
-                          arguments = listOf(navArgument("workoutId") {
-                              type = NavType.LongType
-                              defaultValue = -1L
-                          })
-                      ) { backStackEntry ->
-                          val workoutId = backStackEntry.arguments
-                              ?.getLong("workoutId")
-                              ?.takeIf { it != -1L }
-                          // One builder per screen instance: it survives rotation, but opening the
-                          // editor again starts from the saved template, never from an earlier session's edits.
-                          val builderVm: BuilderViewModel = viewModel(
-                              viewModelStoreOwner = backStackEntry,
-                              factory = BuilderViewModel.factory(trainingRepository, workoutSettings)
-                          )
-                          // The name must be known before the screen starts (it seeds the text field).
-                          val initialName by produceState<String?>(
-                              initialValue = if (workoutId == null) "" else null,
-                              workoutId
-                          ) {
-                              value = workoutId?.let { workoutViewModel.getWorkout(it)?.workout?.name.orEmpty() }.orEmpty()
-                          }
-                          initialName?.let { loadedName ->
+                        composable(
+                            route = Destination.ManageData.route,
+                            arguments = listOf(
+                                navArgument("app") {
+                                    type = NavType.StringType
+                                    defaultValue = "all"
+                                },
+                                navArgument("page") {
+                                    type = NavType.StringType
+                                    defaultValue = "delete"
+                                }
+                            )
+                        ) { backStackEntry ->
+                            val manageVm: ManageDataViewModel =
+                                viewModel(factory = ManageDataViewModel.factory(dataTransfer))
+                            ManageDataScreen(
+                                viewModel = manageVm,
+                                initialApp = DataApp.fromId(backStackEntry.arguments?.getString("app")),
+                                initialPage = ManagePage.fromId(backStackEntry.arguments?.getString("page")),
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+
+                        // ---- Workouts ----
+                        composable(Destination.Workouts.route) {
                             CompositionLocalProvider(
-                              LocalOpenCustomExercise provides { navigateTo(Destination.CustomExerciseForm.createRoute(null)) }
+                                LocalOpenCustomExercise provides { navigateTo(Destination.CustomExerciseForm.createRoute(null)) }
                             ) {
-                              WorkoutBuilderScreen(
-                                  workoutId = workoutId,
-                                  initialName = loadedName,
-                                  viewModel = builderVm,
-                                  onSaveRecord = { name -> workoutViewModel.saveWorkoutRecord(workoutId, name) },
-                                  onDelete = if (workoutId == null) null else ({
-                                      workoutViewModel.deleteWorkout(workoutId)
-                                      popToRoute(Destination.Workouts.route)
-                                  }),
-                                  deleteTemplate = trainingRepository::deleteTemplate,
-                                  onDone = goBack,
-                                  onHome = goHome,
-                                  onOpenSettings = openSettings
-                              )
+                                WorkoutsScreen(
+                                    viewModel = workoutViewModel,
+                                    onOpenWorkout = { id ->
+                                        navigateTo(Destination.WorkoutDetail.createRoute(id))
+                                    },
+                                    onAddWorkout = {
+                                        navigateTo(Destination.WorkoutBuilder.createRoute(null))
+                                    },
+                                    onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
+                                    onOpenWorkoutStats = { id -> navigateTo(Destination.WorkoutStats.createRoute(id)) },
+                                    onOpenExercise = { id -> navigateTo(Destination.ExerciseViewer.createRoute(id)) },
+                                    onBack = goBack,
+                                    onHome = goHome,
+                                    onOpenSettings = openSettings
+                                )
                             }
-                          }
-                      }
-
-                      composable(
-                          route = Destination.MuscleStats.route,
-                          arguments = listOf(navArgument("muscle") { type = NavType.StringType })
-                      ) { backStackEntry ->
-                          val muscle = backStackEntry.arguments?.getString("muscle")
-                              ?.let { n -> Muscle.entries.firstOrNull { it.name == n } }
-                          if (muscle != null) {
-                              val statsVm: MuscleStatsViewModel = viewModel(
-                                  factory = MuscleStatsViewModel.factory(
-                                      trainingRepository, muscle, workoutSettings.settings.value.trackRpe
-                                  )
-                              )
-                              MuscleStatsScreen(
-                                  viewModel = statsVm,
-                                  onBack = goBack,
-                                  onHome = goHome,
-                                  onOpenSettings = openSettings
-                              )
-                          }
-                      }
-                      composable(Destination.Macro.route) {
-                          val macroVm: MacroViewModel = viewModel(
-                              factory = MacroViewModel.factory(
-                                  database.foodDao(), database.ingredientDao(), database.bodyDao(), trainingRepository, workoutSettings.settings.value.trackRpe
-                              )
-                          )
-                          MacroScreen(
-                              viewModel = macroVm,
-                              targets = macroTargets,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(Destination.BodyHistory.route) {
-                          val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
-                          BodyHistoryScreen(
-                              viewModel = bodyVm,
-                              onOpenComposition = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.BodyCompositionHistory.route,
-                          arguments = listOf(navArgument("metric") { type = NavType.StringType })
-                      ) { entry ->
-                          val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
-                          CompositionHistoryScreen(
-                              metric = CompositionMetric.fromRouteId(entry.arguments?.getString("metric")),
-                              viewModel = bodyVm,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(Destination.Body.route) {
-                          val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
-                          BodyScreen(
-                              viewModel = bodyVm,
-                              onOpenMuscle = { muscle -> navigateTo(Destination.MuscleStats.createRoute(muscle)) },
-                              onOpenCompositionHistory = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(Destination.CustomExerciseList.route) {
-                          val listVm: CustomExerciseListViewModel =
-                              viewModel(factory = CustomExerciseListViewModel.factory(trainingRepository))
-                          CustomExerciseListScreen(
-                              viewModel = listVm,
-                              onAdd = { navigateTo(Destination.CustomExerciseForm.createRoute(null)) },
-                              onEdit = { id -> navigateTo(Destination.CustomExerciseForm.createRoute(id)) },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.CustomExerciseForm.route,
-                          arguments = listOf(navArgument("exerciseId") {
-                              type = NavType.LongType
-                              defaultValue = -1L
-                          })
-                      ) { backStackEntry ->
-                          val editId = backStackEntry.arguments?.getLong("exerciseId")?.takeIf { it != -1L }
-                          val customVm: CustomExerciseFormViewModel =
-                              viewModel(factory = CustomExerciseFormViewModel.factory(trainingRepository, editId))
-                          CustomExerciseFormScreen(
-                              viewModel = customVm,
-                              onSaved = goBack,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-
-                      // ---- Streaks ----
-                      composable(Destination.Streaks.route) {
-                          StreaksScreen(
-                              viewModel = streakViewModel,
-                              onOpenStreak = { id -> navigateTo(Destination.StreakDetail.createRoute(id)) },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(Destination.StreakEditor.route) {
-                          StreakEditorScreen(
-                              viewModel = streakViewModel,
-                              onDone = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.StreakDetail.route,
-                          arguments = listOf(navArgument("streakId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
-                          StreakDetailScreen(
-                              streakId = streakId,
-                              viewModel = streakViewModel,
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings,
-                              onOpenSavedDays = {
-                                  navigateTo(Destination.SavedDaysForStreak.createRoute(streakId))
-                              },
-                              onSaveDay = { sId, date ->
-                                  navigateTo(Destination.SavedDayDetail.createRoute(sId, date))
+                        }
+                        composable(Destination.WorkoutHistoryList.route) {
+                            WorkoutHistoryListScreen(
+                                viewModel = workoutViewModel,
+                                onOpenWorkout = { id ->
+                                    navigateTo(Destination.WorkoutHistory.createRoute(id))
+                                },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.WorkoutHistory.route,
+                            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            WorkoutHistoryScreen(
+                                workoutId = workoutId,
+                                viewModel = workoutViewModel,
+                                onOpenSession = { id ->
+                                    navigateTo(Destination.SessionDetail.createRoute(id))
+                                },
+                                onOpenStats = { id ->
+                                    navigateTo(Destination.WorkoutStats.createRoute(id))
+                                },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.WorkoutStats.route,
+                            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            val graphVm: WorkoutGraphViewModel = viewModel(
+                                factory = WorkoutGraphViewModel.factory(
+                                    trainingRepository, workoutId, workoutSettings.settings.value.trackRpe
+                                )
+                            )
+                            WorkoutStatsScreen(
+                                graphViewModel = graphVm,
+                                workoutId = workoutId,
+                                viewModel = workoutViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                useTargets = workoutSettings.settings.value.targetReps
+                            )
+                        }
+                        composable(
+                            route = Destination.WorkoutDetail.route,
+                            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            WorkoutDetailScreen(
+                                workoutId = workoutId,
+                                viewModel = workoutViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onEdit = { id -> navigateTo(Destination.WorkoutBuilder.createRoute(id)) },
+                                onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
+                                onViewExercise = { exId ->
+                                    navigateTo(Destination.ExerciseViewer.createRoute(exId))
+                                }
+                            )
+                        }
+                        composable(
+                            route = Destination.ExerciseViewer.route,
+                            arguments = listOf(navArgument("exerciseId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
+                            ExerciseViewerScreen(
+                                exerciseId = exerciseId,
+                                viewModel = workoutViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onEdit = { id -> navigateTo(Destination.CustomExerciseForm.createRoute(id)) }
+                            )
+                        }
+                        composable(
+                            route = Destination.ExerciseProgress.route,
+                            arguments = listOf(
+                                navArgument("workoutId") { type = NavType.LongType },
+                                navArgument("exerciseId") { type = NavType.LongType }
+                            )
+                        ) { backStackEntry ->
+                            val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            val exerciseId = backStackEntry.arguments?.getLong("exerciseId") ?: -1L
+                            ExerciseProgressScreen(
+                                workoutId = workoutId,
+                                exerciseId = exerciseId,
+                                viewModel = workoutViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                useTargets = workoutSettings.settings.value.targetReps
+                            )
+                        }
+                        composable(
+                            route = Destination.WorkoutSession.route,
+                            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            val workoutName by produceState(initialValue = "", workoutId) {
+                                value = if (workoutId == EMPTY_WORKOUT_ID) "Empty workout"
+                                else workoutViewModel.getWorkout(workoutId)?.workout?.name.orEmpty()
+                            }
+                            val loggerVm: LoggerViewModel =
+                                viewModel(factory = LoggerViewModel.factory(trainingRepository, workoutSettings))
+                            WorkoutSessionScreen(
+                                workoutId = workoutId,
+                                workoutName = workoutName,
+                                viewModel = loggerVm,
+                                onFinished = goBack,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.SessionDetail.route,
+                            arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
+                            SessionDetailScreen(
+                                sessionId = sessionId,
+                                viewModel = workoutViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.WorkoutBuilder.route,
+                            arguments = listOf(navArgument("workoutId") {
+                                type = NavType.LongType
+                                defaultValue = -1L
+                            })
+                        ) { backStackEntry ->
+                            val workoutId = backStackEntry.arguments
+                                ?.getLong("workoutId")
+                                ?.takeIf { it != -1L }
+                            // One builder per screen instance: it survives rotation, but opening the
+                            // editor again starts from the saved template, never from an earlier session's edits.
+                            val builderVm: BuilderViewModel = viewModel(
+                                viewModelStoreOwner = backStackEntry,
+                                factory = BuilderViewModel.factory(trainingRepository, workoutSettings)
+                            )
+                            // The name must be known before the screen starts (it seeds the text field).
+                            val initialName by produceState<String?>(
+                                initialValue = if (workoutId == null) "" else null,
+                                workoutId
+                            ) {
+                                value = workoutId?.let { workoutViewModel.getWorkout(it)?.workout?.name.orEmpty() }.orEmpty()
+                            }
+                            initialName?.let { loadedName ->
+                              CompositionLocalProvider(
+                                LocalOpenCustomExercise provides { navigateTo(Destination.CustomExerciseForm.createRoute(null)) }
+                              ) {
+                                WorkoutBuilderScreen(
+                                    workoutId = workoutId,
+                                    initialName = loadedName,
+                                    viewModel = builderVm,
+                                    onSaveRecord = { name -> workoutViewModel.saveWorkoutRecord(workoutId, name) },
+                                    onDelete = if (workoutId == null) null else ({
+                                        workoutViewModel.deleteWorkout(workoutId)
+                                        popToRoute(Destination.Workouts.route)
+                                    }),
+                                    deleteTemplate = trainingRepository::deleteTemplate,
+                                    onDone = goBack,
+                                    onHome = goHome,
+                                    onOpenSettings = openSettings
+                                )
                               }
-                          )
-                      }
-                      composable(Destination.SavedDays.route) {
-                          SavedDaysScreen(
-                              viewModel = streakViewModel,
-                              onOpenStreak = { id ->
-                                  navigateTo(Destination.SavedDaysForStreak.createRoute(id))
-                              },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.SavedDaysForStreak.route,
-                          arguments = listOf(navArgument("streakId") { type = NavType.LongType })
-                      ) { backStackEntry ->
-                          val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
-                          SavedDaysForStreakScreen(
-                              streakId = streakId,
-                              viewModel = streakViewModel,
-                              onOpenDay = { sId, date ->
-                                  navigateTo(Destination.SavedDayDetail.createRoute(sId, date))
-                              },
-                              onBack = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
-                      composable(
-                          route = Destination.SavedDayDetail.route,
-                          arguments = listOf(
-                              navArgument("streakId") { type = NavType.LongType },
-                              navArgument("date") { type = NavType.StringType }
-                          )
-                      ) { backStackEntry ->
-                          val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
-                          val date = backStackEntry.arguments?.getString("date") ?: ""
-                          SavedDayDetailScreen(
-                              streakId = streakId,
-                              date = date,
-                              viewModel = streakViewModel,
-                              onDone = goBack,
-                              onHome = goHome,
-                              onOpenSettings = openSettings
-                          )
-                      }
+                            }
+                        }
+
+                        composable(
+                            route = Destination.MuscleStats.route,
+                            arguments = listOf(navArgument("muscle") { type = NavType.StringType })
+                        ) { backStackEntry ->
+                            val muscle = backStackEntry.arguments?.getString("muscle")
+                                ?.let { n -> Muscle.entries.firstOrNull { it.name == n } }
+                            if (muscle != null) {
+                                val statsVm: MuscleStatsViewModel = viewModel(
+                                    factory = MuscleStatsViewModel.factory(
+                                        trainingRepository, muscle, workoutSettings.settings.value.trackRpe
+                                    )
+                                )
+                                MuscleStatsScreen(
+                                    viewModel = statsVm,
+                                    onBack = goBack,
+                                    onHome = goHome,
+                                    onOpenSettings = openSettings
+                                )
+                            }
+                        }
+                        composable(Destination.Macro.route) {
+                            val macroVm: MacroViewModel = viewModel(
+                                factory = MacroViewModel.factory(
+                                    database.foodDao(), database.ingredientDao(), database.bodyDao(), trainingRepository, workoutSettings.settings.value.trackRpe
+                                )
+                            )
+                            MacroScreen(
+                                viewModel = macroVm,
+                                targets = macroTargets,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(Destination.BodyHistory.route) {
+                            val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                            BodyHistoryScreen(
+                                viewModel = bodyVm,
+                                onOpenComposition = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.BodyCompositionHistory.route,
+                            arguments = listOf(navArgument("metric") { type = NavType.StringType })
+                        ) { entry ->
+                            val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                            CompositionHistoryScreen(
+                                metric = CompositionMetric.fromRouteId(entry.arguments?.getString("metric")),
+                                viewModel = bodyVm,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(Destination.Body.route) {
+                            val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                            BodyScreen(
+                                viewModel = bodyVm,
+                                onOpenMuscle = { muscle -> navigateTo(Destination.MuscleStats.createRoute(muscle)) },
+                                onOpenCompositionHistory = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(Destination.CustomExerciseList.route) {
+                            val listVm: CustomExerciseListViewModel =
+                                viewModel(factory = CustomExerciseListViewModel.factory(trainingRepository))
+                            CustomExerciseListScreen(
+                                viewModel = listVm,
+                                onAdd = { navigateTo(Destination.CustomExerciseForm.createRoute(null)) },
+                                onEdit = { id -> navigateTo(Destination.CustomExerciseForm.createRoute(id)) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.CustomExerciseForm.route,
+                            arguments = listOf(navArgument("exerciseId") {
+                                type = NavType.LongType
+                                defaultValue = -1L
+                            })
+                        ) { backStackEntry ->
+                            val editId = backStackEntry.arguments?.getLong("exerciseId")?.takeIf { it != -1L }
+                            val customVm: CustomExerciseFormViewModel =
+                                viewModel(factory = CustomExerciseFormViewModel.factory(trainingRepository, editId))
+                            CustomExerciseFormScreen(
+                                viewModel = customVm,
+                                onSaved = goBack,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+
+                        // ---- Streaks ----
+                        composable(Destination.Streaks.route) {
+                            StreaksScreen(
+                                viewModel = streakViewModel,
+                                onOpenStreak = { id -> navigateTo(Destination.StreakDetail.createRoute(id)) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(Destination.StreakEditor.route) {
+                            StreakEditorScreen(
+                                viewModel = streakViewModel,
+                                onDone = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.StreakDetail.route,
+                            arguments = listOf(navArgument("streakId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
+                            StreakDetailScreen(
+                                streakId = streakId,
+                                viewModel = streakViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onOpenSavedDays = {
+                                    navigateTo(Destination.SavedDaysForStreak.createRoute(streakId))
+                                },
+                                onSaveDay = { sId, date ->
+                                    navigateTo(Destination.SavedDayDetail.createRoute(sId, date))
+                                }
+                            )
+                        }
+                        composable(Destination.SavedDays.route) {
+                            SavedDaysScreen(
+                                viewModel = streakViewModel,
+                                onOpenStreak = { id ->
+                                    navigateTo(Destination.SavedDaysForStreak.createRoute(id))
+                                },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.SavedDaysForStreak.route,
+                            arguments = listOf(navArgument("streakId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
+                            SavedDaysForStreakScreen(
+                                streakId = streakId,
+                                viewModel = streakViewModel,
+                                onOpenDay = { sId, date ->
+                                    navigateTo(Destination.SavedDayDetail.createRoute(sId, date))
+                                },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.SavedDayDetail.route,
+                            arguments = listOf(
+                                navArgument("streakId") { type = NavType.LongType },
+                                navArgument("date") { type = NavType.StringType }
+                            )
+                        ) { backStackEntry ->
+                            val streakId = backStackEntry.arguments?.getLong("streakId") ?: -1L
+                            val date = backStackEntry.arguments?.getString("date") ?: ""
+                            SavedDayDetailScreen(
+                                streakId = streakId,
+                                date = date,
+                                viewModel = streakViewModel,
+                                onDone = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                    }
                   }
                 }
             }
