@@ -36,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import java.util.Calendar
@@ -58,6 +59,14 @@ internal val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
  *    [DayFill.Intensity] give the heat-map shading. Tapping a day behaves exactly as in month
  *    view, so the selected-day panel under the calendar works unchanged.
  *
+ * Sizing knobs for screens where the calendar is the main content:
+ *  - [cellAspectRatio] is width / height of a month-view cell. Below 1 the cells get taller.
+ *  - [fixedRows] always draws 6 week rows, so the calendar keeps one height from month to month.
+ *  - [yearCellSize] is the smallest a year-view cell may be (it scrolls sideways when the year
+ *    doesn't fit).
+ *  - [swipeNavigation] = false turns off swipe-to-change-month, for calendars inside a pager
+ *    where a sideways swipe should change page instead. The chevrons still work.
+ *
  * Corner rounding follows the button rounding from Appearance, and cells are padded so squares
  * never merge.
  */
@@ -70,6 +79,10 @@ fun MonthCalendar(
     selectable: Boolean = true,
     firstDayOfWeek: Int = Calendar.SUNDAY,
     showModeToggle: Boolean = true,
+    swipeNavigation: Boolean = true,
+    cellAspectRatio: Float = 1f,
+    fixedRows: Boolean = false,
+    yearCellSize: Dp = 12.dp,
     onDayClick: (String) -> Unit = {},
     cellContent: (@Composable BoxScope.(DayCellInfo) -> Unit)? = null
 ) {
@@ -129,6 +142,7 @@ fun MonthCalendar(
                 selectable = selectable,
                 firstDayOfWeek = firstDayOfWeek,
                 decorate = decorate,
+                minCellSize = yearCellSize,
                 onDayClick = { dayKey ->
                     if (selectable) state.selectedDay = dayKey
                     // So switching back to month view lands on the day you tapped.
@@ -167,23 +181,27 @@ fun MonthCalendar(
 
         val leading = (month.firstWeekday() - firstDayOfWeek + 7) % 7
         val days = month.daysInMonth()
-        val rows = (leading + days + 6) / 7
+        val rows = if (fixedRows) 6 else (leading + days + 6) / 7
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(month, first, last) {
-                    var total = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { total = 0f },
-                        onDragEnd = {
-                            if (total > 120f && month > first) state.visibleMonth = month.previous()
-                            else if (total < -120f && month < last) state.visibleMonth = month.next()
-                            total = 0f
-                        },
-                        onHorizontalDrag = { _, amount -> total += amount }
-                    )
-                }
+                .then(
+                    if (swipeNavigation) {
+                        Modifier.pointerInput(month, first, last) {
+                            var total = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { total = 0f },
+                                onDragEnd = {
+                                    if (total > 120f && month > first) state.visibleMonth = month.previous()
+                                    else if (total < -120f && month < last) state.visibleMonth = month.next()
+                                    total = 0f
+                                },
+                                onHorizontalDrag = { _, amount -> total += amount }
+                            )
+                        }
+                    } else Modifier
+                )
         ) {
             for (row in 0 until rows) {
                 Row(modifier = Modifier.fillMaxWidth()) {
@@ -192,7 +210,7 @@ fun MonthCalendar(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .aspectRatio(1f)
+                                .aspectRatio(cellAspectRatio)
                         ) {
                             if (dayOfMonth in 1..days) {
                                 val dayKey = month.dayKey(dayOfMonth)

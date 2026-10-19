@@ -26,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.ashrdev.aznd.ui.common.share.FlexPreset
+import com.ashrdev.aznd.ui.common.share.route
 import com.ashrdev.aznd.ui.components.TopAppBar
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
@@ -141,6 +143,7 @@ fun HomeScreen(
                 tray = tray,
                 onSelectPage = { goToPage(it) },
                 onOpenSettings = { onNavigate(Destination.Settings.route) },
+                onShare = { onNavigate(FlexPreset.HOME.route()) },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }

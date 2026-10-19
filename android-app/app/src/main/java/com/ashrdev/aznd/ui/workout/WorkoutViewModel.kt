@@ -60,6 +60,10 @@ class WorkoutViewModel(
         dao.getWorkoutHistorySummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Every history session with its sets, newest first (feeds the Workout History pages). */
+    val allSessions: StateFlow<List<SessionWithSets>> = dao.getSessions()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun sessionsForWorkout(workoutId: Long): Flow<List<SessionWithSets>> =
         dao.getSessionsForWorkout(workoutId)
     suspend fun getMostRecentSession(): RecentWorkoutSession? = dao.getMostRecentSession()

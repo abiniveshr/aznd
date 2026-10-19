@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,7 +58,9 @@ fun WorkoutDetailScreen(
     onEdit: (Long) -> Unit,
     onOpenSession: (Long) -> Unit,
     // Opens the exercise viewer for a catalog exercise id.
-    onViewExercise: (Long) -> Unit
+    onViewExercise: (Long) -> Unit,
+    // Opens Flex on the routine preset for this workout.
+    onShare: (Long) -> Unit
 ) {
     val active by viewModel.activeSession.collectAsState()
     var workout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
@@ -112,6 +115,14 @@ fun WorkoutDetailScreen(
             icon = Icons.Default.Edit,
             label = "Edit",
             onClick = { onEdit(item.workout.id) }
+        ),
+        extraActions = listOf(
+            ThirdAction(
+                icon = Icons.Default.Share,
+                label = "Share",
+                enabled = hasRows,
+                onClick = { onShare(item.workout.id) }
+            )
         ),
         primaryAction = PrimaryAction(
             icon = Icons.Default.PlayArrow,

@@ -88,7 +88,8 @@ internal fun YearGrid(
     firstDayOfWeek: Int,
     decorate: (String) -> DayDecoration,
     onDayClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    minCellSize: Dp = MinCellSize
 ) {
     val colors = MaterialTheme.colorScheme
     val today = todayDayKey()
@@ -99,7 +100,7 @@ internal fun YearGrid(
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val viewport = maxWidth - WeekdayLabelWidth
-        val cell: Dp = maxOf(viewport / layout.weeks, MinCellSize)
+        val cell: Dp = maxOf(viewport / layout.weeks, minCellSize)
 
         // A ScrollState starting past the end is clamped to the end once measured, so this
         // needs no waiting for layout. For the current year, put today's week at the right edge.

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -121,7 +122,8 @@ fun bottomBarClearance(hasMainRow: Boolean = true): Dp = bottomBarHeight(hasMain
 // Shared shell: rounded-top surface, drag-to-reveal handle, and the Home / Settings / Manage data
 // row. `row1` is whatever a screen wants as its main row (always visible); null leaves just the
 // handle. Pulling the bar up reveals the Home / Settings / Manage data row. [onHome] is null on
-// the Home pager itself, which hides the Home tile.
+// the Home pager itself, which hides the Home tile. [onShare] takes that tile's place there (Flex), so the
+// pull-up row is Share / Settings / Manage data on Home and Home / Settings / Manage data everywhere else.
 @Composable
 fun BottomBarShell(
     tray: Animatable<Float, AnimationVector1D>,
@@ -130,6 +132,7 @@ fun BottomBarShell(
     settingsEnabled: Boolean = true,
     manageDataEnabled: Boolean = true,
     onHome: (() -> Unit)? = null,
+    onShare: (() -> Unit)? = null,
     row1: (@Composable () -> Unit)? = null
 ) {
     val openManageData = LocalManageData.current
@@ -232,6 +235,16 @@ fun BottomBarShell(
                             ) {
                                 collapseTray()
                                 onHome()
+                            }
+                        }
+                        if (onHome == null && onShare != null) {
+                            ActionTile(
+                                icon = Icons.Default.Share,
+                                label = "Share",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            ) {
+                                collapseTray()
+                                onShare()
                             }
                         }
                         // Grayed out and inert while you're already inside Settings.

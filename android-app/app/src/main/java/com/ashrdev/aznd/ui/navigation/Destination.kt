@@ -39,6 +39,8 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseProgress,
  *                     Muscle data (dropdown) -> MuscleStats
  *
+ * Flex (share card maker): Share in the pull-up bar on Home, and the Share button of SessionDetail,
+ * WorkoutDetail, ExerciseProgress and SavedDayDetail, each with its own preset.
  * Settings -> Appearance opens from the pull-up bar on every screen.
  * Manage data (Delete | Export | Import) opens from the pull-up bar on every screen: from Home,
  * Settings and Appearance it lists all data, from a screen inside an app it is pre-filtered to
@@ -85,6 +87,15 @@ sealed class Destination(val route: String) {
     }
     object SessionDetail : Destination("session_detail/{sessionId}") {
         fun createRoute(sessionId: Long) = "session_detail/$sessionId"
+    }
+
+    /**
+     * Flex, the share-card maker. [preset] is a FlexPreset id; a / b are ids and s a text key whose meaning
+     * depends on the preset (see FlexPreset). Callers use FlexPreset.route(...), which also encodes [s].
+     */
+    object Flex : Destination("flex/{preset}?a={a}&b={b}&s={s}") {
+        fun createRoute(preset: String, a: Long = -1L, b: Long = -1L, s: String = "") =
+            "flex/$preset?a=$a&b=$b&s=$s"
     }
 
     object Streaks : Destination("streaks")

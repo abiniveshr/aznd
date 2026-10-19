@@ -24,15 +24,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.workout.SessionPhotoCard
-import com.ashrdev.aznd.ui.workout.SessionShare
 
 private const val REMARK_LIMIT = 50
 
@@ -44,10 +41,10 @@ fun SavedDayDetailScreen(
     viewModel: StreakViewModel,
     onDone: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    // Opens Flex on the streak-day preset.
+    onShare: () -> Unit
 ) {
-    val context = LocalContext.current
-    var streakName by remember { mutableStateOf("") }
     var remark by remember { mutableStateOf("") }
     var photoUri by remember { mutableStateOf<String?>(null) }
     var streakCount by remember { mutableStateOf(0) }
@@ -60,7 +57,6 @@ fun SavedDayDetailScreen(
     )
 
     LaunchedEffect(streakId, date) {
-        streakName = viewModel.getStreak(streakId)?.name ?: ""
         viewModel.getSavedDay(streakId, date)?.let { existing ->
             remark = existing.remark
             photoUri = existing.photoUri
@@ -97,14 +93,7 @@ fun SavedDayDetailScreen(
         onOpenSettings = onOpenSettings,
         topBarActions = {
             if (isExisting) {
-                IconButton(onClick = {
-                    SessionShare.share(
-                        context = context,
-                        subject = "$streakName · ${displayDate(date)}",
-                        body = "$streakName · Day $streakCount\n${displayDate(date)}\n\n$remark\n\nlogged with aznd",
-                        photoUri = photoUri?.toUri()
-                    )
-                }) {
+                IconButton(onClick = onShare) {
                     Icon(Icons.Default.Share, contentDescription = "Share")
                 }
                 IconButton(onClick = { showDelete = true }) {

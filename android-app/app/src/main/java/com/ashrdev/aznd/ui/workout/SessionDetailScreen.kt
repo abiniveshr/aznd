@@ -27,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import com.ashrdev.aznd.data.workout.LoggedSetEntity
 import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.SessionWithSets
@@ -41,9 +40,10 @@ fun SessionDetailScreen(
     viewModel: WorkoutViewModel,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    // Opens Flex on the workout preset for this session.
+    onShare: () -> Unit
 ) {
-    val context = LocalContext.current
     var data by remember { mutableStateOf<SessionWithSets?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(setOf<String>()) }
@@ -71,14 +71,7 @@ fun SessionDetailScreen(
         third = ThirdAction(
             icon = Icons.Default.Share,
             label = "Share",
-            onClick = {
-                SessionShare.share(
-                    context = context,
-                    subject = "${item.session.workoutName} · ${formatTimestamp(item.session.startedAt)}",
-                    body = formatSessionText(item.session, item.sets),
-                    photoUri = item.session.photoUri?.toUri()
-                )
-            }
+            onClick = onShare
         )
     ) { padding ->
         LazyColumn(

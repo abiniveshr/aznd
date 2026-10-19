@@ -64,6 +64,7 @@ fun PhotoViewerDialog(uriString: String, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        PhotoBackdrop()
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -91,7 +92,7 @@ fun PhotoViewerDialog(uriString: String, onDismiss: () -> Unit) {
                 Text(
                     "Tap the photo to open it in your gallery",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.75f)
+                    color = Color.White.copy(alpha = 0.9f)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -111,6 +112,15 @@ fun PhotoViewerDialog(uriString: String, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * What sits behind a full-screen photo: the page, blurred and dimmed enough that none of its text
+ * shows through next to the photo's hint and buttons. Without blur support it is dimmed harder.
+ */
+@Composable
+fun PhotoBackdrop() {
+    BlurBehindDialog(radius = 28.dp, dim = 0.65f, dimWithoutBlur = 0.88f)
 }
 
 private fun openInGallery(context: Context, uri: Uri) {

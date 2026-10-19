@@ -1,7 +1,5 @@
 package com.ashrdev.aznd.ui.manage
 
-import android.os.Build
-import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,18 +35,15 @@ import com.ashrdev.aznd.ui.components.Card
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import com.ashrdev.aznd.data.manage.DataApp
 import com.ashrdev.aznd.data.manage.isAll
 import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.calendar.todayDayKey
+import com.ashrdev.aznd.ui.common.BlurBehindDialog
 import com.ashrdev.aznd.ui.common.CustomRangeRow
 import com.ashrdev.aznd.ui.common.DateRangeKind
 import com.ashrdev.aznd.ui.common.DateRangeState
@@ -443,25 +437,5 @@ private fun CheckRow(
             Text(label, style = MaterialTheme.typography.bodyLarge)
             if (supporting != null) Hint(supporting)
         }
-    }
-}
-
-/**
- * Blurs whatever is behind the dialog this is placed in. It asks the window compositor to do it
- * (Android 12+, when the device allows it), so it costs nothing in Compose: no re-drawing the page,
- * no extra layers. Where blur isn't available the normal dim is left exactly as it was.
- */
-@Composable
-private fun BlurBehindDialog(radius: Dp = 10.dp) {
-    val view = LocalView.current
-    val radiusPx = with(LocalDensity.current) { radius.roundToPx() }
-    SideEffect {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return@SideEffect
-        val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
-        val windowManager = view.context.getSystemService(WindowManager::class.java) ?: return@SideEffect
-        if (!windowManager.isCrossWindowBlurEnabled) return@SideEffect
-        window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-        window.attributes = window.attributes.also { it.blurBehindRadius = radiusPx }
-        window.setDimAmount(0.25f)
     }
 }

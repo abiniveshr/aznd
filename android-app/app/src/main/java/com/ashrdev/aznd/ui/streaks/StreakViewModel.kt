@@ -13,10 +13,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class StreakWithCount(val streak: StreakEntity, val currentStreak: Int)
+
+/** A streak with its current and longest run, read once (used by the Flex share card). */
+data class StreakSnapshot(val streak: StreakEntity, val current: Int, val longest: Int)
 
 class StreakViewModel(private val dao: StreakDao) : ViewModel() {
     // Re-computed when streaks OR slips change, so counts on the Streaks screen never go stale.
@@ -34,6 +38,17 @@ class StreakViewModel(private val dao: StreakDao) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     suspend fun getStreak(id: Long): StreakEntity? = dao.getStreak(id)
+
+    /** Every streak with its current and longest run, as of today. */
+    suspend fun streakSnapshots(): List<StreakSnapshot> {
+        val today = todayKey()
+        val streaks = dao.getStreaks().first()
+        val breaksByStreak = dao.getAllBreaks().first().groupBy({ it.streakId }, { it.date })
+        return streaks.map { s ->
+            val stats = computeStreakStats(s.startDate, breaksByStreak[s.id].orEmpty().toSet(), emptyList(), today)
+            StreakSnapshot(s, stats.current, stats.longest)
+        }
+    }
 
     fun createStreak(
         name: String,

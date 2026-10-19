@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
+import com.ashrdev.aznd.ui.common.PhotoBackdrop
 import com.ashrdev.aznd.ui.common.saveImageToDevice
 import kotlinx.coroutines.launch
 
@@ -60,6 +61,7 @@ fun SessionPhotoDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        PhotoBackdrop()
         Box(
             modifier = Modifier
                 .fillMaxSize()

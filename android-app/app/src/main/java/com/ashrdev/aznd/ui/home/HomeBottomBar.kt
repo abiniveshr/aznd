@@ -29,6 +29,7 @@ fun HomeBottomBar(
     tray: Animatable<Float, AnimationVector1D>,
     onSelectPage: (Int) -> Unit,
     onOpenSettings: () -> Unit,
+    onShare: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val bar = SubPageBar(
@@ -40,6 +41,7 @@ fun HomeBottomBar(
         tray = tray,
         onOpenSettings = onOpenSettings,
         modifier = modifier,
+        onShare = onShare,
         row1 = { SubPageTabs(bar) }
     )
 }

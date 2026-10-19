@@ -26,6 +26,9 @@ import com.ashrdev.aznd.data.AppDatabase
 import com.ashrdev.aznd.data.manage.DataApp
 import com.ashrdev.aznd.data.manage.DataRegistry
 import com.ashrdev.aznd.data.manage.DataTransfer
+import com.ashrdev.aznd.ui.common.share.FlexPreset
+import com.ashrdev.aznd.ui.common.share.FlexScreen
+import com.ashrdev.aznd.ui.common.share.route
 import com.ashrdev.aznd.ui.home.HomeScreen
 import com.ashrdev.aznd.ui.manage.LocalDataTransfer
 import com.ashrdev.aznd.ui.manage.LocalManageData
@@ -249,6 +252,9 @@ class MainActivity : ComponentActivity() {
                                 onOpenWorkout = { id ->
                                     navigateTo(Destination.WorkoutHistory.createRoute(id))
                                 },
+                                onOpenSession = { id ->
+                                    navigateTo(Destination.SessionDetail.createRoute(id))
+                                },
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings
@@ -308,7 +314,8 @@ class MainActivity : ComponentActivity() {
                                 onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
                                 onViewExercise = { exId ->
                                     navigateTo(Destination.ExerciseViewer.createRoute(exId))
-                                }
+                                },
+                                onShare = { id -> navigateTo(FlexPreset.ROUTINE.route(a = id)) }
                             )
                         }
                         composable(
@@ -341,7 +348,8 @@ class MainActivity : ComponentActivity() {
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings,
-                                useTargets = workoutSettings.settings.value.targetReps
+                                useTargets = workoutSettings.settings.value.targetReps,
+                                onShare = { navigateTo(FlexPreset.EXERCISE.route(a = workoutId, b = exerciseId)) }
                             )
                         }
                         composable(
@@ -375,7 +383,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = workoutViewModel,
                                 onBack = goBack,
                                 onHome = goHome,
-                                onOpenSettings = openSettings
+                                onOpenSettings = openSettings,
+                                onShare = { navigateTo(FlexPreset.WORKOUT.route(a = sessionId)) }
                             )
                         }
                         composable(
@@ -600,6 +609,40 @@ class MainActivity : ComponentActivity() {
                                 date = date,
                                 viewModel = streakViewModel,
                                 onDone = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onShare = { navigateTo(FlexPreset.STREAK_DAY.route(a = streakId, s = date)) }
+                            )
+                        }
+
+                        // ---- Flex (share card maker) ----
+                        composable(
+                            route = Destination.Flex.route,
+                            arguments = listOf(
+                                navArgument("preset") { type = NavType.StringType },
+                                navArgument("a") {
+                                    type = NavType.LongType
+                                    defaultValue = -1L
+                                },
+                                navArgument("b") {
+                                    type = NavType.LongType
+                                    defaultValue = -1L
+                                },
+                                navArgument("s") {
+                                    type = NavType.StringType
+                                    defaultValue = ""
+                                }
+                            )
+                        ) { backStackEntry ->
+                            val args = backStackEntry.arguments
+                            FlexScreen(
+                                preset = FlexPreset.fromId(args?.getString("preset")),
+                                a = args?.getLong("a") ?: -1L,
+                                b = args?.getLong("b") ?: -1L,
+                                s = args?.getString("s") ?: "",
+                                workoutViewModel = workoutViewModel,
+                                streakViewModel = streakViewModel,
+                                onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings
                             )
