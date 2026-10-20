@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.home.ActionTile
 import com.ashrdev.aznd.ui.home.TabsHeight
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.ThemeColor
+import com.ashrdev.aznd.ui.theme.themedFill
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -78,7 +80,7 @@ fun SubPageTabs(bar: SubPageBar, modifier: Modifier = Modifier) {
                 .fillMaxHeight()
                 .padding(3.dp)
                 .clip(style.buttonShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
+                .themedFill(ThemeColor.HIGHLIGHT)
         )
 
         Row(modifier = Modifier.fillMaxSize()) {

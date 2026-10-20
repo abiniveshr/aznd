@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.AlertDialog
+import com.ashrdev.aznd.ui.components.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -201,9 +201,7 @@ private fun ViewPage(
         runningSession?.let { running ->
             item(key = "running") {
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
+                    highlight = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = { onOpenSession(running.workoutId) })

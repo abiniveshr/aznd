@@ -46,6 +46,8 @@ import com.ashrdev.aznd.ui.home.bottomBarClearance
 import com.ashrdev.aznd.ui.home.bottomBarHeight
 import com.ashrdev.aznd.ui.home.rememberTrayState
 import com.ashrdev.aznd.ui.home.settleTo
+import com.ashrdev.aznd.ui.theme.ThemeColor
+import com.ashrdev.aznd.ui.theme.themedFill
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -93,6 +95,11 @@ fun ScreenScaffold(
     BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
+        // The screen's fill (gradient / pattern included) is painted by the modifier; Material's own
+        // container is see-through, so its content colour is set by hand.
+        modifier = Modifier.themedFill(ThemeColor.BACKGROUND),
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
             TopAppBar(
                 title = {

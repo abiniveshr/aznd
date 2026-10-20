@@ -47,7 +47,7 @@ architecture:
     -run tracker
     
 
-progress:
+dev log:
 
     17/08/2026:
         -identified desired data sets, planned the program flow
@@ -82,3 +82,10 @@ progress:
 
     20/08/2026-13/10/2026:
         -added macro tracker, body composition tracker and testing a swipe/gesture based UX. exercise list with custom exercises, framework for a 3d wireframe muscle model to display exercises, target muscles and interactive menus (not implemented).
+    14/10/2026-20/10/2026:
+        -more work on the swipe UX, added a flex card feature as base for all sharing, testing currently
+    20/10/2026:
+        -rapid improvement in the flex feature
+    21/10/2026:
+        -new app theming features that extend to the flex cards
+        -flex system broke on implementing new theming

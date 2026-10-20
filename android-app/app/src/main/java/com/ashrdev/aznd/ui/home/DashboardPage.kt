@@ -162,7 +162,7 @@ private fun StreakSummaryCard(
     onClick: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        highlight = true,
         modifier = Modifier
             .width(150.dp)
             .clickable(onClick = onClick)

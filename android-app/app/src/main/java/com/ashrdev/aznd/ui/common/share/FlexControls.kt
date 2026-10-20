@@ -25,7 +25,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
+import com.ashrdev.aznd.ui.components.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -157,42 +157,14 @@ fun ColorRow(label: String, color: Int, onChange: (Int) -> Unit) {
     }
 }
 
-/** Hue / saturation / brightness sliders with a live preview. Returns an opaque ARGB colour. */
+/** The app-wide colour picker (square, hue bar, RGB, hex, swatches). Returns an opaque ARGB colour. */
 @Composable
 fun ColorPickerDialog(initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
-    val start = remember {
-        FloatArray(3).also { android.graphics.Color.colorToHSV(initial, it) }
-    }
-    var hue by remember { mutableStateOf(start[0]) }
-    var sat by remember { mutableStateOf(start[1]) }
-    var value by remember { mutableStateOf(start[2]) }
-    val argb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Pick a colour") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(MaterialTheme.shapes.small)
-                        .background(Color(argb))
-                        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
-                )
-                Text(
-                    "#%06X".format(argb and 0xFFFFFF),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                LabeledSlider("Hue", "${hue.toInt()}°", hue, 0f..360f) { hue = it }
-                LabeledSlider("Saturation", "${(sat * 100).toInt()}%", sat, 0f..1f) { sat = it }
-                LabeledSlider("Brightness", "${(value * 100).toInt()}%", value, 0f..1f) { value = it }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onPick(argb) }) { Text("Use colour") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    com.ashrdev.aznd.ui.common.AdvancedColorPickerDialog(
+        title = "Pick a colour",
+        initial = initial,
+        onDismiss = onDismiss,
+        onPick = onPick
     )
 }
 

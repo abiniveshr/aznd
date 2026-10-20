@@ -81,6 +81,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.BarPage
+import com.ashrdev.aznd.ui.common.FillCopySource
+import com.ashrdev.aznd.ui.common.FillEditorDialog
 import com.ashrdev.aznd.ui.common.ReorderableItem
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.dragReorderHandle
@@ -94,11 +96,22 @@ import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
+import com.ashrdev.aznd.ui.theme.FillBase
+import com.ashrdev.aznd.ui.theme.FillStyle
+import com.ashrdev.aznd.ui.theme.GradientKind
+import com.ashrdev.aznd.ui.theme.GradientSpec
+import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.ResolvedFill
+import com.ashrdev.aznd.ui.theme.ThemeColor
+import com.ashrdev.aznd.ui.theme.ThemePresets
+import com.ashrdev.aznd.ui.theme.azndFill
+import com.ashrdev.aznd.ui.theme.azndStyleOf
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Left to right: how the card looks, what is on it, the card itself. Opens on the middle one. */
@@ -286,7 +299,13 @@ fun FlexScreen(
                             assets = assets,
                             plan = pl,
                             bottom = bottom,
-                            onMoveBlock = { from, to -> update { moveBlock(it, from, to) } }
+                            onRowsChange = { shown, rows, old, moved -> update { applyRows(it, shown, rows, old, moved) } },
+                            onWidths = { weights ->
+                                update { sp -> sp.copy(blocks = sp.blocks.map { b -> weights[b.id]?.let { b.copy(width = it) } ?: b }) }
+                            },
+                            onSizeBlock = { id, size ->
+                                update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
+                            }
                         )
                     }
                 }
@@ -360,7 +379,9 @@ fun FlexPreview(
     boxHeight: Dp,
     modifier: Modifier = Modifier,
     canvasModifier: Modifier = Modifier,
-    overlay: (DrawScope.(scale: Float) -> Unit)? = null
+    overlay: (DrawScope.(scale: Float) -> Unit)? = null,
+    /** Read while drawing (so changes redraw without recomposing): blocks being held or gliding. */
+    poses: (() -> FlexPoses?)? = null
 ) {
     val ratio by animateFloatAsState(
         targetValue = FLEX_CARD_WIDTH / plan.height,
@@ -383,7 +404,7 @@ fun FlexPreview(
                 val native = canvas.nativeCanvas
                 native.save()
                 native.clipRect(0f, 0f, size.width, size.height)
-                FlexPainter.draw(native, size.width, spec, content, assets, plan)
+                FlexPainter.draw(native, size.width, spec, content, assets, plan, poses?.invoke())
                 native.restore()
             }
             overlay?.invoke(this, k)
@@ -451,6 +472,25 @@ private fun ContentTab(
                         update { sp -> sp.copy(blocks = sp.blocks.filter { it.id != block.id }) }
                     },
                     onPickPhoto = { onPickPhoto(block.id) },
+                    onWidth = { v ->
+                        update { sp ->
+                            val widths = resizeWidth(plan, block.id, v)
+                            if (widths.isEmpty()) {
+                                sp.copy(blocks = sp.blocks.map { if (it.id == block.id) it.copy(width = v) else it })
+                            } else {
+                                sp.copy(blocks = sp.blocks.map { b -> widths[b.id]?.let { b.copy(width = it) } ?: b })
+                            }
+                        }
+                    },
+                    onPlaceBeside = { beside ->
+                        // The first explicit choice freezes the current arrangement, so nothing else moves.
+                        update { sp ->
+                            val frozen = applyRows(sp, plan.shownIds, plan.rows)
+                            frozen.copy(blocks = frozen.blocks.map {
+                                if (it.id == block.id) it.copy(place = if (beside) FlexPlace.BESIDE else FlexPlace.BELOW) else it
+                            })
+                        }
+                    },
                     dragModifier = Modifier.dragReorderOnLongPress(reorder, block.id),
                     handleModifier = Modifier.dragReorderHandle(reorder, block.id)
                 )
@@ -500,6 +540,8 @@ private fun BlockCard(
     onChange: (FlexBlock) -> Unit,
     onDelete: () -> Unit,
     onPickPhoto: () -> Unit,
+    onPlaceBeside: (Boolean) -> Unit,
+    onWidth: (Float) -> Unit,
     /** Put on the header row: hold it, then drag the block to a new place. */
     dragModifier: Modifier = Modifier,
     /** Put on the hamburger icon: drag straight away. */
@@ -546,6 +588,22 @@ private fun BlockCard(
             AnimatedVisibility(visible = expanded) {
               Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 BlockPreview(spec, content, assets, plan, block)
+                LabeledSlider(
+                    label = "Size",
+                    valueText = "${(block.size * 100).roundToInt()}%",
+                    value = block.size,
+                    range = 0.5f..2f
+                ) { onChange(block.copy(size = it)) }
+                val row = plan.rows.firstOrNull { block.id in it }
+                val beside = if (row != null) row.indexOf(block.id) > 0 else block.place == FlexPlace.BESIDE
+                SwitchRow("Place beside the previous block", beside, onPlaceBeside)
+                val share = if (row != null) widthFraction(plan, block.id) else block.width.coerceIn(MIN_BLOCK_WIDTH, 1f)
+                LabeledSlider(
+                    label = "Width",
+                    valueText = "${(share * 100).roundToInt()}% of the row",
+                    value = share,
+                    range = MIN_BLOCK_WIDTH..1f
+                ) { onWidth(it) }
                 if (type.variants.size > 1) {
                     ChipChoice(
                         options = type.variants.indices.toList(),
@@ -591,6 +649,29 @@ private fun BlockCard(
                             TextButton(onClick = { onChange(block.copy(keys = null)) }) { Text("Use default") }
                         }
                     }
+                    // Crop: what shapes are allowed depends on the card size; the crop can be changed any time.
+                    val aspect = spec.style.aspect
+                    val options = FlexPhotoRatio.entries.filter { it.allowedOn(aspect) }
+                    val current = options.firstOrNull { it != FlexPhotoRatio.ORIGINAL && abs(it.ratio - block.photoRatio) < 0.01f }
+                        ?: FlexPhotoRatio.ORIGINAL
+                    val real = options.filter { it != FlexPhotoRatio.ORIGINAL }
+                    val lowest = real.minByOrNull { it.ratio }?.label
+                    val highest = real.maxByOrNull { it.ratio }?.label
+                    DropdownField(
+                        label = "Crop shape" + if (lowest != null && highest != null) " (this size allows $lowest to $highest)" else "",
+                        options = options,
+                        selected = current,
+                        optionLabel = { if (it == FlexPhotoRatio.ORIGINAL) "Original, within what fits" else it.label }
+                    ) { onChange(block.copy(photoRatio = it.ratio)) }
+                    LabeledSlider("Zoom", "${(block.photoZoom * 10).roundToInt() / 10f}×", block.photoZoom, 1f..3f) {
+                        onChange(block.copy(photoZoom = it))
+                    }
+                    LabeledSlider("Move left / right", "${(block.photoX * 100).roundToInt()}%", block.photoX, 0f..1f) {
+                        onChange(block.copy(photoX = it))
+                    }
+                    LabeledSlider("Move up / down", "${(block.photoY * 100).roundToInt()}%", block.photoY, 0f..1f) {
+                        onChange(block.copy(photoY = it))
+                    }
                 }
                 TextButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -617,16 +698,57 @@ private fun LookTab(
     onReset: () -> Unit
 ) {
     val st = spec.style
-    val scheme = MaterialTheme.colorScheme
-    val appPalette = FlexPalette(
-        id = "app",
-        label = "App theme",
-        bgA = scheme.background.toArgb(),
-        bgB = scheme.surfaceVariant.toArgb(),
-        text = scheme.onBackground.toArgb(),
-        accent = scheme.primary.toArgb(),
-        panel = scheme.onBackground.toArgb()
-    )
+    val app = LocalAzndStyle.current
+    // The app theme's elements, for the Copy button of the fill dialogs.
+    val themeSources = ThemeColor.entries.map { e ->
+        val resolved = app.fill(e)
+        FillCopySource(e.label, resolved.base.toArgb(), resolved.style)
+    }
+    var editBackground by remember { mutableStateOf(false) }
+    var editPanels by remember { mutableStateOf(false) }
+
+    if (editBackground) {
+        FillEditorDialog(
+            title = "Background",
+            baseLabel = "Colour",
+            baseColor = st.bgA,
+            fill = st.backgroundFill(),
+            onDismiss = { editBackground = false },
+            onApply = { color, fill ->
+                style { s ->
+                    if (fill.base == FillBase.GRADIENT) {
+                        val stops = fill.gradient.cleanStops()
+                        s.copy(
+                            bgMode = FlexBgMode.GRADIENT,
+                            bgA = stops.first().color,
+                            bgB = stops.last().color,
+                            gradientAngle = fill.gradient.angle,
+                            bgGradient = fill.gradient,
+                            bgPatterns = fill.patterns
+                        )
+                    } else {
+                        s.copy(bgMode = FlexBgMode.SOLID, bgA = color, bgGradient = null, bgPatterns = fill.patterns)
+                    }
+                }
+                editBackground = false
+            },
+            copyFrom = themeSources
+        )
+    }
+    if (editPanels) {
+        FillEditorDialog(
+            title = "Panels",
+            baseLabel = "Panel colour",
+            baseColor = st.panelColor,
+            fill = st.panelFill,
+            onDismiss = { editPanels = false },
+            onApply = { color, fill ->
+                style { it.copy(panelColor = color, panelFill = fill) }
+                editPanels = false
+            },
+            copyFrom = themeSources
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -636,13 +758,32 @@ private fun LookTab(
         item {
             FlexSection("Starter looks") {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(listOf(appPalette) + FlexPalettes.all) { p ->
-                        PaletteChip(p) { style { it.withPalette(p) } }
+                    item {
+                        // The app's own theme: screen fill, card fill, borders, corners and colours carry over.
+                        val bg = app.fill(ThemeColor.BACKGROUND)
+                        LookChip("System theme", bg, app.button.toArgb()) { style { it.withAppTheme(app) } }
+                    }
+                    items(FlexPalettes.all) { p ->
+                        val fill = ResolvedFill(
+                            Color(p.bgA),
+                            FillStyle.ofGradient(GradientSpec.of(GradientKind.LINEAR, 135, p.bgA, p.bgB))
+                        )
+                        LookChip(p.label, fill, p.accent) { style { it.withPalette(p) } }
+                    }
+                }
+                Text("App theme presets", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(ThemePresets.all) { preset ->
+                        val presetStyle = azndStyleOf(preset.settings, dark = true)
+                        val look = FlexStyle().withAppTheme(presetStyle)
+                        LookChip(preset.name, ResolvedFill(Color(look.bgA), look.backgroundFill()), look.accent) {
+                            style { it.withAppTheme(presetStyle) }
+                        }
                     }
                 }
             }
         }
-        backgroundItems(st, hasDefaultPhoto, style, onPickPhoto)
+        backgroundItems(st, hasDefaultPhoto, style, onPickPhoto) { editBackground = true }
         item {
             FlexSection("Size") {
                 DropdownField("Card size", FlexAspect.entries, st.aspect, { it.label }) { picked ->
@@ -689,8 +830,27 @@ private fun LookTab(
             FlexSection("Panels") {
                 ChipChoice(FlexPanel.entries, st.panel, { it.label }) { picked -> style { it.copy(panel = picked) } }
                 if (st.panel == FlexPanel.FILLED) {
-                    LabeledSlider("Opacity", "${(st.panelAlpha * 100).roundToInt()}%", st.panelAlpha, 0.04f..0.6f) { v ->
+                    // The slider stops at 60% for the see-through look; a themed panel can be fully opaque.
+                    LabeledSlider("Opacity", "${(st.panelAlpha * 100).roundToInt()}%", st.panelAlpha, 0.04f..1f) { v ->
                         style { it.copy(panelAlpha = v) }
+                    }
+                    Text(
+                        "Fill: ${st.panelFill.summary()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(onClick = { editPanels = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Panel gradient & pattern")
+                    }
+                }
+                if (st.panel != FlexPanel.NONE) {
+                    LabeledSlider(
+                        "Border",
+                        if (st.panelBorderWidth == 0) "default" else "${st.panelBorderWidth}",
+                        st.panelBorderWidth.toFloat(), 0f..24f
+                    ) { v -> style { it.copy(panelBorderWidth = v.roundToInt()) } }
+                    if (st.panelBorderWidth > 0) {
+                        ColorRow("Panel border colour", st.panelBorderColor) { c -> style { it.copy(panelBorderColor = c) } }
                     }
                 }
                 if (st.panel != FlexPanel.NONE) {
@@ -705,7 +865,7 @@ private fun LookTab(
                 LabeledSlider("Corner radius", "${st.cardRadius}", st.cardRadius.toFloat(), 0f..160f) { v ->
                     style { it.copy(cardRadius = v.roundToInt()) }
                 }
-                LabeledSlider("Border", if (st.borderWidth == 0) "off" else "${st.borderWidth}", st.borderWidth.toFloat(), 0f..24f) { v ->
+                LabeledSlider("Border", if (st.borderWidth == 0) "off" else "${st.borderWidth}", st.borderWidth.toFloat(), 0f..48f) { v ->
                     style { it.copy(borderWidth = v.roundToInt()) }
                 }
                 if (st.borderWidth > 0) {
@@ -730,7 +890,7 @@ private fun LookTab(
 }
 
 @Composable
-private fun PaletteChip(p: FlexPalette, onClick: () -> Unit) {
+private fun LookChip(label: String, fillOf: ResolvedFill, accent: Int, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
@@ -742,7 +902,7 @@ private fun PaletteChip(p: FlexPalette, onClick: () -> Unit) {
             modifier = Modifier
                 .size(52.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Color(p.bgA), Color(p.bgB))))
+                .azndFill(fillOf, CircleShape)
                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -750,10 +910,10 @@ private fun PaletteChip(p: FlexPalette, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(18.dp)
                     .clip(CircleShape)
-                    .background(Color(p.accent))
+                    .background(Color(accent))
             )
         }
-        Text(p.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 
@@ -766,7 +926,8 @@ private fun LazyListScope.backgroundItems(
     st: FlexStyle,
     hasDefaultPhoto: Boolean,
     style: ((FlexStyle) -> FlexStyle) -> Unit,
-    onPickPhoto: () -> Unit
+    onPickPhoto: () -> Unit,
+    onAdvanced: () -> Unit
 ) {
     item {
         FlexSection("Background") {
@@ -776,14 +937,36 @@ private fun LazyListScope.backgroundItems(
     if (st.bgMode != FlexBgMode.PHOTO) {
         item {
             FlexSection(if (st.bgMode == FlexBgMode.GRADIENT) "Gradient" else "Colour") {
-                ColorRow(if (st.bgMode == FlexBgMode.GRADIENT) "Start colour" else "Colour", st.bgA) { c ->
-                    style { it.copy(bgA = c) }
-                }
-                if (st.bgMode == FlexBgMode.GRADIENT) {
-                    ColorRow("End colour", st.bgB) { c -> style { it.copy(bgB = c) } }
-                    LabeledSlider("Angle", "${st.gradientAngle}°", st.gradientAngle.toFloat(), 0f..360f) { v ->
-                        style { it.copy(gradientAngle = v.roundToInt()) }
+                val advancedGradient = st.bgMode == FlexBgMode.GRADIENT && st.bgGradient != null
+                if (advancedGradient) {
+                    Text(
+                        "Advanced gradient: ${st.backgroundFill().summary()}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = { style { it.copy(bgGradient = null) } }) { Text("Back to a simple two-colour gradient") }
+                } else {
+                    ColorRow(if (st.bgMode == FlexBgMode.GRADIENT) "Start colour" else "Colour", st.bgA) { c ->
+                        style { it.copy(bgA = c) }
                     }
+                    if (st.bgMode == FlexBgMode.GRADIENT) {
+                        ColorRow("End colour", st.bgB) { c -> style { it.copy(bgB = c) } }
+                        LabeledSlider("Angle", "${st.gradientAngle}°", st.gradientAngle.toFloat(), 0f..360f) { v ->
+                            style { it.copy(gradientAngle = v.roundToInt()) }
+                        }
+                    }
+                }
+                val activePatterns = st.bgPatterns.filter { it.isActive }
+                if (activePatterns.isNotEmpty()) {
+                    Text(
+                        if (activePatterns.size == 1) "Pattern: ${activePatterns[0].kind.label}"
+                        else "Patterns: ${activePatterns.joinToString(", ") { it.kind.label }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(onClick = onAdvanced, modifier = Modifier.fillMaxWidth()) {
+                    Text("Multi-colour gradient & pattern")
                 }
             }
         }

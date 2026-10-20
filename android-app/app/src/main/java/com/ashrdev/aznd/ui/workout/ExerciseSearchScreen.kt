@@ -56,6 +56,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import com.ashrdev.aznd.ui.theme.ThemeColor
+import com.ashrdev.aznd.ui.theme.themedFill
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -104,7 +106,11 @@ fun ExerciseSearchScreen(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(
+            modifier = Modifier.fillMaxSize().themedFill(ThemeColor.BACKGROUND),
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground
+        ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                     IconButton(onClick = onDismiss) {
@@ -328,7 +334,11 @@ private fun ExerciseFilterScreen(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(
+            modifier = Modifier.fillMaxSize().themedFill(ThemeColor.BACKGROUND),
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground
+        ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                     IconButton(onClick = onDismiss) {
@@ -477,7 +487,7 @@ private fun ExerciseRow(exercise: Exercise, isSelected: Boolean, onClick: () -> 
                 .fillMaxWidth()
                 .background(
                     if (isSelected) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                    else MaterialTheme.colorScheme.background
+                    else Color.Transparent
                 )
                 .clickable(onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 8.dp)

@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.manage.LocalManageData
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.ThemeColor
+import com.ashrdev.aznd.ui.theme.azndFill
 import kotlinx.coroutines.launch
 
 val HandleAreaHeight = 20.dp
@@ -159,14 +161,16 @@ fun BottomBarShell(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (style.cardOutline) Modifier.topOutline(shape, style.outline, 1.dp) else Modifier),
+            .then(if (style.bottomBarBorder > 0.dp) Modifier.topOutline(shape, style.outline, style.bottomBarBorder) else Modifier),
         shape = shape,
-        color = style.card,
+        // Flat colour underneath (it also casts the shadow); the gradient / pattern fill is painted over it.
+        color = style.bottomBar,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 12.dp
     ) {
         Column(
             modifier = Modifier
+                .azndFill(style.fill(ThemeColor.BOTTOM_BAR))
                 .navigationBarsPadding()
                 .padding(bottom = BarBottomMargin)
                 .draggable(

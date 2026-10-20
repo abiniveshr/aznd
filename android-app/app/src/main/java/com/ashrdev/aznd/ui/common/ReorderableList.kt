@@ -1,6 +1,7 @@
 package com.ashrdev.aznd.ui.common
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -238,19 +240,22 @@ fun LazyItemScope.ReorderableItem(
     content: @Composable () -> Unit
 ) {
     val active = state.isHeld(key)
+    // Lifts off the list while held (bigger, with a shadow) and settles back on drop.
+    val lift by animateFloatAsState(if (state.draggingKey == key) 1f else 0f, label = "reorderLift")
     Box(
         modifier = modifier
             .animateItem(placementSpec = if (active) null else spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold))
             .zIndex(if (active) 1f else 0f)
             .graphicsLayer {
                 translationY = state.translationOf(key)
-                if (state.draggingKey == key) {
-                    scaleX = 1.02f
-                    scaleY = 1.02f
-                }
+                val grow = 1f + 0.03f * lift
+                scaleX = grow
+                scaleY = grow
+                shadowElevation = 28f * lift
+                shape = RoundedCornerShape(16.dp)
+                clip = false
             }
     ) {
         content()
     }
 }
-

@@ -5,6 +5,11 @@ import android.content.res.AssetManager
 import android.graphics.Typeface
 import android.os.Build
 import com.ashrdev.aznd.domain.formatWeight
+import com.ashrdev.aznd.ui.theme.FillBase
+import com.ashrdev.aznd.ui.theme.FillStyle
+import com.ashrdev.aznd.ui.theme.GradientKind
+import com.ashrdev.aznd.ui.theme.GradientSpec
+import com.ashrdev.aznd.ui.theme.PatternSpec
 import java.util.concurrent.ConcurrentHashMap
 
 /*
@@ -33,7 +38,39 @@ enum class FlexAspect(val label: String, val width: Int, val height: Int, val ma
     PORTRAIT("Post 4:5", FLEX_CARD_WIDTH, 1350, 5),
     STORY("Story 9:16", FLEX_CARD_WIDTH, 1920, 7),
     WIDE("Wide 16:9", FLEX_CARD_WIDTH, 608, 4),
-    FREE("Free size (fits content)", FLEX_CARD_WIDTH, 0, Int.MAX_VALUE)
+    FREE("Free size (fits content)", FLEX_CARD_WIDTH, 0, Int.MAX_VALUE);
+
+    /**
+     * Which photo shapes (width / height) suit this card: from three quarters to four thirds of the card's
+     * own shape. Square takes 3:4 up to 4:3, Story (9:16) takes up to 3:4, and so on. A photo outside the
+     * range is cropped to the nearest end of it. Free size, having no shape of its own, takes 3:4 to 16:9.
+     */
+    fun photoRange(): ClosedFloatingPointRange<Float> =
+        if (height <= 0) 0.75f..(16f / 9f) else {
+            val r = width.toFloat() / height
+            (r * 0.75f)..(r * 4f / 3f)
+        }
+}
+
+/** The photo shapes offered in a photo block's crop menu (those inside the card's [FlexAspect.photoRange]). */
+enum class FlexPhotoRatio(val label: String, val ratio: Float) {
+    ORIGINAL("Original", 0f),
+    R1_1("1:1", 1f),
+    R4_3("4:3", 4f / 3f),
+    R3_4("3:4", 3f / 4f),
+    R3_2("3:2", 3f / 2f),
+    R2_3("2:3", 2f / 3f),
+    R5_4("5:4", 5f / 4f),
+    R4_5("4:5", 4f / 5f),
+    R16_9("16:9", 16f / 9f),
+    R9_16("9:16", 9f / 16f),
+    R21_9("21:9", 21f / 9f);
+
+    fun allowedOn(aspect: FlexAspect): Boolean {
+        if (this == ORIGINAL) return true
+        val range = aspect.photoRange()
+        return ratio >= range.start - 0.005f && ratio <= range.endInclusive + 0.005f
+    }
 }
 
 /**
@@ -137,6 +174,10 @@ data class FlexStyle(
     val bgA: Int = FlexPalettes.Midnight.bgA,
     val bgB: Int = FlexPalettes.Midnight.bgB,
     val gradientAngle: Int = 135,
+    /** An advanced gradient (any number of colours, linear / radial / sweep). Null = the two-colour one from [bgA], [bgB] and [gradientAngle]. */
+    val bgGradient: GradientSpec? = null,
+    /** Patterns (noise, brushed ...) over a solid or gradient background, first = lowest. */
+    val bgPatterns: List<PatternSpec> = emptyList(),
     /** A photo the person picked. For [FlexBgMode.PHOTO] it wins over the share's own photo (e.g. the workout photo). */
     val photoUri: String? = null,
     val photoBlur: Float = 0.5f,
@@ -153,6 +194,11 @@ data class FlexStyle(
     val panelColor: Int = FlexPalettes.Midnight.panel,
     val panelAlpha: Float = 0.12f,
     val panelRadius: Int = 36,
+    /** Gradient / pattern for Filled panels; [panelColor] is the solid colour under it. Plain = just [panelColor]. */
+    val panelFill: FillStyle = FillStyle.Plain,
+    /** Border around every panel in card pixels; 0 keeps each panel type's own look (none, 3 px outline, 2 px glass edge). */
+    val panelBorderWidth: Int = 0,
+    val panelBorderColor: Int = FlexPalettes.Midnight.accent,
     val cardRadius: Int = 0,
     val borderWidth: Int = 0,
     val borderColor: Int = FlexPalettes.Midnight.accent,
@@ -161,7 +207,17 @@ data class FlexStyle(
 ) {
     fun withPalette(p: FlexPalette): FlexStyle = copy(
         bgA = p.bgA, bgB = p.bgB, textColor = p.text, accent = p.accent,
-        panelColor = p.panel, borderColor = p.accent
+        panelColor = p.panel, borderColor = p.accent,
+        // A starter look is plain colours: it clears gradients, patterns and panel borders.
+        bgGradient = null, bgPatterns = emptyList(), panelFill = FillStyle.Plain,
+        panelBorderWidth = 0, panelBorderColor = p.accent
+    )
+
+    /** The background as a fill (for Solid and Gradient modes; a photo is drawn separately). */
+    fun backgroundFill(): FillStyle = FillStyle(
+        base = if (bgMode == FlexBgMode.GRADIENT) FillBase.GRADIENT else FillBase.SOLID,
+        gradient = bgGradient ?: GradientSpec.of(GradientKind.LINEAR, gradientAngle, bgA, bgB),
+        patterns = bgPatterns
     )
 }
 
@@ -180,7 +236,7 @@ enum class FlexBlockType(
     HEADER("Title", listOf("Standard", "Huge", "Compact"), "Show date", false),
     STREAKS("Streaks", listOf("Cards", "Grid", "Hero number"), "Show longest run", true),
     TOP_SET("Top set", listOf("Hero", "Rows"), "Show RPE and date", true),
-    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show \"calculated from\" on rows", true),
+    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show \"calculated from\"", true),
     SESSION_STATS("Workout stats", listOf("Tiles", "One line"), null, false),
     EXERCISES("Exercises", listOf("Detailed", "Compact", "Best set only"), "Show RPE", true),
     ROUTINE("Routine", listOf("Detailed", "Compact"), "Show targets", true),
@@ -189,6 +245,16 @@ enum class FlexBlockType(
     PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false),
     TEXT("Text", listOf("Plain", "Quote", "Big"), null, false)
 }
+
+/**
+ * Where a block goes relative to the one before it. [AUTO] is "whatever the card size does by default": below,
+ * except on the wide size, which packs blocks side by side by itself. The first explicit choice on a card
+ * freezes the arrangement into [BELOW] / [BESIDE] for every block (see [FlexPlan.rows]).
+ */
+enum class FlexPlace { AUTO, BELOW, BESIDE }
+
+/** At most this many blocks share a row; more would be squeezed. */
+const val FLEX_MAX_PER_ROW = 3
 
 /**
  * One piece of a card. A block is generic on purpose (every field is a plain value), so a card can be
@@ -205,7 +271,24 @@ data class FlexBlock(
     /** TEXT: the text. HEADER: replaces the title when not blank. */
     val text: String = "",
     /** The block's detail switch, see [FlexBlockType.flagLabel]. */
-    val flag: Boolean = true
+    val flag: Boolean = true,
+    /** How big the block is drawn: 1 = natural, 0.5 to 2. Everything in it (text, numbers, images) scales together. */
+    val size: Float = 1f,
+    /** Below the previous block (new row) or beside it (same row), see [FlexPlace]. */
+    val place: FlexPlace = FlexPlace.AUTO,
+    /**
+     * How much of its row's width the block takes, 0.15 to 1. A block can be narrower than the row and
+     * others can sit in the space left. If a row's blocks add up to more than 1 they share it in those
+     * proportions, which is also how rows from older versions (every width 1) come out as equal splits.
+     */
+    val width: Float = 1f,
+    /** PHOTO: the crop shape (width / height); 0 = the photo's own shape. Limited by [FlexAspect.photoRange]. */
+    val photoRatio: Float = 0f,
+    /** PHOTO: zoom into the picture, 1 to 3. */
+    val photoZoom: Float = 1f,
+    /** PHOTO: where the crop sits, 0 to 1 from left to right and from top to bottom (0.5 = centre). */
+    val photoX: Float = 0.5f,
+    val photoY: Float = 0.5f
 )
 
 data class FlexSpec(val style: FlexStyle, val blocks: List<FlexBlock>) {
