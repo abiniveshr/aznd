@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Visibility
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.common.rememberReorderState
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import kotlinx.coroutines.launch
 
@@ -123,7 +125,15 @@ fun WorkoutBuilderScreen(
             ) { Text("Save") }
         }
     ) { padding ->
+        // The workout name is the first list item, so the exercise cards start at index 1.
+        val listState = rememberLazyListState()
+        val reorder = rememberReorderState(
+            listState = listState,
+            firstItemIndex = 1,
+            itemCount = state.cards.size
+        ) { from, to -> viewModel.moveCard(from, to) }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
@@ -144,7 +154,8 @@ fun WorkoutBuilderScreen(
                 exercises = exercises,
                 showTargets = settings.targetReps,
                 actions = viewModel.actions,
-                onAddExercise = { showAddPicker = true }
+                onAddExercise = { showAddPicker = true },
+                reorder = reorder
             )
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,6 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.common.ReorderState
+import com.ashrdev.aznd.ui.common.ReorderableItem
+import com.ashrdev.aznd.ui.common.dragReorderHandle
+import com.ashrdev.aznd.ui.common.dragReorderOnLongPress
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
@@ -62,22 +67,44 @@ private val SmallIcon = 40.dp
  * Emits the exercise cards plus the "Add exercise" button into the caller's LazyColumn.
  * Rows appear/disappear in place: nothing here opens a dialog or sheet, requests focus or scrolls.
  * [showTargets] = the "Target reps" setting (OFF hides all target fields; stored targets are kept).
+ * With a [reorder] state, a card can be held and dragged to a new place (the caller applies the move).
  */
 fun LazyListScope.builderItems(
     state: BuilderState,
     exercises: List<Exercise>,
     showTargets: Boolean,
     actions: BuilderActions,
-    onAddExercise: () -> Unit = actions.onAddCard
+    onAddExercise: () -> Unit = actions.onAddCard,
+    reorder: ReorderState? = null
 ) {
     val byId = exercises.associateBy { it.id }
     val depth = state.depthById
     items(state.cards, key = { it.rows.first().id }) { card ->
-        ExerciseCard(card, byId, exercises, depth, showTargets, actions)
+        val cardKey = card.rows.first().id
+        if (reorder == null) {
+            ExerciseCard(card, byId, exercises, depth, showTargets, actions)
+        } else {
+            ReorderableItem(reorder, cardKey) {
+                ExerciseCard(
+                    card, byId, exercises, depth, showTargets, actions,
+                    dragModifier = Modifier.dragReorderOnLongPress(reorder, cardKey),
+                    handleModifier = Modifier.dragReorderHandle(reorder, cardKey)
+                )
+            }
+        }
     }
     item(key = "add-exercise") {
-        OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) {
-            Text("Add exercise")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) {
+                Text("Add exercise")
+            }
+            if (reorder != null && state.cards.size > 1) {
+                Text(
+                    "Hold an exercise and drag it to reorder",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -89,11 +116,14 @@ private fun ExerciseCard(
     all: List<Exercise>,
     depth: Map<Long, Int>,
     showTargets: Boolean,
-    actions: BuilderActions
+    actions: BuilderActions,
+    dragModifier: Modifier = Modifier,
+    /** Put on the hamburger icon at the end of the header: drag straight away. Null = no handle. */
+    handleModifier: Modifier? = null
 ) {
     val first = card.rows.first()
     val exercise = card.exerciseId?.let { byId[it] }
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().then(dragModifier)) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -106,6 +136,15 @@ private fun ExerciseCard(
                     onPick = { actions.onPickCardExercise(first.id, it.id) },
                     modifier = Modifier.weight(1f)
                 )
+                if (handleModifier != null) {
+                    Icon(
+                        Icons.Default.Menu,
+                        contentDescription = "Drag to reorder",
+                        modifier = handleModifier
+                            .size(40.dp)
+                            .padding(8.dp)
+                    )
+                }
                 if (card.exerciseId == null) {
                     // An empty card has no rows to edit yet; this removes it.
                     IconButton(onClick = { actions.onDelete(first.id) }) {

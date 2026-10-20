@@ -17,11 +17,12 @@ object FlexExport {
     private const val DIR = "shared"
     private const val MAX_AGE_MS = 24L * 60 * 60 * 1000
 
-    /** Draws the card at [width] pixels wide (1080 is native; the height follows the aspect). */
+    /** Draws the card at [width] pixels wide (1080 is native). The height comes from the layout: fixed by the size, or by the content for Free size. */
     fun render(spec: FlexSpec, content: FlexContent, assets: FlexAssets, width: Int = FLEX_CARD_WIDTH): Bitmap {
-        val height = (spec.style.aspect.height * width / FLEX_CARD_WIDTH.toFloat()).roundToInt().coerceAtLeast(1)
+        val plan = FlexPainter.plan(spec, content, assets)
+        val height = (plan.height * width / FLEX_CARD_WIDTH.toFloat()).roundToInt().coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        FlexPainter.draw(Canvas(bitmap), width.toFloat(), spec, content, assets)
+        FlexPainter.draw(Canvas(bitmap), width.toFloat(), spec, content, assets, plan)
         return bitmap
     }
 

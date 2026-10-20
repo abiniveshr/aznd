@@ -75,6 +75,11 @@ class BuilderViewModel(
         }
     }
 
+    /** Drag-to-reorder: the exercise card at [from] moves to [to]. */
+    fun moveCard(from: Int, to: Int) {
+        _state.update { it.moveCard(from, to) }
+    }
+
     val actions = BuilderActions(
         onPickCardExercise = { row, ex -> _state.update { it.pickCardExercise(row, ex) } },
         onPickRowExercise = { row, ex -> _state.update { it.pickRowExercise(row, ex) } },

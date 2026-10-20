@@ -1,7 +1,11 @@
 package com.ashrdev.aznd.ui.common.share
 
+import android.content.Context
+import android.content.res.AssetManager
 import android.graphics.Typeface
+import android.os.Build
 import com.ashrdev.aznd.domain.formatWeight
+import java.util.concurrent.ConcurrentHashMap
 
 /*
  * Flex: the card / poster maker used by every "share" button in the app.
@@ -18,20 +22,43 @@ import com.ashrdev.aznd.domain.formatWeight
 /** Every card is drawn on a canvas this wide; the height follows the aspect. Export scales from it. */
 const val FLEX_CARD_WIDTH = 1080
 
-enum class FlexAspect(val label: String, val width: Int, val height: Int) {
-    SQUARE("Square 1:1", FLEX_CARD_WIDTH, 1080),
-    PORTRAIT("Post 4:5", FLEX_CARD_WIDTH, 1350),
-    STORY("Story 9:16", FLEX_CARD_WIDTH, 1920),
-    WIDE("Wide 16:9", FLEX_CARD_WIDTH, 608)
+/**
+ * Card sizes. [maxBlocks] is how many blocks a size can show before they would be squeezed too small:
+ * further blocks are left out (and the editor says so). [FREE] has no fixed height: the card grows or
+ * shrinks to fit whatever is on it, so nothing is ever squeezed (its [height] is 0, the real height comes
+ * from the layout plan).
+ */
+enum class FlexAspect(val label: String, val width: Int, val height: Int, val maxBlocks: Int) {
+    SQUARE("Square 1:1", FLEX_CARD_WIDTH, 1080, 3),
+    PORTRAIT("Post 4:5", FLEX_CARD_WIDTH, 1350, 5),
+    STORY("Story 9:16", FLEX_CARD_WIDTH, 1920, 7),
+    WIDE("Wide 16:9", FLEX_CARD_WIDTH, 608, 4),
+    FREE("Free size (fits content)", FLEX_CARD_WIDTH, 0, Int.MAX_VALUE)
 }
 
-enum class FlexFont(val label: String) {
+/**
+ * Text styles. The first six use the fonts Android ships with. The rest are open-source families (all SIL
+ * Open Font License) bundled as files in assets/fonts/; if a file is missing the card falls back to Sans.
+ * [boldAsset] is a separate bold file; [variable] means one variable font whose weight is set on load.
+ */
+enum class FlexFont(
+    val label: String,
+    val asset: String? = null,
+    val boldAsset: String? = null,
+    val variable: Boolean = false
+) {
     SANS("Sans"),
     CONDENSED("Condensed"),
     SERIF("Serif"),
     MONO("Mono"),
     HEAVY("Heavy"),
-    LIGHT("Light");
+    LIGHT("Light"),
+    BEBAS("Bebas Neue", asset = "fonts/BebasNeue-Regular.ttf"),
+    ANTON("Anton", asset = "fonts/Anton-Regular.ttf"),
+    ARCHIVO_BLACK("Archivo Black", asset = "fonts/ArchivoBlack-Regular.ttf"),
+    SPACE_MONO("Space Mono", asset = "fonts/SpaceMono-Regular.ttf", boldAsset = "fonts/SpaceMono-Bold.ttf"),
+    PLAYFAIR("Playfair Display", asset = "fonts/PlayfairDisplay-Variable.ttf", variable = true),
+    DM_SERIF("DM Serif Display", asset = "fonts/DMSerifDisplay-Regular.ttf");
 
     fun face(bold: Boolean): Typeface = when (this) {
         SANS -> Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
@@ -40,6 +67,36 @@ enum class FlexFont(val label: String) {
         MONO -> Typeface.create("monospace", if (bold) Typeface.BOLD else Typeface.NORMAL)
         HEAVY -> Typeface.create(if (bold) "sans-serif-black" else "sans-serif-medium", Typeface.NORMAL)
         LIGHT -> Typeface.create(if (bold) "sans-serif-medium" else "sans-serif-light", Typeface.NORMAL)
+        else -> FlexFonts.load(this, bold) ?: SANS.face(bold)
+    }
+}
+
+/** Loads and caches the bundled fonts. [attach] is called once with any context before a card is drawn. */
+object FlexFonts {
+    @Volatile
+    private var assets: AssetManager? = null
+    private val cache = ConcurrentHashMap<String, Typeface>()
+
+    fun attach(context: Context) {
+        if (assets == null) assets = context.applicationContext.assets
+    }
+
+    internal fun load(font: FlexFont, bold: Boolean): Typeface? {
+        val am = assets ?: return null
+        val path = (if (bold) font.boldAsset else null) ?: font.asset ?: return null
+        val key = "$path|$bold"
+        cache[key]?.let { return it }
+        val face = runCatching {
+            if (font.variable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Typeface.Builder(am, path)
+                    .setFontVariationSettings(if (bold) "'wght' 700" else "'wght' 400")
+                    .build()
+            } else {
+                Typeface.createFromAsset(am, path)
+            }
+        }.getOrNull() ?: return null
+        cache[key] = face
+        return face
     }
 }
 
@@ -123,7 +180,7 @@ enum class FlexBlockType(
     HEADER("Title", listOf("Standard", "Huge", "Compact"), "Show date", false),
     STREAKS("Streaks", listOf("Cards", "Grid", "Hero number"), "Show longest run", true),
     TOP_SET("Top set", listOf("Hero", "Rows"), "Show RPE and date", true),
-    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show the set it came from", true),
+    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show \"calculated from\" on rows", true),
     SESSION_STATS("Workout stats", listOf("Tiles", "One line"), null, false),
     EXERCISES("Exercises", listOf("Detailed", "Compact", "Best set only"), "Show RPE", true),
     ROUTINE("Routine", listOf("Detailed", "Compact"), "Show targets", true),

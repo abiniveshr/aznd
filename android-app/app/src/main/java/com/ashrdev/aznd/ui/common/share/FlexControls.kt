@@ -16,12 +16,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -36,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Card
@@ -183,4 +194,159 @@ fun ColorPickerDialog(initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit
         confirmButton = { TextButton(onClick = { onPick(argb) }) { Text("Use colour") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+// ---------------------------------------------------------------------------------------------
+// Dropdowns
+// ---------------------------------------------------------------------------------------------
+
+/** The closed look of a dropdown: the current value and an arrow, outlined. */
+@Composable
+private fun DropdownBox(text: String, onClick: () -> Unit) {
+    val shape = MaterialTheme.shapes.small
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+    }
+}
+
+/** Pick one of [options] from a dropdown. */
+@Composable
+fun <T> DropdownField(
+    label: String,
+    options: List<T>,
+    selected: T,
+    optionLabel: (T) -> String,
+    onSelect: (T) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            DropdownBox(optionLabel(selected)) { open = true }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option)) },
+                        trailingIcon = if (option == selected) {
+                            { Icon(Icons.Default.Check, contentDescription = null) }
+                        } else null,
+                        onClick = {
+                            open = false
+                            onSelect(option)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Pick which items a block shows: "Auto" (the first few) or any number of [choices] as (key, label).
+ * [keys] null = Auto. The menu stays open while ticking so several can be picked in one go.
+ */
+@Composable
+fun MultiSelectDropdown(
+    label: String,
+    choices: List<Pair<String, String>>,
+    keys: List<String>?,
+    onChange: (List<String>?) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    val summary = when {
+        keys == null -> "Auto"
+        keys.size <= 2 -> choices.filter { it.first in keys }.joinToString(", ") { it.second }.ifBlank { "Auto" }
+        else -> "${keys.size} selected"
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            DropdownBox(summary) { open = true }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text("Auto") },
+                    leadingIcon = { Checkbox(checked = keys == null, onCheckedChange = null) },
+                    onClick = { onChange(null) }
+                )
+                choices.forEach { (key, name) ->
+                    val on = keys?.contains(key) == true
+                    DropdownMenuItem(
+                        text = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingIcon = { Checkbox(checked = on, onCheckedChange = null) },
+                        onClick = {
+                            val current = keys ?: emptyList()
+                            val next = if (on) current - key else current + key
+                            onChange(next.ifEmpty { null })
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Crowding warning
+// ---------------------------------------------------------------------------------------------
+
+/** What is wrong with how full the card is, in plain words. Empty when it is fine. */
+fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
+    val out = ArrayList<String>()
+    if (plan.hidden.isNotEmpty()) {
+        val names = spec.blocks.filter { it.id in plan.hidden }.joinToString(", ") { it.type.label }
+        out += "Too many blocks for ${spec.style.aspect.label}: it fits ${plan.limit}. Not shown: $names. " +
+            "Turn some off or switch to Free size."
+    }
+    if (plan.clipped) {
+        out += "The content runs past the bottom of the card and is cut off. Show fewer items, shorten the text, or use Free size."
+    } else if (plan.scale < 0.85f) {
+        out += "Crowded: everything was shrunk to ${(plan.scale * 100).toInt()}% to fit. Show fewer items or use a taller size."
+    }
+    if (plan.tooTall) {
+        out += "This card is very tall (${plan.height.toInt()} px). Some apps crop or reject images this long."
+    }
+    return out
+}
+
+@Composable
+fun FlexWarning(spec: FlexSpec, plan: FlexPlan, modifier: Modifier = Modifier) {
+    val messages = flexWarnings(spec, plan)
+    if (messages.isEmpty()) return
+    val shape = MaterialTheme.shapes.small
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            Icons.Default.Warning,
+            contentDescription = "Warning",
+            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            messages.forEach {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            }
+        }
+    }
 }

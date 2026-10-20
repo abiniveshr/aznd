@@ -27,24 +27,199 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.math.sin
 
+/** Where one block ended up on the card, in card pixels (1080 wide). */
+class FlexBlockBox(val id: Int, val left: Float, val top: Float, val width: Float, val height: Float) {
+    fun contains(x: Float, y: Float) = x >= left && x <= left + width && y >= top && y <= top + height
+}
+
+/**
+ * The result of laying a card out, without drawing it: the card's height (fixed by the size, or taken from
+ * the content for Free size), how far the content had to shrink, where each block is, and what did not fit.
+ * Compute it once per change ([FlexPainter.plan]) and hand it to [FlexPainter.draw] and to the UI.
+ */
+class FlexPlan(
+    val height: Float,
+    /** 1 = natural size. Shrinks continuously, never below [FlexPainter.MIN_SCALE]. */
+    val scale: Float,
+    val originX: Float,
+    val originY: Float,
+    val colWidth: Float,
+    val colStep: Float,
+    /** Block ids per column, top to bottom. */
+    val columns: List<List<Int>>,
+    val boxes: List<FlexBlockBox>,
+    /** Enabled blocks left out because this size only fits [limit] of them. */
+    val hidden: List<Int>,
+    /** Still too tall at the smallest allowed scale, so the bottom is cut off. */
+    val clipped: Boolean,
+    val limit: Int,
+    /** Free size only: a card taller than most apps handle well. */
+    val tooTall: Boolean
+) {
+    fun hit(x: Float, y: Float): FlexBlockBox? = boxes.firstOrNull { it.contains(x, y) }
+}
+
 /**
  * Draws a Flex card with plain android.graphics, in a fixed 1080-wide design space that is scaled to
  * whatever width it is asked for. The editor preview (a Compose Canvas) and the exported PNG both
  * call [FlexPainter.draw], so what you see is what you share.
  *
- * Layout is a vertical stack of blocks. Every block function takes its box (x, y, width), draws itself
- * and returns its height; while [Ctx.dry] is set nothing is drawn, so the same code also measures.
- * That is what lets a card shrink its content to fit and lets panels wrap their content.
+ * Layout is a vertical stack of blocks (two columns on the wide size). Every block function takes its box
+ * (x, y, width), draws itself and returns its height; while [Ctx.dry] is set nothing is drawn, so the same
+ * code also measures. That is what lets [plan] fit the content, find what is hidden or clipped, and what
+ * lets panels wrap their content.
  */
 object FlexPainter {
 
-    fun draw(canvas: Canvas, targetWidthPx: Float, spec: FlexSpec, content: FlexContent, assets: FlexAssets) {
+    /** Content is never shrunk below this; past it the card clips and the editor warns. */
+    const val MIN_SCALE = 0.7f
+    private const val FOOTER = 56f
+    private const val MIN_FREE_HEIGHT = 480f
+    private const val TOO_TALL = 4000f
+
+    /** Lays [spec] out for [content]. Cheap enough to run on every edit. */
+    fun plan(spec: FlexSpec, content: FlexContent, assets: FlexAssets): FlexPlan {
+        val st = spec.style
+        val c = Ctx(Canvas(), st, assets)
+        c.dry = true
+
+        val pad = st.padding.toFloat()
+        val footer = if (st.watermark && st.watermarkText.isNotBlank()) FOOTER else 0f
+        val cols = if (st.aspect == FlexAspect.WIDE) 2 else 1
+        val gap = if (cols > 1) max(pad * 0.8f, 48f) else 0f
+        val availW = FLEX_CARD_WIDTH - 2 * pad
+        val colW = (availW - gap * (cols - 1)) / cols
+        val spacing = st.spacing.toFloat()
+
+        // 1. Which blocks draw anything, and how tall each is at full size. A size only fits so many.
+        val drawable = spec.blocks
+            .filter { it.enabled && content.has(it.type) }
+            .mapNotNull { b ->
+                val h = block(c, b, content, 0f, 0f, colW)
+                if (h > 0f) b to h else null
+            }
+        val limit = st.aspect.maxBlocks
+        val shown = drawable.take(limit)
+        val hidden = drawable.drop(limit).map { it.first.id }
+
+        // 2. Columns: the blocks in order, cut where the two columns come out most even.
+        val columnBlocks: List<List<FlexBlock>> = if (cols == 1 || shown.size < 2) {
+            listOf(shown.map { it.first }) + List(cols - 1) { emptyList<FlexBlock>() }
+        } else {
+            var bestK = 1
+            var bestTall = Float.MAX_VALUE
+            for (k in 1 until shown.size) {
+                val left = shown.subList(0, k).sumOf { it.second.toDouble() }.toFloat() + spacing * (k - 1)
+                val right = shown.subList(k, shown.size).sumOf { it.second.toDouble() }.toFloat() + spacing * (shown.size - k - 1)
+                val tall = max(left, right)
+                if (tall < bestTall) {
+                    bestTall = tall
+                    bestK = k
+                }
+            }
+            listOf(shown.subList(0, bestK).map { it.first }, shown.subList(bestK, shown.size).map { it.first })
+        }
+
+        fun stackHeight(blocks: List<FlexBlock>, w: Float): Float {
+            var y = 0f
+            var first = true
+            for (b in blocks) {
+                val h = block(c, b, content, 0f, 0f, w)
+                if (h > 0f) {
+                    y += (if (first) 0f else spacing) + h
+                    first = false
+                }
+            }
+            return y
+        }
+        // Height the content takes on the card at scale [s]: blocks lay out in a box 1/s wider, then shrink.
+        fun need(s: Float): Float = (columnBlocks.maxOfOrNull { stackHeight(it, colW / s) } ?: 0f) * s
+
+        // 3. Fit. Free size takes its height from the content; the others shrink the content, smoothly.
+        var scale = 1f
+        var clipped = false
+        var tooTall = false
+        val height: Float
+        if (st.aspect == FlexAspect.FREE) {
+            height = (need(1f) + 2 * pad + footer).coerceAtLeast(MIN_FREE_HEIGHT)
+            tooTall = height > TOO_TALL
+        } else {
+            height = st.aspect.height.toFloat()
+            val avail = height - 2 * pad - footer
+            var h = need(1f)
+            if (h > avail) {
+                var s = 1f
+                for (i in 0 until 6) {
+                    val next = (s * avail / h).coerceIn(MIN_SCALE, 1f)
+                    if (abs(next - s) < 0.0005f) {
+                        s = next
+                        break
+                    }
+                    s = next
+                    h = need(s)
+                }
+                // Wrapping can make the last step slightly too big; never end up over.
+                var guard = 0
+                while (need(s) > avail + 0.5f && s > MIN_SCALE && guard++ < 40) s = max(MIN_SCALE, s - 0.004f)
+                scale = s
+                clipped = need(s) > avail + 1f
+            }
+        }
+
+        // 4. Where everything sits.
+        val availH = height - 2 * pad - footer
+        val used = need(scale)
+        val top = when (st.vAlign) {
+            FlexVAlign.TOP -> 0f
+            FlexVAlign.CENTER -> max(0f, (availH - used) / 2f)
+            FlexVAlign.BOTTOM -> max(0f, availH - used)
+        }
+        val originY = pad + top
+        val boxes = ArrayList<FlexBlockBox>()
+        columnBlocks.forEachIndexed { ci, col ->
+            var y = 0f
+            var first = true
+            for (b in col) {
+                val bh = block(c, b, content, 0f, 0f, colW / scale)
+                if (bh > 0f) {
+                    y += if (first) 0f else spacing
+                    boxes += FlexBlockBox(b.id, pad + ci * (colW + gap), originY + y * scale, colW, bh * scale)
+                    y += bh
+                    first = false
+                }
+            }
+        }
+        return FlexPlan(
+            height = height,
+            scale = scale,
+            originX = pad,
+            originY = originY,
+            colWidth = colW,
+            colStep = colW + gap,
+            columns = columnBlocks.map { col -> col.map { it.id } },
+            boxes = boxes,
+            hidden = hidden,
+            clipped = clipped,
+            limit = limit,
+            tooTall = tooTall
+        )
+    }
+
+    fun draw(
+        canvas: Canvas,
+        targetWidthPx: Float,
+        spec: FlexSpec,
+        content: FlexContent,
+        assets: FlexAssets,
+        plan: FlexPlan = plan(spec, content, assets)
+    ) {
         val st = spec.style
         val w = FLEX_CARD_WIDTH.toFloat()
-        val h = st.aspect.height.toFloat()
+        val h = plan.height
         val outer = canvas.save()
         val scale = targetWidthPx / w
         canvas.scale(scale, scale)
+        canvas.clipRect(0f, 0f, w, h)
 
         // Rounded card corners are cut out of a layer so the edge is smooth and the corners are transparent.
         val rounded = st.cardRadius > 0
@@ -52,7 +227,7 @@ object FlexPainter {
 
         val ctx = Ctx(canvas, st, assets)
         drawBackground(ctx, w, h)
-        drawContent(ctx, spec, content, w, h)
+        drawContent(ctx, spec, content, plan, w, h)
         drawBorder(ctx, w, h)
 
         if (rounded) {
@@ -284,59 +459,38 @@ object FlexPainter {
         c.canvas.drawRoundRect(RectF(half, half, w - half, h - half), r, r, c.stroke)
     }
 
-    private fun drawContent(c: Ctx, spec: FlexSpec, content: FlexContent, w: Float, h: Float) {
+    private fun drawContent(c: Ctx, spec: FlexSpec, content: FlexContent, plan: FlexPlan, w: Float, h: Float) {
         val st = spec.style
-        val pad = st.padding.toFloat()
-        val showMark = st.watermark && st.watermarkText.isNotBlank()
-        val footer = if (showMark) 56f else 0f
-        val availW = w - 2 * pad
-        val availH = h - 2 * pad - footer
-
-        // Shrink everything uniformly until the stack fits; the width the blocks lay out in grows to match.
-        var s = 1f
-        var contentH = 0f
-        c.dry = true
-        while (true) {
-            contentH = drawBlocks(c, spec, content, availW / s)
-            if (contentH * s <= availH || s <= 0.45f) break
-            s -= 0.05f
-        }
+        val byId = spec.blocks.associateBy { it.id }
+        val spacing = st.spacing.toFloat()
         c.dry = false
-
-        val used = contentH * s
-        val top = when (st.vAlign) {
-            FlexVAlign.TOP -> 0f
-            FlexVAlign.CENTER -> max(0f, (availH - used) / 2f)
-            FlexVAlign.BOTTOM -> max(0f, availH - used)
-        }
         c.canvas.save()
-        c.canvas.translate(pad, pad + top)
-        c.canvas.scale(s, s)
-        drawBlocks(c, spec, content, availW / s)
+        c.canvas.translate(plan.originX, plan.originY)
+        c.canvas.scale(plan.scale, plan.scale)
+        plan.columns.forEachIndexed { ci, ids ->
+            val x = ci * plan.colStep / plan.scale
+            var y = 0f
+            var first = true
+            for (id in ids) {
+                val b = byId[id] ?: continue
+                val gap = if (first) 0f else spacing
+                val bh = block(c, b, content, x, y + gap, plan.colWidth / plan.scale)
+                if (bh > 0f) {
+                    y += gap + bh
+                    first = false
+                }
+            }
+        }
         c.canvas.restore()
 
-        if (showMark) {
+        if (st.watermark && st.watermarkText.isNotBlank()) {
+            val pad = st.padding.toFloat()
             val p = c.ink(26f, true, st.textColor, 0.5f, 0.1f)
             val baseline = h - max(pad * 0.55f, 40f)
             p.textAlign = if (c.center) Paint.Align.CENTER else Paint.Align.LEFT
             c.canvas.drawText(st.watermarkText, if (c.center) w / 2f else pad, baseline, p)
             p.textAlign = Paint.Align.LEFT
         }
-    }
-
-    private fun drawBlocks(c: Ctx, spec: FlexSpec, content: FlexContent, w: Float): Float {
-        var y = 0f
-        var first = true
-        for (b in spec.blocks) {
-            if (!b.enabled || !content.has(b.type)) continue
-            val gap = if (first) 0f else spec.style.spacing.toFloat()
-            val bh = block(c, b, content, 0f, y + gap, w)
-            if (bh > 0f) {
-                y += gap + bh
-                first = false
-            }
-        }
-        return y
     }
 
     private fun block(c: Ctx, b: FlexBlock, ct: FlexContent, x: Float, y: Float, w: Float): Float = when (b.type) {
@@ -367,6 +521,9 @@ object FlexPainter {
     private fun fmtDay(ms: Long): String = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(ms))
     private fun one(v: Double): String = formatWeight((v * 10.0).roundToLong() / 10.0)
     private fun setText(l: FlexLiftItem): String = "${formatWeight(l.weightKg)} kg × ${l.reps}"
+    /** What an estimated 1RM was worked out from, e.g. "Calculated from 100 kg × 5 @ RPE 9". */
+    private fun calcFrom(l: FlexLiftItem): String =
+        "Calculated from ${setText(l)}" + (l.rpe?.let { " @ RPE ${formatWeight(it)}" } ?: "")
     private fun liftMeta(l: FlexLiftItem): String =
         listOfNotNull(l.rpe?.let { "RPE ${formatWeight(it)}" }, fmtDate(l.dateMs)).joinToString(" · ")
 
@@ -581,10 +738,8 @@ object FlexPainter {
                     h += numberWithUnit(c, ix, iw, iy + h, one(l.e1rm), "kg", 260f)
                     h += 6f
                     h += c.para(l.name, c.ink(42f, true, st.textColor), ix, iy + h, iw, 2)
-                    if (b.flag) {
-                        h += 6f
-                        h += c.para("from ${setText(l)}", c.ink(30f, false, st.textColor, 0.65f), ix, iy + h, iw, 1)
-                    }
+                    h += 6f
+                    h += c.para(calcFrom(l), c.ink(30f, false, st.textColor, 0.65f), ix, iy + h, iw, 2)
                     h
                 }
             }
@@ -598,10 +753,8 @@ object FlexPainter {
                         c.drawLayout(nameL, ix, iy)
                         var h = nameL.height + 8f
                         h += numberWithUnit(c, ix, iw, iy + h, one(l.e1rm), "kg", 100f)
-                        if (b.flag) {
-                            h += 6f
-                            h += c.para(setText(l), c.ink(24f, false, st.textColor, 0.65f), ix, iy + h, iw, 1)
-                        }
+                        h += 6f
+                        h += c.para(calcFrom(l), c.ink(24f, false, st.textColor, 0.65f), ix, iy + h, iw, 2)
                         h
                     }
                 items.chunked(2).forEachIndexed { r, row ->
@@ -626,7 +779,7 @@ object FlexPainter {
                     val rightP = c.ink(52f, true, st.accent)
                     val leftW = (iw - rightP.measureText(right) - 24f).coerceAtLeast(120f)
                     val nameL = c.layout(l.name, c.ink(36f, true, st.textColor), leftW, 2, false)
-                    val metaL = if (b.flag) c.layout("from ${setText(l)}", c.ink(26f, false, st.textColor, 0.65f), leftW, 1, false) else null
+                    val metaL = if (b.flag) c.layout(calcFrom(l), c.ink(26f, false, st.textColor, 0.65f), leftW, 2, false) else null
                     val textH = nameL.height + (metaL?.let { it.height + 4f } ?: 0f)
                     val rowH = max(textH, c.lineH(rightP))
                     val ty = iy + h + (rowH - textH) / 2f

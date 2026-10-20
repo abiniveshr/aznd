@@ -36,6 +36,9 @@ data class BuilderState(
     fun duplicate(rowId: Long): BuilderState = mutate { SetTree.duplicate(rows, rowId, it) }
     fun delete(rowId: Long): BuilderState = mutate { SetTree.delete(rows, rowId) }
 
+    /** Drag-to-reorder: the card at [from] moves to [to] (indexes into [cards]). */
+    fun moveCard(from: Int, to: Int): BuilderState = copy(rows = SetTree.moveCard(rows, from, to))
+
     /** New empty set at the bottom of the card that contains [anyRowIdInCard]. */
     fun addSet(anyRowIdInCard: Long): BuilderState = mutate { SetTree.addSetToCard(rows, anyRowIdInCard, it) }
 

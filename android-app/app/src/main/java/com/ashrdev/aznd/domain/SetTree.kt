@@ -45,6 +45,23 @@ object SetTree {
     /** Depth-first order: the order to show, and the order to log. */
     fun ordered(rows: List<SetRow>): List<SetRow> = Tree(rows).flatten()
 
+    /**
+     * Moves the card at index [from] (in [cards] order) to index [to], shifting the cards between. Every
+     * card keeps its rows (drops and supersets included); only the top-level positions are renumbered.
+     * As everywhere, neighbouring cards that end up with the same exercise read as one card.
+     */
+    fun moveCard(rows: List<SetRow>, from: Int, to: Int): List<SetRow> {
+        val cards = cards(rows)
+        if (from !in cards.indices || to !in cards.indices || from == to) return rows
+        val reordered = cards.toMutableList().also { it.add(to, it.removeAt(from)) }
+        val ids = rows.mapTo(HashSet()) { it.id }
+        var position = 0
+        return reordered.flatMap { it.rows }.map { r ->
+            val parent = r.parentId
+            if (parent == null || parent !in ids) r.copy(position = position++, parentId = null) else r
+        }
+    }
+
     /** Nesting depth per row id (top-level = 0), for indenting. */
     fun depthById(rows: List<SetRow>): Map<Long, Int> {
         val depth = HashMap<Long, Int>()

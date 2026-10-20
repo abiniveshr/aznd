@@ -102,6 +102,7 @@ private fun neededImages(spec: FlexSpec?, content: FlexContent?): Set<String> {
 @Composable
 fun rememberFlexAssets(spec: FlexSpec?, content: FlexContent?): FlexAssets {
     val context = LocalContext.current
+    remember(context) { FlexFonts.attach(context) }
     val style = spec?.style
 
     val bgUri = if (style?.bgMode == FlexBgMode.PHOTO) style.photoUri ?: content?.photoUri else null
