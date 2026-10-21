@@ -287,13 +287,7 @@ fun FlexScreen(
                                 assets = assets,
                                 plan = pl,
                                 bottom = bottom,
-                                onRowsChange = { shown, rows, old, moved -> update { applyRows(it, shown, rows, old, moved) } },
-                                onWidths = { weights ->
-                                    update { sp -> sp.copy(blocks = sp.blocks.map { b -> weights[b.id]?.let { b.copy(width = it) } ?: b }) }
-                                },
-                                onSizeBlock = { id, size ->
-                                    update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
-                                },
+                                onLayout = { tree -> update { it.copy(layout = tree) } },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
                                 onEdit = { id ->
@@ -493,7 +487,7 @@ private fun LookTab(
                 }
                 Text(
                     if (st.aspect == FlexAspect.FREE) "Grows or shrinks with the content, so nothing is squeezed."
-                    else "Fits up to ${st.aspect.maxBlocks} blocks.",
+                    else "Fits up to ${st.aspect.maxBlocks} blocks, each in a tile that fills the card.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -512,10 +506,6 @@ private fun LookTab(
                 LabeledSlider("Size", "${(st.textScale * 100).roundToInt()}%", st.textScale, 0.7f..1.5f) { v ->
                     style { it.copy(textScale = v) }
                 }
-                Text("Align", style = MaterialTheme.typography.labelMedium)
-                ChipChoice(FlexAlign.entries, st.align, { it.label }) { picked -> style { it.copy(align = picked) } }
-                Text("Vertical position", style = MaterialTheme.typography.labelMedium)
-                ChipChoice(FlexVAlign.entries, st.vAlign, { it.label }) { picked -> style { it.copy(vAlign = picked) } }
             }
         }
         item {
@@ -523,7 +513,7 @@ private fun LookTab(
                 LabeledSlider("Margins", "${st.padding}", st.padding.toFloat(), 24f..160f) { v ->
                     style { it.copy(padding = v.roundToInt()) }
                 }
-                LabeledSlider("Gap between blocks", "${st.spacing}", st.spacing.toFloat(), 8f..72f) { v ->
+                LabeledSlider("Gap between tiles", "${st.spacing}", st.spacing.toFloat(), 8f..72f) { v ->
                     style { it.copy(spacing = v.roundToInt()) }
                 }
             }

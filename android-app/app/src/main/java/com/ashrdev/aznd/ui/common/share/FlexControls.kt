@@ -285,9 +285,9 @@ fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
             "Turn some off or switch to Free size."
     }
     if (plan.clipped) {
-        out += "The content runs past the bottom of the card and is cut off. Show fewer items, shorten the text, or use Free size."
-    } else if (plan.scale < 0.85f) {
-        out += "Crowded: everything was shrunk to ${(plan.scale * 100).toInt()}% to fit. Show fewer items or use a taller size."
+        out += "Some content is too big for its tile and is cut off at the tile's edge. Give that tile more room, show fewer items, or use Free size."
+    } else if (plan.minScale < FlexPainter.CROWDED_SCALE) {
+        out += "Crowded: some content was shrunk to ${(plan.minScale * 100).toInt()}% to fit its tile. Give it more room, show fewer items or use a taller size."
     }
     if (plan.tooTall) {
         out += "This card is very tall (${plan.height.toInt()} px). Some apps crop or reject images this long."

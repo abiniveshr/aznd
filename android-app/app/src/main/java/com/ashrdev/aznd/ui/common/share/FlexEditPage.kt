@@ -121,30 +121,10 @@ internal class FlexEditHistory(private val initial: FlexSpec) {
     }
 }
 
-/** The arrangement after nudging block [id] one row up or down, or null when it cannot go that way. */
-private fun rowsNudged(plan: FlexPlan, id: Int, up: Boolean): List<List<Int>>? {
-    val rows = plan.rows
-    val r = rows.indexOfFirst { id in it }
-    if (r < 0) return null
-    return if (up) {
-        when {
-            r > 0 -> rowsAfterMove(rows, id, DropKind.ROW_BEFORE, rows[r - 1].first())
-            rows[r].size > 1 -> rowsAfterMove(rows, id, DropKind.ROW_BEFORE, rows[r].first { it != id })
-            else -> null
-        }
-    } else {
-        when {
-            r < rows.size - 1 -> rowsAfterMove(rows, id, DropKind.ROW_AFTER, rows[r + 1].first())
-            rows[r].size > 1 -> rowsAfterMove(rows, id, DropKind.ROW_AFTER, rows[r].first { it != id })
-            else -> null
-        }
-    }
-}
-
 /**
- * Edit page of one block. Top: the card with everything dimmed except this block, so its position and size
- * are what you see. Below: Position & size, then everything else the block can do (look, items, text,
- * photo). Bottom bar: Finish (leave without keeping this visit's changes, like closing a screen), Undo,
+ * Edit page of one block. Top: the card with everything dimmed except this block's tile, so its position and
+ * size are what you see. Below: the tile (swap places, share of its row or column), how the content sits in it,
+ * then everything else the block can do (look, items, text, photo). Bottom bar: Finish (leave without keeping this visit's changes, like closing a screen), Undo,
  * Redo, Done (keep the changes and go back).
  */
 @Composable
@@ -248,18 +228,19 @@ internal fun FlexEditPage(
                         }
                     )
 
-                    val shownIndex = plan.shownIds.indexOf(blockId)
-                    val share = if (plan.rows.any { blockId in it }) widthFraction(plan, blockId) else block.width.coerceIn(MIN_BLOCK_WIDTH, 1f)
+                    val tile = plan.box(blockId)
                     Text(
-                        text = if (shownIndex >= 0) {
-                            "Position ${shownIndex + 1} of ${plan.shownIds.size} · Size ${(block.size * 100).roundToInt()}% · " +
-                                "Width ${(share * 100).roundToInt()}% of the row"
+                        text = if (tile != null) {
+                            "Tile ${FlexTree.leaves(plan.tree).indexOf(blockId) + 1} of ${plan.boxes.size} · " +
+                                "${(tile.width / plan.contentWidth * 100).roundToInt()}% wide, " +
+                                "${(tile.height / plan.contentHeight * 100).roundToInt()}% tall" +
+                                if (tile.scale < 0.999f) " · content shrunk to ${(tile.scale * 100).roundToInt()}%" else ""
                         } else if (!content.has(block.type)) {
                             "Nothing to show for this block here."
                         } else if (!block.enabled) {
-                            "This block is turned off, so it is not on the card."
+                            "This block is turned off, so it has no tile."
                         } else {
-                            "Not shown: too many blocks for this card size."
+                            "No tile: too many blocks for this card size."
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -274,74 +255,73 @@ internal fun FlexEditPage(
                             .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        FlexSection("Position & size") {
-                            val canUp = shownIndex >= 0 && rowsNudged(plan, blockId, up = true) != null
-                            val canDown = shownIndex >= 0 && rowsNudged(plan, blockId, up = false) != null
+                        FlexSection("Tile") {
+                            val order = FlexTree.leaves(plan.tree)
+                            val at = order.indexOf(blockId)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Move on the card", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                Text("Swap places with the next tile", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                                 IconButton(
-                                    enabled = canUp,
+                                    enabled = at > 0,
                                     onClick = {
-                                        rowsNudged(plan, blockId, up = true)?.let { rows ->
-                                            history.change { sp -> applyRows(sp, plan.shownIds, rows, plan.rows, blockId) }
+                                        plan.tree?.let { tree ->
+                                            history.change { sp -> sp.copy(layout = FlexTree.swap(tree, blockId, order[at - 1])) }
                                         }
                                     }
-                                ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up") }
+                                ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Swap with the tile before") }
                                 IconButton(
-                                    enabled = canDown,
+                                    enabled = at >= 0 && at < order.size - 1,
                                     onClick = {
-                                        rowsNudged(plan, blockId, up = false)?.let { rows ->
-                                            history.change { sp -> applyRows(sp, plan.shownIds, rows, plan.rows, blockId) }
+                                        plan.tree?.let { tree ->
+                                            history.change { sp -> sp.copy(layout = FlexTree.swap(tree, blockId, order[at + 1])) }
                                         }
                                     }
-                                ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down") }
+                                ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Swap with the tile after") }
                             }
-                            val row = plan.rows.firstOrNull { blockId in it }
-                            val beside = if (row != null) row.indexOf(blockId) > 0 else block.place == FlexPlace.BESIDE
-                            SwitchRow("Place beside the previous block", beside) { wantBeside ->
-                                // The first explicit choice freezes the current arrangement, so nothing else moves.
-                                history.change { sp ->
-                                    val frozen = applyRows(sp, plan.shownIds, plan.rows)
-                                    frozen.copy(blocks = frozen.blocks.map {
-                                        if (it.id == blockId) it.copy(place = if (wantBeside) FlexPlace.BESIDE else FlexPlace.BELOW) else it
-                                    })
-                                }
-                            }
-                            LabeledSlider(
-                                label = "Size",
-                                valueText = "${(block.size * 100).roundToInt()}%",
-                                value = block.size,
-                                range = 0.5f..2f
-                            ) { onChange(block.copy(size = it), continuous = true) }
-                            LabeledSlider(
-                                label = "Width",
-                                valueText = "${(share * 100).roundToInt()}% of the row",
-                                value = share,
-                                range = MIN_BLOCK_WIDTH..1f
-                            ) { v ->
-                                history.change(continuous = true) { sp ->
-                                    val widths = resizeWidth(plan, blockId, v)
-                                    if (widths.isEmpty()) {
-                                        sp.copy(blocks = sp.blocks.map { if (it.id == blockId) it.copy(width = v) else it })
-                                    } else {
-                                        sp.copy(blocks = sp.blocks.map { b -> widths[b.id]?.let { b.copy(width = it) } ?: b })
+                            val ref = FlexTree.refOf(plan.tree, blockId)
+                            val sizes = ref?.let { plan.groupSizes[it.path] }
+                            if (ref != null && sizes != null && sizes.size == ref.group.children.size) {
+                                val total = sizes.sum()
+                                val share = if (total > 0f) sizes[ref.index] / total else 1f
+                                LabeledSlider(
+                                    label = if (ref.group.vertical) "Height in its column" else "Width in its row",
+                                    valueText = "${(share * 100).roundToInt()}%",
+                                    value = share.coerceIn(0.1f, 0.9f),
+                                    range = 0.1f..0.9f
+                                ) { v ->
+                                    history.change(continuous = true) { sp ->
+                                        sp.copy(layout = FlexTree.withShare(plan.tree, ref.path, sizes, ref.index, v))
                                     }
                                 }
+                                TextButton(
+                                    onClick = { history.change { sp -> sp.copy(layout = FlexTree.clearWeights(plan.tree, ref.path)) } },
+                                    enabled = !ref.group.isAuto
+                                ) { Text(if (ref.group.vertical) "Share this column by content" else "Share this row equally") }
                             }
-                            TextButton(
-                                onClick = {
-                                    history.change { sp ->
-                                        val widths = resizeWidth(plan, blockId, 1f)
-                                        sp.copy(blocks = sp.blocks.map { b ->
-                                            when {
-                                                b.id == blockId -> b.copy(size = 1f, width = widths[b.id] ?: 1f)
-                                                else -> widths[b.id]?.let { b.copy(width = it) } ?: b
-                                            }
-                                        })
-                                    }
-                                },
-                                enabled = block.size != 1f || share < 0.999f
-                            ) { Text("Reset size and width") }
+                        }
+
+                        FlexSection("Content in this tile") {
+                            Text("Across", style = MaterialTheme.typography.labelMedium)
+                            ChipChoice(
+                                options = FlexAlign.entries,
+                                selected = block.hAlign,
+                                label = { it.label },
+                                onSelect = { onChange(block.copy(hAlign = it)) }
+                            )
+                            Text("Up and down", style = MaterialTheme.typography.labelMedium)
+                            ChipChoice(
+                                options = FlexVAlign.entries,
+                                selected = block.vAlign,
+                                label = { it.label },
+                                onSelect = { onChange(block.copy(vAlign = it)) }
+                            )
+                            if (block.type != FlexBlockType.PHOTO) {
+                                LabeledSlider(
+                                    label = "Content size",
+                                    valueText = "${(block.size * 100).roundToInt()}%",
+                                    value = block.size,
+                                    range = 0.5f..2f
+                                ) { onChange(block.copy(size = it), continuous = true) }
+                            }
                         }
 
                         BlockOptions(
@@ -453,16 +433,16 @@ private fun BlockOptions(
                     TextButton(onClick = { onChange(block.copy(keys = null), false) }) { Text("Use default") }
                 }
             }
-            // Crop: what shapes are allowed depends on the card size; the crop can be changed any time.
-            val aspect = spec.style.aspect
-            val options = FlexPhotoRatio.entries.filter { it.allowedOn(aspect) }
+            // A photo takes at most half the card, so the shapes on offer are those that suit that half.
+            val limit = spec.style.photoLimit()
+            val options = FlexPhotoRatio.entries.filter { it.allowedOn(limit) }
             val current = options.firstOrNull { it != FlexPhotoRatio.ORIGINAL && abs(it.ratio - block.photoRatio) < 0.01f }
                 ?: FlexPhotoRatio.ORIGINAL
             val real = options.filter { it != FlexPhotoRatio.ORIGINAL }
             val lowest = real.minByOrNull { it.ratio }?.label
             val highest = real.maxByOrNull { it.ratio }?.label
             DropdownField(
-                label = "Crop shape" + if (lowest != null && highest != null) " (this size allows $lowest to $highest)" else "",
+                label = "Crop shape (at most half the card" + if (lowest != null && highest != null) ", $lowest to $highest)" else ")",
                 options = options,
                 selected = current,
                 optionLabel = { if (it == FlexPhotoRatio.ORIGINAL) "Original, within what fits" else it.label }

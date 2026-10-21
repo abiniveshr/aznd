@@ -47,7 +47,7 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
  * The card's blocks as a compact list under the card on the Flex page (this used to be the Content page).
  * Switch a block on or off, drag the handle (or hold the row) to reorder, tap a row to select it on the card;
  * the selected row shows its Edit button. Which block is selected is shared with the card above.
- * The order here is the order on the card.
+ * The order here is the order of the tiles (left to right, top to bottom): reordering swaps the blocks between tiles.
  */
 @Composable
 internal fun BlockListPanel(
@@ -69,8 +69,13 @@ internal fun BlockListPanel(
         itemCount = spec.blocks.size
     ) { from, to ->
         update { sp ->
-            if (from !in sp.blocks.indices || to !in sp.blocks.indices) sp
-            else sp.copy(blocks = sp.blocks.toMutableList().also { it.add(to, it.removeAt(from)) })
+            if (from !in sp.blocks.indices || to !in sp.blocks.indices) {
+                sp
+            } else {
+                val moved = sp.blocks.toMutableList().also { it.add(to, it.removeAt(from)) }
+                // The tiles stay where they are; the blocks change places in them.
+                sp.copy(blocks = moved, layout = sp.layout?.let { FlexTree.relabel(it, moved.map { b -> b.id }) })
+            }
         }
     }
 

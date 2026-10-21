@@ -11,6 +11,10 @@ import com.ashrdev.aznd.ui.theme.GradientKind
 import com.ashrdev.aznd.ui.theme.GradientSpec
 import com.ashrdev.aznd.ui.theme.PatternSpec
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
 
 /*
  * Flex: the card / poster maker used by every "share" button in the app.
@@ -18,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  *  - FlexModel.kt      what a card is made of: [FlexStyle] (look), [FlexBlock]s (content), [FlexContent] (data)
  *  - FlexPresets.kt    one preset per share source (home, workout, routine, ...): default blocks + look,
  *                      and the loaders that turn app data into [FlexContent]
+ *  - FlexLayout.kt     the tile layout (a tree of splits, like a tiling window manager) and the editing of it
  *  - FlexPainter.kt    draws a card with android.graphics, so the same code makes the preview and the PNG
  *  - FlexExport.kt     PNG file, share sheet, save to gallery
  *  - FlexStore.kt      remembers each preset's customisation
@@ -38,21 +43,10 @@ enum class FlexAspect(val label: String, val width: Int, val height: Int, val ma
     PORTRAIT("Post 4:5", FLEX_CARD_WIDTH, 1350, 5),
     STORY("Story 9:16", FLEX_CARD_WIDTH, 1920, 7),
     WIDE("Wide 16:9", FLEX_CARD_WIDTH, 608, 4),
-    FREE("Free size (fits content)", FLEX_CARD_WIDTH, 0, Int.MAX_VALUE);
-
-    /**
-     * Which photo shapes (width / height) suit this card: from three quarters to four thirds of the card's
-     * own shape. Square takes 3:4 up to 4:3, Story (9:16) takes up to 3:4, and so on. A photo outside the
-     * range is cropped to the nearest end of it. Free size, having no shape of its own, takes 3:4 to 16:9.
-     */
-    fun photoRange(): ClosedFloatingPointRange<Float> =
-        if (height <= 0) 0.75f..(16f / 9f) else {
-            val r = width.toFloat() / height
-            (r * 0.75f)..(r * 4f / 3f)
-        }
+    FREE("Free size (fits content)", FLEX_CARD_WIDTH, 0, Int.MAX_VALUE)
 }
 
-/** The photo shapes offered in a photo block's crop menu (those inside the card's [FlexAspect.photoRange]). */
+/** The photo shapes offered in a photo block's crop menu (those inside the card's [photoLimit]). */
 enum class FlexPhotoRatio(val label: String, val ratio: Float) {
     ORIGINAL("Original", 0f),
     R1_1("1:1", 1f),
@@ -66,11 +60,37 @@ enum class FlexPhotoRatio(val label: String, val ratio: Float) {
     R9_16("9:16", 9f / 16f),
     R21_9("21:9", 21f / 9f);
 
-    fun allowedOn(aspect: FlexAspect): Boolean {
+    fun allowedOn(limit: FlexPhotoLimit): Boolean {
         if (this == ORIGINAL) return true
-        val range = aspect.photoRange()
-        return ratio >= range.start - 0.005f && ratio <= range.endInclusive + 0.005f
+        return ratio >= limit.range.start - 0.005f && ratio <= limit.range.endInclusive + 0.005f
     }
+}
+
+/** Under the footer line of the watermark, in card pixels. */
+const val FLEX_FOOTER = 56f
+
+/**
+ * How big a photo may be: at most half of the card. Of the two halves (top or bottom; left or right) the one
+ * whose shape is closer to a square is used (the top half when they tie), so a portrait card allows a wide
+ * photo across half its height and a wide card one in half its width. [range] is the shapes (width / height)
+ * that suit that half, from three quarters to four thirds of its own shape.
+ */
+class FlexPhotoLimit(val maxWidth: Float, val maxHeight: Float, val range: ClosedFloatingPointRange<Float>)
+
+fun FlexStyle.photoLimit(): FlexPhotoLimit {
+    val pad = padding.toFloat()
+    val footer = if (watermark && watermarkText.isNotBlank()) FLEX_FOOTER else 0f
+    val w = (FLEX_CARD_WIDTH - 2 * pad).coerceAtLeast(100f)
+    // Free size has no height of its own: judge it as a 4:5 post.
+    val cardH = if (aspect.height > 0) aspect.height else FlexAspect.PORTRAIT.height
+    val h = (cardH - 2 * pad - footer).coerceAtLeast(100f)
+    val top = w / (h / 2f)
+    val side = (w / 2f) / h
+    val useTop = abs(ln(top)) <= abs(ln(side)) + 0.0001f
+    val maxW = if (useTop) w else w / 2f
+    val maxH = if (useTop) h / 2f else h
+    val shape = maxW / maxH
+    return FlexPhotoLimit(maxW, maxH, max(0.5f, shape * 0.75f)..min(2.4f, shape * 4f / 3f))
 }
 
 /**
@@ -138,7 +158,7 @@ object FlexFonts {
 }
 
 enum class FlexBgMode(val label: String) { SOLID("Solid"), GRADIENT("Gradient"), PHOTO("Photo") }
-enum class FlexAlign(val label: String) { START("Left"), CENTER("Centre") }
+enum class FlexAlign(val label: String) { START("Left"), CENTER("Centre"), END("Right") }
 enum class FlexVAlign(val label: String) { TOP("Top"), CENTER("Middle"), BOTTOM("Bottom") }
 enum class FlexPanel(val label: String) { NONE("None"), FILLED("Filled"), OUTLINE("Outline"), GLASS("Glass") }
 
@@ -186,8 +206,6 @@ data class FlexStyle(
     val accent: Int = FlexPalettes.Midnight.accent,
     val font: FlexFont = FlexFont.SANS,
     val textScale: Float = 1f,
-    val align: FlexAlign = FlexAlign.START,
-    val vAlign: FlexVAlign = FlexVAlign.TOP,
     val padding: Int = 72,
     val spacing: Int = 28,
     val panel: FlexPanel = FlexPanel.FILLED,
@@ -247,16 +265,6 @@ enum class FlexBlockType(
 }
 
 /**
- * Where a block goes relative to the one before it. [AUTO] is "whatever the card size does by default": below,
- * except on the wide size, which packs blocks side by side by itself. The first explicit choice on a card
- * freezes the arrangement into [BELOW] / [BESIDE] for every block (see [FlexPlan.rows]).
- */
-enum class FlexPlace { AUTO, BELOW, BESIDE }
-
-/** At most this many blocks share a row; more would be squeezed. */
-const val FLEX_MAX_PER_ROW = 3
-
-/**
  * One piece of a card. A block is generic on purpose (every field is a plain value), so a card can be
  * saved as JSON and a preset can be rebuilt from it.
  */
@@ -272,17 +280,12 @@ data class FlexBlock(
     val text: String = "",
     /** The block's detail switch, see [FlexBlockType.flagLabel]. */
     val flag: Boolean = true,
-    /** How big the block is drawn: 1 = natural, 0.5 to 2. Everything in it (text, numbers, images) scales together. */
+    /** How big the block's content is drawn inside its tile: 1 = natural, 0.5 to 2. Everything in it (text, numbers, images) scales together. */
     val size: Float = 1f,
-    /** Below the previous block (new row) or beside it (same row), see [FlexPlace]. */
-    val place: FlexPlace = FlexPlace.AUTO,
-    /**
-     * How much of its row's width the block takes, 0.15 to 1. A block can be narrower than the row and
-     * others can sit in the space left. If a row's blocks add up to more than 1 they share it in those
-     * proportions, which is also how rows from older versions (every width 1) come out as equal splits.
-     */
-    val width: Float = 1f,
-    /** PHOTO: the crop shape (width / height); 0 = the photo's own shape. Limited by [FlexAspect.photoRange]. */
+    /** Where the content sits inside the block's tile, across and down. Every tile has its own. */
+    val hAlign: FlexAlign = FlexAlign.START,
+    val vAlign: FlexVAlign = FlexVAlign.TOP,
+    /** PHOTO: the crop shape (width / height); 0 = the photo's own shape. Limited by [FlexStyle.photoLimit]. */
     val photoRatio: Float = 0f,
     /** PHOTO: zoom into the picture, 1 to 3. */
     val photoZoom: Float = 1f,
@@ -291,7 +294,11 @@ data class FlexBlock(
     val photoY: Float = 0.5f
 )
 
-data class FlexSpec(val style: FlexStyle, val blocks: List<FlexBlock>) {
+/**
+ * A card: its look, its blocks and how the blocks are tiled on it. [layout] is the tiling (see FlexLayout.kt);
+ * null means automatic (the blocks one under the other, in list order).
+ */
+data class FlexSpec(val style: FlexStyle, val blocks: List<FlexBlock>, val layout: FlexNode? = null) {
     fun nextBlockId(): Int = (blocks.maxOfOrNull { it.id } ?: 0) + 1
 }
 

@@ -57,8 +57,6 @@ private fun specToJson(spec: FlexSpec): JSONObject {
         .put("accent", s.accent)
         .put("font", s.font.name)
         .put("textScale", s.textScale.toDouble())
-        .put("align", s.align.name)
-        .put("vAlign", s.vAlign.name)
         .put("padding", s.padding)
         .put("spacing", s.spacing)
         .put("panel", s.panel.name)
@@ -86,15 +84,71 @@ private fun specToJson(spec: FlexSpec): JSONObject {
                 .put("text", b.text)
                 .put("flag", b.flag)
                 .put("size", b.size.toDouble())
-                .put("place", b.place.name)
-                .put("width", b.width.toDouble())
+                .put("hAlign", b.hAlign.name)
+                .put("vAlign", b.vAlign.name)
                 .put("photoRatio", b.photoRatio.toDouble())
                 .put("photoZoom", b.photoZoom.toDouble())
                 .put("photoX", b.photoX.toDouble())
                 .put("photoY", b.photoY.toDouble())
         )
     }
-    return JSONObject().put("style", style).put("blocks", blocks)
+    val out = JSONObject().put("style", style).put("blocks", blocks)
+    spec.layout?.let { out.put("layout", nodeToJson(it)) }
+    return out
+}
+
+private fun nodeToJson(n: FlexNode): JSONObject = when (n) {
+    is FlexLeaf -> JSONObject().put("id", n.id)
+    is FlexGroup -> JSONObject()
+        .put("vertical", n.vertical)
+        .put("weights", JSONArray().also { a -> n.weights.forEach { a.put(it.toDouble()) } })
+        .put("children", JSONArray().also { a -> n.children.forEach { a.put(nodeToJson(it)) } })
+}
+
+private fun nodeFromJson(o: JSONObject, depth: Int = 0): FlexNode? {
+    if (depth > 12) return null
+    if (o.has("children")) {
+        val arr = o.getJSONArray("children")
+        val weights = o.optJSONArray("weights")
+        val kids = ArrayList<FlexNode>()
+        val ws = ArrayList<Float>()
+        for (i in 0 until arr.length()) {
+            nodeFromJson(arr.getJSONObject(i), depth + 1)?.let {
+                kids.add(it)
+                ws.add((weights?.optDouble(i, 0.0) ?: 0.0).toFloat())
+            }
+        }
+        if (kids.isEmpty()) return null
+        if (kids.size == 1) return kids[0]
+        return FlexGroup(o.optBoolean("vertical", true), kids, ws)
+    }
+    return if (o.has("id")) FlexLeaf(o.getInt("id")) else null
+}
+
+/**
+ * Cards saved before tiling placed blocks in rows ("place" beside or below the one before, and a "width" share).
+ * Turns such a card's rows into a tiling; null when every block simply sat under the previous one.
+ */
+private fun legacyLayout(arr: JSONArray, blocks: List<FlexBlock>): FlexNode? {
+    val rows = ArrayList<MutableList<Pair<Int, Float>>>()
+    val enabled = blocks.filter { it.enabled }.map { it.id }.toSet()
+    for (i in 0 until arr.length()) {
+        val b = arr.getJSONObject(i)
+        val id = b.optInt("id", i + 1)
+        if (id !in enabled) continue
+        val width = b.optDouble("width", 1.0).toFloat().coerceIn(0.05f, 20f)
+        if (b.optString("place") == "BESIDE" && rows.isNotEmpty() && rows.last().size < 3) {
+            rows.last().add(id to width)
+        } else {
+            rows.add(mutableListOf(id to width))
+        }
+    }
+    if (rows.none { it.size > 1 }) return null
+    val tiles: List<FlexNode> = rows.map { row ->
+        if (row.size == 1) FlexLeaf(row[0].first)
+        else FlexGroup(false, row.map { FlexLeaf(it.first) }, row.map { it.second })
+    }
+    return if (tiles.size == 1) tiles[0] else FlexGroup(true, tiles, tiles.map { 0f })
 }
 
 private fun specFromJson(o: JSONObject): FlexSpec {
@@ -115,8 +169,6 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         accent = s.optInt("accent", d.accent),
         font = enumOr(s.optString("font"), d.font),
         textScale = s.optDouble("textScale", d.textScale.toDouble()).toFloat(),
-        align = enumOr(s.optString("align"), d.align),
-        vAlign = enumOr(s.optString("vAlign"), d.vAlign),
         padding = s.optInt("padding", d.padding),
         spacing = s.optInt("spacing", d.spacing),
         panel = enumOr(s.optString("panel"), d.panel),
@@ -132,6 +184,9 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         watermark = s.optBoolean("watermark", d.watermark),
         watermarkText = s.optString("watermarkText", d.watermarkText)
     )
+    // Before alignment belonged to each block it was one setting for the whole card: carry it over.
+    val oldAlign = enumOr(s.optString("align"), FlexAlign.START)
+    val oldVAlign = enumOr(s.optString("vAlign"), FlexVAlign.TOP)
     val arr = o.getJSONArray("blocks")
     val blocks = ArrayList<FlexBlock>()
     for (i in 0 until arr.length()) {
@@ -151,13 +206,14 @@ private fun specFromJson(o: JSONObject): FlexSpec {
             text = b.optString("text", ""),
             flag = b.optBoolean("flag", true),
             size = b.optDouble("size", 1.0).toFloat().coerceIn(0.5f, 2f),
-            place = enumOr(b.optString("place"), FlexPlace.AUTO),
-            width = b.optDouble("width", 1.0).toFloat().coerceIn(0.05f, 20f),
+            hAlign = enumOr(b.optString("hAlign"), oldAlign),
+            vAlign = enumOr(b.optString("vAlign"), oldVAlign),
             photoRatio = b.optDouble("photoRatio", 0.0).toFloat().coerceAtLeast(0f),
             photoZoom = b.optDouble("photoZoom", 1.0).toFloat().coerceIn(1f, 3f),
             photoX = b.optDouble("photoX", 0.5).toFloat().coerceIn(0f, 1f),
             photoY = b.optDouble("photoY", 0.5).toFloat().coerceIn(0f, 1f)
         )
     }
-    return FlexSpec(style, blocks)
+    val layout = o.optJSONObject("layout")?.let { nodeFromJson(it) } ?: legacyLayout(arr, blocks)
+    return FlexSpec(style, blocks, layout)
 }
