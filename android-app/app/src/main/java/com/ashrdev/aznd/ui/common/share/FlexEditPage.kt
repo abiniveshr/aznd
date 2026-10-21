@@ -123,7 +123,7 @@ internal class FlexEditHistory(private val initial: FlexSpec) {
 
 /**
  * Edit page of one block. Top: the card with everything dimmed except this block's tile, so its position and
- * size are what you see. Below: the tile (swap places, share of its row or column), how the content sits in it,
+ * size are what you see. Below: its position (swap places), size and alignment,
  * then everything else the block can do (look, items, text, photo). Bottom bar: Finish (leave without keeping this visit's changes, like closing a screen), Undo,
  * Redo, Done (keep the changes and go back).
  */
@@ -232,8 +232,8 @@ internal fun FlexEditPage(
                     Text(
                         text = if (tile != null) {
                             "Tile ${FlexTree.leaves(plan.tree).indexOf(blockId) + 1} of ${plan.boxes.size} · " +
-                                "${(tile.width / plan.contentWidth * 100).roundToInt()}% wide, " +
-                                "${(tile.height / plan.contentHeight * 100).roundToInt()}% tall" +
+                                "${(tile.width / plan.contentWidth * 100).roundToInt()}% of the width, " +
+                                "${(tile.height / plan.contentHeight * 100).roundToInt()}% of the height" +
                                 if (tile.scale < 0.999f) " · content shrunk to ${(tile.scale * 100).roundToInt()}%" else ""
                         } else if (!content.has(block.type)) {
                             "Nothing to show for this block here."
@@ -255,7 +255,7 @@ internal fun FlexEditPage(
                             .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        FlexSection("Tile") {
+                        FlexSection("Position") {
                             val order = FlexTree.leaves(plan.tree)
                             val at = order.indexOf(blockId)
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -277,29 +277,10 @@ internal fun FlexEditPage(
                                     }
                                 ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Swap with the tile after") }
                             }
-                            val ref = FlexTree.refOf(plan.tree, blockId)
-                            val sizes = ref?.let { plan.groupSizes[it.path] }
-                            if (ref != null && sizes != null && sizes.size == ref.group.children.size) {
-                                val total = sizes.sum()
-                                val share = if (total > 0f) sizes[ref.index] / total else 1f
-                                LabeledSlider(
-                                    label = if (ref.group.vertical) "Height in its column" else "Width in its row",
-                                    valueText = "${(share * 100).roundToInt()}%",
-                                    value = share.coerceIn(0.1f, 0.9f),
-                                    range = 0.1f..0.9f
-                                ) { v ->
-                                    history.change(continuous = true) { sp ->
-                                        sp.copy(layout = FlexTree.withShare(plan.tree, ref.path, sizes, ref.index, v))
-                                    }
-                                }
-                                TextButton(
-                                    onClick = { history.change { sp -> sp.copy(layout = FlexTree.clearWeights(plan.tree, ref.path)) } },
-                                    enabled = !ref.group.isAuto
-                                ) { Text(if (ref.group.vertical) "Share this column by content" else "Share this row equally") }
-                            }
                         }
 
-                        FlexSection("Content in this tile") {
+                        FlexSection("Size and alignment") {
+                            Text("The tile is only as big as its content. These say where it sits in the space it is given, and how its content lines up.", style = MaterialTheme.typography.labelMedium)
                             Text("Across", style = MaterialTheme.typography.labelMedium)
                             ChipChoice(
                                 options = FlexAlign.entries,
@@ -316,7 +297,7 @@ internal fun FlexEditPage(
                             )
                             if (block.type != FlexBlockType.PHOTO) {
                                 LabeledSlider(
-                                    label = "Content size",
+                                    label = "Size",
                                     valueText = "${(block.size * 100).roundToInt()}%",
                                     value = block.size,
                                     range = 0.5f..2f

@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,17 +48,21 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
 import kotlinx.coroutines.launch
+import kotlin.math.pow
 
 /**
  * The Flex page, the middle one: the card, edited on the card itself, and under it the list of its blocks.
- * The card is tiled like a tiling window manager: every block has a tile and the tiles fill the card.
+ * The card is tiled like a tiling window manager: every block has a cell and the cells fill the card. A tile is
+ * only as big as its block's content needs and sits in its cell where the block's alignment says, so what can
+ * be tapped and grabbed is the content, never empty space.
  *
- *  - Tap a tile (on the card or in the list) to select it. Its borders get handles and an Edit button opens
- *    that block's edit page.
- *  - Drag a handle on a selected tile's border to resize: the tile on the other side gives or takes the room.
- *  - Hold a tile and drag it to move it: it lifts off the card and follows the finger, and the part of the tile
- *    under the finger that it will take lights up. Drop it on the left, right, top or bottom of another tile to
- *    sit beside that side of it (sharing its space), or on its middle to swap places.
+ *  - Tap a tile (on the card or in the list) to select it. It gets a handle in its corner, and an Edit button
+ *    opens that block's edit page.
+ *  - Drag the corner handle to scale the tile's content: the tile grows or shrinks with it and the other tiles
+ *    make room.
+ *  - Hold a tile and drag it to move it: it lifts off the card and follows the finger, and the part of the cell
+ *    under the finger that it will take lights up. Drop it on the left, right, top or bottom of another cell to
+ *    sit beside that side of it, or on its middle to swap places.
  *  - The list switches blocks on and off, reorders them (the tiles keep their places; the blocks swap) and adds
  *    new ones. It can be folded away to give the card the whole page.
  */
@@ -69,6 +74,8 @@ internal fun FlexViewPage(
     plan: FlexPlan,
     bottom: Dp,
     onLayout: (FlexNode?) -> Unit,
+    /** Scales the content of block [id]: 1 is natural size. */
+    onSizeBlock: (id: Int, size: Float) -> Unit,
     /** The selected block; kept by the screen so the card and the list share it. */
     selectedId: Int?,
     onSelect: (Int?) -> Unit,
@@ -85,6 +92,8 @@ internal fun FlexViewPage(
 
     val planNow by rememberUpdatedState(plan)
     val layoutNow by rememberUpdatedState(onLayout)
+    val sizeNow by rememberUpdatedState(onSizeBlock)
+    val specNow by rememberUpdatedState(spec)
     val selectNow by rememberUpdatedState(onSelect)
     val primary = MaterialTheme.colorScheme.primary
     // A selection that is not on the card (turned off, hidden) has no handles; its list row is still selected.
@@ -140,24 +149,28 @@ internal fun FlexViewPage(
                 onDragCancel = { endDrag(false) }
             )
         }
-        // Drag a handle on the selected tile's border: resize. Last in the chain, so it sees touches first and
-        // leaves the others alone when the touch is not on a handle.
+        // Drag the corner handle of the selected tile: scale its content. Last in the chain, so it sees touches
+        // first and leaves the others alone when the touch is not on the handle.
         .pointerInput(Unit) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val id = pickedNow ?: return@awaitEachGesture
+                val block = specNow.blocks.firstOrNull { it.id == id } ?: return@awaitEachGesture
+                if (block.type == FlexBlockType.PHOTO) return@awaitEachGesture   // a photo's size is its crop shape
+                val box = planNow.box(id) ?: return@awaitEachGesture
                 val k = size.width / FLEX_CARD_WIDTH.toFloat()
-                val reach = HANDLE_REACH.toPx()
-                val border = planNow.dividersOf(id).firstOrNull { d ->
-                    (Offset(d.cx * k, d.cy * k) - down.position).getDistance() <= reach
-                } ?: return@awaitEachGesture
+                val inset = HANDLE_INSET.toPx()
+                val corner = Offset((box.left + box.width) * k - inset, (box.top + box.height) * k - inset)
+                if ((down.position - corner).getDistance() > HANDLE_REACH.toPx()) return@awaitEachGesture
                 down.consume()
+                val start = block.size
                 var travelled = 0f
                 drag(down.id) { change ->
                     change.consume()
                     val step = change.position - change.previousPosition
-                    travelled += (if (border.vertical) step.y else step.x) / k
-                    FlexTree.resized(planNow.tree, border, travelled)?.let { layoutNow(it) }
+                    // Drag right/down to grow, left/up to shrink; every 400 card px doubles or halves it.
+                    travelled += (step.x + step.y) / 2f / k
+                    sizeNow(id, (start * 2f.pow(travelled / 400f)).coerceIn(MIN_BLOCK_SIZE, MAX_BLOCK_SIZE))
                 }
             }
         }
@@ -204,11 +217,11 @@ internal fun FlexViewPage(
                         val aimed = spot
                         val target = aimed?.let { s -> plan.boxes.firstOrNull { it.id == s.target } }
                         if (aimed != null && target != null) {
-                            // The part of the target the dropped tile will take.
-                            val l = target.left
-                            val t = target.top
-                            val w = target.width
-                            val h = target.height
+                            // The part of the target's cell the dropped tile will take.
+                            val l = target.cellLeft
+                            val t = target.cellTop
+                            val w = target.cellWidth
+                            val h = target.cellHeight
                             val part = when (aimed.zone) {
                                 DropZone.LEFT -> floatArrayOf(l, t, w / 2f, h)
                                 DropZone.RIGHT -> floatArrayOf(l + w / 2f, t, w / 2f, h)
@@ -230,18 +243,11 @@ internal fun FlexViewPage(
                                 cornerRadius = radius,
                                 style = Stroke(width = 2.dp.toPx())
                             )
-                            // Handles on the borders it touches: drag one to resize.
-                            val longSide = 36.dp.toPx()
-                            val shortSide = 10.dp.toPx()
-                            for (d in plan.dividersOf(sel.id)) {
-                                val w = if (d.vertical) longSide else shortSide
-                                val h = if (d.vertical) shortSide else longSide
-                                drawRoundRect(
-                                    primary,
-                                    topLeft = Offset(d.cx * k - w / 2f, d.cy * k - h / 2f),
-                                    size = Size(w, h),
-                                    cornerRadius = CornerRadius(shortSide / 2f)
-                                )
+                            // The corner handle: drag it to scale the content.
+                            if (spec.blocks.firstOrNull { it.id == sel.id }?.type != FlexBlockType.PHOTO) {
+                                val corner = Offset((sel.left + sel.width) * k - HANDLE_INSET.toPx(), (sel.top + sel.height) * k - HANDLE_INSET.toPx())
+                                drawCircle(primary, radius = 11.dp.toPx(), center = corner)
+                                drawCircle(Color.White, radius = 4.dp.toPx(), center = corner)
                             }
                         }
                     }
@@ -311,5 +317,8 @@ internal fun FlexViewPage(
     }
 }
 
-/** How close a touch must be to a border handle to grab it. */
+/** How close a touch must be to the corner handle to grab it, and how far inside the tile's corner it sits. */
 private val HANDLE_REACH = 30.dp
+private val HANDLE_INSET = 14.dp
+private const val MIN_BLOCK_SIZE = 0.5f
+private const val MAX_BLOCK_SIZE = 2f

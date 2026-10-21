@@ -288,6 +288,9 @@ fun FlexScreen(
                                 plan = pl,
                                 bottom = bottom,
                                 onLayout = { tree -> update { it.copy(layout = tree) } },
+                                onSizeBlock = { id, size ->
+                                    update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
+                                },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
                                 onEdit = { id ->

@@ -29,8 +29,10 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 
 /**
- * A block's tile on the card, in card pixels (1080 wide). [scale] is how far its content had to shrink to fit
- * (1 = natural size) and [drawn] the height that content takes at that scale.
+ * A block's tile on the card, in card pixels (1080 wide): only as big as its content needs, so this is also
+ * what can be tapped and grabbed. [scale] is how far its content had to shrink to fit (1 = natural size) and
+ * [drawn] the height that content takes at that scale. The tile sits inside its cell, the space the tiling
+ * gave it, which can be bigger.
  */
 class FlexBlockBox(
     val id: Int,
@@ -39,9 +41,15 @@ class FlexBlockBox(
     val width: Float,
     val height: Float,
     val scale: Float = 1f,
-    val drawn: Float = height
+    val drawn: Float = height,
+    val cellLeft: Float = left,
+    val cellTop: Float = top,
+    val cellWidth: Float = width,
+    val cellHeight: Float = height
 ) {
     fun contains(x: Float, y: Float) = x >= left && x <= left + width && y >= top && y <= top + height
+    fun cellContains(x: Float, y: Float) =
+        x >= cellLeft && x <= cellLeft + cellWidth && y >= cellTop && y <= cellTop + cellHeight
 }
 
 /** A block drawn this far (card pixels) from where the layout put it: used to glide blocks to new places. */
@@ -111,17 +119,28 @@ class FlexPlan(
  */
 object FlexPainter {
 
-    /** A tile's content is never shrunk below this; past it the tile clips the content and the editor warns. */
-    const val MIN_TILE_SCALE = 0.35f
+    /** A tile's content is never shrunk below this (text would turn tiny): past it blocks are left off the card and the editor warns. */
+    const val MIN_TILE_SCALE = 0.6f
 
     /** Below this the editor says some tiles are crowded. */
-    const val CROWDED_SCALE = 0.6f
+    const val CROWDED_SCALE = 0.85f
     private const val MIN_FREE_HEIGHT = 480f
     private const val NO_CAP = 1e9f
     private const val TOO_TALL = 4000f
 
     /** Pixels per dp the patterns are drawn at: the card is 1080 wide, about a phone screen's width in pixels. */
     private const val PATTERN_DENSITY = 2.7f
+
+    /** What one arrangement of the shown blocks came to. */
+    private class Arranged(
+        val tree: FlexNode?,
+        val boxes: List<FlexBlockBox>,
+        val solved: FlexSolved,
+        val height: Float,
+        val availH: Float,
+        val clipped: Boolean,
+        val minScale: Float
+    )
 
     /** Lays [spec] out for [content]. Cheap enough to run on every edit. */
     fun plan(spec: FlexSpec, content: FlexContent, assets: FlexAssets): FlexPlan {
@@ -140,81 +159,178 @@ object FlexPainter {
         fun heightOf(b: FlexBlock, w: Float): Float =
             heights.getOrPut("${b.id}@${(w * 100).roundToInt()}") { measure(c, b, content, w) }
 
+        // The least width a block can have without a broken word, a text cut short or text shrunk to a fraction.
+        val needs = HashMap<Int, Float>()
+        fun needOf(b: FlexBlock): Float = needs.getOrPut(b.id) {
+            if (b.type == FlexBlockType.PHOTO) {
+                0f
+            } else {
+                var w = 90f
+                for (i in 0 until 14) {
+                    c.overflow = 0f
+                    measure(c, b, content, w)
+                    if (c.overflow <= 0.5f) break
+                    w += c.overflow * 2f * max(1f, b.size)
+                    if (w >= availW) {
+                        w = availW
+                        break
+                    }
+                }
+                w.coerceAtMost(availW)
+            }
+        }
+
+        // The narrowest a block can be in a cell [cw] wide, at content scale [s], and still be [dh] tall with nothing broken or cut:
+        // a block takes only what it needs.
+        fun hugWidth(b: FlexBlock, cw: Float, s: Float, dh: Float): Float {
+            var lo = min(cw, needOf(b) * s)
+            var hi = cw
+            var i = 0
+            while (hi - lo > 3f && i++ < 8) {
+                val mid = (lo + hi) / 2f
+                c.overflow = 0f
+                val h = measure(c, b, content, mid / s) * s
+                if (c.overflow <= 0.5f && abs(h - dh) <= 1.5f) hi = mid else lo = mid
+            }
+            return min(cw, hi + 2f)
+        }
+
         // 1. Which blocks draw anything. A size only fits so many.
         val drawable = spec.blocks
             .filter { it.enabled && content.has(it.type) }
             .filter { heightOf(it, availW) > 0f }
         val limit = st.aspect.maxBlocks
-        val shown = drawable.take(limit)
-        val hidden = drawable.drop(limit).map { it.id }
-        val byId = shown.associateBy { it.id }
+        val hidden = ArrayList(drawable.drop(limit).map { it.id })
+        var live = drawable.take(limit)
 
-        // 2. The tiling of exactly those blocks.
-        val tree = FlexTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
-        val nat: (Int, Float) -> Float = { id, w -> byId[id]?.let { heightOf(it, w) } ?: 0f }
-        val cap: (Int, Boolean) -> Float = { id, vertical ->
-            if (byId[id]?.type == FlexBlockType.PHOTO) (if (vertical) limits.maxHeight else limits.maxWidth) else NO_CAP
-        }
+        val hugs = HashMap<Int, Float>()
 
-        // 3. The card's height: fixed by the size, or whatever the content needs for Free size.
-        val height: Float = if (st.aspect == FlexAspect.FREE) {
-            val need = if (tree != null) FlexTiler.natural(tree, availW, gap, nat) else 0f
-            (need + 2 * pad + footer).coerceAtLeast(MIN_FREE_HEIGHT)
-        } else {
-            st.aspect.height.toFloat()
-        }
-        val availH = height - 2 * pad - footer
-        val solved = FlexTiler.solve(tree, pad, pad, availW, availH, gap, nat, cap)
-
-        // 4. Fit. A tile whose content is too tall for it shrinks that content, smoothly; photos fit their own shape in.
-        var clipped = false
-        var minScale = 1f
-        val boxes = ArrayList<FlexBlockBox>()
-        for ((id, r) in solved.rects) {
-            val b = byId[id] ?: continue
-            val bw = r[2]
-            val bh = r[3]
-            var s = 1f
-            var drawn = heightOf(b, bw)
-            if (b.type != FlexBlockType.PHOTO && drawn > bh) {
-                var need = drawn
-                for (i in 0 until 6) {
-                    val next = (s * bh / need).coerceIn(MIN_TILE_SCALE, 1f)
-                    if (abs(next - s) < 0.0005f) {
-                        s = next
-                        break
-                    }
-                    s = next
-                    need = heightOf(b, bw / s) * s
-                }
-                // Wrapping can make the last step slightly too big; never end up over.
-                var guard = 0
-                while (heightOf(b, bw / s) * s > bh + 0.5f && s > MIN_TILE_SCALE && guard++ < 40) {
-                    s = max(MIN_TILE_SCALE, s - 0.004f)
-                }
-                drawn = heightOf(b, bw / s) * s
-                if (drawn > bh + 1f) clipped = true
+        fun arrange(shown: List<FlexBlock>): Arranged {
+            val byId = shown.associateBy { it.id }
+            // 2. The tiling of exactly those blocks.
+            val tree = FlexTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
+            val nat: (Int, Float) -> Float = { id, w -> byId[id]?.let { heightOf(it, w) } ?: 0f }
+            val cap: (Int, Boolean) -> Float = { id, vertical ->
+                if (byId[id]?.type == FlexBlockType.PHOTO) (if (vertical) limits.maxHeight else limits.maxWidth) else NO_CAP
             }
-            minScale = min(minScale, s)
-            boxes += FlexBlockBox(id, r[0], r[1], bw, bh, s, min(drawn, bh))
+            val hug: (Int) -> Float = { id ->
+                val b = byId[id]
+                if (b == null) {
+                    availW
+                } else {
+                    hugs.getOrPut(id) {
+                        if (b.type == FlexBlockType.PHOTO) {
+                            photoSize(c, b, content, availW, Float.MAX_VALUE)?.first ?: availW
+                        } else {
+                            hugWidth(b, availW, 1f, heightOf(b, availW))
+                        }
+                    }
+                }
+            }
+            val need: (Int) -> Float = { id -> byId[id]?.let { needOf(it) } ?: 0f }
+
+            // 3. The card's height: fixed by the size, or whatever the content needs for Free size.
+            val height: Float = if (st.aspect == FlexAspect.FREE) {
+                val wanted = if (tree != null) FlexTiler.natural(tree, availW, gap, nat, hug) else 0f
+                (wanted + 2 * pad + footer).coerceAtLeast(MIN_FREE_HEIGHT)
+            } else {
+                st.aspect.height.toFloat()
+            }
+            val availH = height - 2 * pad - footer
+            val solved = FlexTiler.solve(tree, pad, pad, availW, availH, gap, nat, cap, hug, need)
+
+            // 4. Tiles. Each block is only as big as its content needs, inside the cell the tiling gave it, placed
+            // there by the block's own alignment. Content that is too big for its cell shrinks (never below
+            // MIN_TILE_SCALE: past that the block cannot be shown); a photo is its own shape, as big as fits.
+            var clipped = false
+            var minScale = 1f
+            val boxes = ArrayList<FlexBlockBox>()
+            for ((id, r) in solved.rects) {
+                val b = byId[id] ?: continue
+                val cx = r[0]
+                val cy = r[1]
+                val cw = r[2]
+                val ch = r[3]
+                var tw = cw
+                var th = ch
+                var s = 1f
+                if (b.type == FlexBlockType.PHOTO) {
+                    val size = photoSize(c, b, content, cw, ch)
+                    if (size != null) {
+                        tw = size.first
+                        th = size.second
+                    }
+                } else {
+                    val need1 = needOf(b)
+                    // Words must stay whole: scale far enough for the box to be as wide as they need.
+                    val widest = if (need1 > cw) (cw / need1).coerceAtLeast(MIN_TILE_SCALE) else 1f
+                    s = widest
+                    var dh = heightOf(b, cw / s) * s
+                    if (dh > ch) {
+                        var tall = dh
+                        for (i in 0 until 6) {
+                            val next = (s * ch / tall).coerceIn(MIN_TILE_SCALE, widest)
+                            if (abs(next - s) < 0.0005f) {
+                                s = next
+                                break
+                            }
+                            s = next
+                            tall = heightOf(b, cw / s) * s
+                        }
+                        // Wrapping can make the last step slightly too big; never end up over.
+                        var guard = 0
+                        while (heightOf(b, cw / s) * s > ch + 0.5f && s > MIN_TILE_SCALE && guard++ < 40) {
+                            s = max(MIN_TILE_SCALE, s - 0.004f)
+                        }
+                        dh = heightOf(b, cw / s) * s
+                    }
+                    val cut = dh > ch + 1f || need1 > cw / s + 1f
+                    if (cut) clipped = true
+                    th = min(dh, ch)
+                    tw = if (cut) cw else hugWidth(b, cw, s, dh)
+                }
+                minScale = min(minScale, s)
+                val tx = cx + when (b.hAlign) {
+                    FlexAlign.START -> 0f
+                    FlexAlign.CENTER -> (cw - tw) / 2f
+                    FlexAlign.END -> cw - tw
+                }
+                val ty = cy + when (b.vAlign) {
+                    FlexVAlign.TOP -> 0f
+                    FlexVAlign.CENTER -> (ch - th) / 2f
+                    FlexVAlign.BOTTOM -> ch - th
+                }
+                boxes += FlexBlockBox(id, tx, ty, tw, th, s, th, cx, cy, cw, ch)
+            }
+            return Arranged(tree, boxes, solved, height, availH, clipped, minScale)
+        }
+
+        // 5. When something cannot be shown whole even at the smallest scale (a fixed-size card that is too full), the
+        // block at the end of the layout is left off, over and over, until what is left fits. Free size just grows.
+        var arranged = arrange(live)
+        while (arranged.clipped && st.aspect != FlexAspect.FREE && live.size > 1) {
+            val last = FlexTree.leaves(arranged.tree).lastOrNull() ?: break
+            live = live.filter { it.id != last }
+            hidden.add(last)
+            arranged = arrange(live)
         }
         return FlexPlan(
-            height = height,
-            boxes = boxes,
-            tree = tree,
-            dividers = solved.dividers,
-            groupSizes = solved.groupSizes,
+            height = arranged.height,
+            boxes = arranged.boxes,
+            tree = arranged.tree,
+            dividers = arranged.solved.dividers,
+            groupSizes = arranged.solved.groupSizes,
             contentLeft = pad,
             contentTop = pad,
             contentWidth = availW,
-            contentHeight = availH,
+            contentHeight = arranged.availH,
             gap = gap,
-            shownIds = shown.map { it.id },
+            shownIds = live.map { it.id },
             hidden = hidden,
-            clipped = clipped,
-            minScale = minScale,
+            clipped = arranged.clipped,
+            minScale = arranged.minScale,
             limit = limit,
-            tooTall = st.aspect == FlexAspect.FREE && height > TOO_TALL
+            tooTall = st.aspect == FlexAspect.FREE && arranged.height > TOO_TALL
         )
     }
 
@@ -295,6 +411,13 @@ object FlexPainter {
         /** While true, blocks only measure. */
         var dry = false
 
+        /**
+         * Dry runs only: how much wider (in the units of the box being measured) the content must be for no word
+         * to be broken, no text cut with an ellipsis and no text shrunk to a fraction of its size. 0 = it is fine.
+         * The caller resets it, measures, and reads it.
+         */
+        var overflow = 0f
+
         /** How the block being drawn aligns its content across its tile. Set per block. */
         var align: FlexAlign = FlexAlign.START
         val center: Boolean get() = align == FlexAlign.CENTER
@@ -355,13 +478,19 @@ object FlexPainter {
                 size *= 0.93f
                 p = ink(size, bold, color, alpha)
             }
+            if (dry) {
+                // Text this much smaller than asked for looks wrong: the box has to be wide enough to avoid it.
+                val least = ink(maxSize * 0.75f, bold, color, alpha)
+                val lack = max(least.measureText(reference), least.measureText(s)) - width
+                if (lack > 0f) overflow = max(overflow, lack)
+            }
             return p
         }
 
         fun lineH(p: Paint): Float = p.descent() - p.ascent()
 
-        fun layout(s: CharSequence, p: TextPaint, width: Float, maxLines: Int, centered: Boolean, rightAligned: Boolean = right): StaticLayout =
-            StaticLayout.Builder.obtain(s, 0, s.length, p, width.toInt().coerceAtLeast(1))
+        fun layout(s: CharSequence, p: TextPaint, width: Float, maxLines: Int, centered: Boolean, rightAligned: Boolean = right): StaticLayout {
+            val l = StaticLayout.Builder.obtain(s, 0, s.length, p, width.toInt().coerceAtLeast(1))
                 .setAlignment(
                     when {
                         centered -> Layout.Alignment.ALIGN_CENTER
@@ -373,6 +502,23 @@ object FlexPainter {
                 .setEllipsize(TextUtils.TruncateAt.END)
                 .setIncludePad(false)
                 .build()
+            if (dry) noteOverflow(s, p, width, maxLines, l)
+            return l
+        }
+
+        /** A word wider than its box gets broken mid-word, and text that does not fit its lines ends in an ellipsis: both want a wider box. */
+        private fun noteOverflow(s: CharSequence, p: TextPaint, width: Float, maxLines: Int, l: StaticLayout) {
+            var widest = 0f
+            for (word in s.split(' ', '\n', '\t')) if (word.isNotEmpty()) widest = max(widest, p.measureText(word))
+            if (widest > width) overflow = max(overflow, widest - width)
+            for (i in 0 until l.lineCount) {
+                if (l.getEllipsisCount(i) > 0) {
+                    val need = p.measureText(s.toString()) / maxLines * (if (maxLines > 1) 1.1f else 1f) - width
+                    overflow = max(overflow, max(need, width * 0.1f))
+                    break
+                }
+            }
+        }
 
         fun drawLayout(l: StaticLayout, x: Float, y: Float) {
             if (dry) return
@@ -590,22 +736,16 @@ object FlexPainter {
         canvas.restore()
     }
 
+    /** A photo is its own tile: the image fills it. */
     private fun drawPhoto(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
-        val (pw, ph) = photoSize(c, b, ct, w, h) ?: return
         val uri = b.keys?.firstOrNull() ?: ct.photoUri ?: return
         val bmp = c.assets.images[uri] ?: return
-        val x = c.alignBox(0f, w, pw)
-        val y = when (b.vAlign) {
-            FlexVAlign.TOP -> 0f
-            FlexVAlign.CENTER -> (h - ph) / 2f
-            FlexVAlign.BOTTOM -> h - ph
-        }
         val radius = when (b.variant) {
-            1 -> pw / 2f
+            1 -> min(w, h) / 2f
             2 -> 0f
             else -> max(c.st.panelRadius.toFloat(), 24f)
         }
-        c.image(bmp, RectF(x, y, x + pw, y + ph), radius, b.photoZoom, b.photoX, b.photoY)
+        c.image(bmp, RectF(0f, 0f, w, h), radius, b.photoZoom, b.photoX, b.photoY)
     }
 
     /** The block being dragged, drawn on top where the finger has it: slightly bigger, with a soft shadow. */
