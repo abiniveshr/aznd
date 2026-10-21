@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -20,6 +21,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +51,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.components.Button
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -236,15 +245,18 @@ internal fun rowsForDrag(plan: FlexPlan, id: Int, topLeft: Offset): List<List<In
 }
 
 /**
- * The right-hand page: the card as large as the page allows, edited on the card itself.
+ * The Flex page, the middle one: the card, edited on the card itself, and under it the list of its blocks.
  *
- *  - Tap a block to select it. Handles appear and a Size control under the card.
+ *  - Tap a block (on the card or in the list) to select it. Handles appear on the card, and an Edit button
+ *    opens that block's edit page.
  *  - The corner handle scales its contents; the handle on its right edge sets how wide it is (any block, not
- *    only ones beside another). The sliders do the same.
+ *    only ones beside another).
  *  - Hold a block and drag to move it: it lifts off the card and follows the finger while the others glide
  *    out of the way and the gap shows where it will land. Pass it above or below another block to stack
  *    vertically; drop it in the empty space beside a narrow block to sit next to it; or hold it over another
- *    block for half a second to split the space between the two. The order is the Content list's order.
+ *    block for half a second to split the space between the two.
+ *  - The list switches blocks on and off, reorders them (the order is the card's order) and adds new ones.
+ *    It can be folded away to give the card the whole page.
  */
 @Composable
 internal fun FlexViewPage(
@@ -255,10 +267,15 @@ internal fun FlexViewPage(
     bottom: Dp,
     onRowsChange: (shownIds: List<Int>, rows: List<List<Int>>, oldRows: List<List<Int>>, moved: Int?) -> Unit,
     onWidths: (Map<Int, Float>) -> Unit,
-    onSizeBlock: (id: Int, size: Float) -> Unit
+    onSizeBlock: (id: Int, size: Float) -> Unit,
+    /** The selected block; kept by the screen so the card and the list share it. */
+    selectedId: Int?,
+    onSelect: (Int?) -> Unit,
+    onEdit: (Int) -> Unit,
+    /** Changes the card's spec (switching, reordering, adding blocks from the list). */
+    update: ((FlexSpec) -> FlexSpec) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var selected by remember { mutableStateOf<Int?>(null) }
     /** Finger is down on this block (dragging it). */
     var dragging by remember { mutableStateOf<Int?>(null) }
     /** The floating block: while dragged, and while it settles into its place after the drop. */
@@ -284,9 +301,10 @@ internal fun FlexViewPage(
     val rowsNow by rememberUpdatedState(onRowsChange)
     val widthsNow by rememberUpdatedState(onWidths)
     val sizeNow by rememberUpdatedState(onSizeBlock)
+    val selectNow by rememberUpdatedState(onSelect)
     val primary = MaterialTheme.colorScheme.primary
-    // A selection that has left the card (turned off, hidden) is forgotten.
-    val picked = selected?.takeIf { id -> plan.boxes.any { it.id == id } }
+    // A selection that is not on the card (turned off, hidden) has no handles; its list row is still selected.
+    val picked = selectedId?.takeIf { id -> plan.boxes.any { it.id == id } }
     val pickedNow by rememberUpdatedState(picked)
 
     /** Starts [id] [from] away from its place and glides it home. */
@@ -398,7 +416,7 @@ internal fun FlexViewPage(
         .pointerInput(Unit) {
             detectTapGestures { p ->
                 val k = FLEX_CARD_WIDTH / size.width.toFloat()
-                selected = planNow.hit(p.x * k, p.y * k)?.id
+                selectNow(planNow.hit(p.x * k, p.y * k)?.id)
             }
         }
         // Hold, then drag: move a block.
@@ -412,7 +430,7 @@ internal fun FlexViewPage(
                     offsets.remove(hit.id)
                     dragging = hit.id
                     heldId = hit.id
-                    selected = hit.id
+                    selectNow(hit.id)
                     finger = Offset(p.x * k, p.y * k)
                     grab = finger - Offset(hit.left, hit.top)
                     waiting[0] = null
@@ -489,101 +507,107 @@ internal fun FlexViewPage(
             }
         }
 
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .padding(horizontal = 16.dp)) {
-        FlexWarning(spec, plan, Modifier.padding(top = 4.dp))
-        BoxWithConstraints(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()) {
-            FlexPreview(
-                spec = spec,
-                content = content,
-                assets = assets,
-                plan = plan,
-                boxHeight = maxHeight,
-                modifier = Modifier.fillMaxWidth(),
-                canvasModifier = gestures,
-                poses = {
-                    val id = heldId
-                    val slot = id?.let { held -> plan.boxes.firstOrNull { it.id == held } }
-                    val moved = offsets.mapValues { FlexPose(it.value.x, it.value.y) }
-                    if (id != null && slot != null) {
-                        val off = offsets[id] ?: Offset.Zero
-                        val topLeft = if (dragging != null) finger - grab else Offset(slot.left + off.x, slot.top + off.y)
-                        FlexPoses(moved, id, topLeft.x, topLeft.y, lift.value)
-                    } else {
-                        FlexPoses(moved)
-                    }
-                },
-                overlay = { k ->
-                    val radius = CornerRadius(10.dp.toPx())
-                    val held = heldId?.let { id -> plan.boxes.firstOrNull { it.id == id } }
-                    if (held != null) {
-                        // The gap the block will drop into.
-                        drawRoundRect(
-                            primary.copy(alpha = 0.7f),
-                            Offset(held.left * k, held.top * k),
-                            Size(held.width * k, held.height * k),
-                            radius,
-                            style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
-                        )
-                        // Hold-to-split: the block underneath fills in as the half second runs down.
-                        val under = hoverId?.let { id -> plan.boxes.firstOrNull { it.id == id } }
-                        if (under != null && dragging != null) {
-                            val topLeft = finger - grab
-                            val onLeft = topLeft.x + held.width / 2f < under.left + under.width / 2f
-                            val half = under.width / 2f
-                            val sideLeft = if (onLeft) under.left else under.left + half
-                            drawRoundRect(
-                                primary.copy(alpha = 0.10f + 0.30f * hoverProgress),
-                                Offset(sideLeft * k, under.top * k),
-                                Size(half * k, under.height * k),
-                                radius
-                            )
-                            drawRoundRect(
-                                primary.copy(alpha = 0.5f + 0.5f * hoverProgress),
-                                Offset(under.left * k, under.top * k),
-                                Size(under.width * k, under.height * k),
-                                radius,
-                                style = Stroke(width = 2.dp.toPx())
-                            )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val pageHeight = maxHeight
+        var listOpen by rememberSaveable { mutableStateOf(true) }
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)) {
+            FlexWarning(spec, plan, Modifier.padding(top = 4.dp))
+            BoxWithConstraints(modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()) {
+                FlexPreview(
+                    spec = spec,
+                    content = content,
+                    assets = assets,
+                    plan = plan,
+                    boxHeight = maxHeight,
+                    modifier = Modifier.fillMaxWidth(),
+                    canvasModifier = gestures,
+                    poses = {
+                        val id = heldId
+                        val slot = id?.let { held -> plan.boxes.firstOrNull { it.id == held } }
+                        val moved = offsets.mapValues { FlexPose(it.value.x, it.value.y) }
+                        if (id != null && slot != null) {
+                            val off = offsets[id] ?: Offset.Zero
+                            val topLeft = if (dragging != null) finger - grab else Offset(slot.left + off.x, slot.top + off.y)
+                            FlexPoses(moved, id, topLeft.x, topLeft.y, lift.value)
+                        } else {
+                            FlexPoses(moved)
                         }
-                    } else {
-                        plan.boxes.firstOrNull { it.id == picked }?.let { b ->
-                            // Where the block is actually drawn: its place plus any glide still running.
-                            val shift = offsets[b.id] ?: Offset.Zero
-                            val left = (b.left + shift.x) * k
-                            val top = (b.top + shift.y) * k
+                    },
+                    overlay = { k ->
+                        val radius = CornerRadius(10.dp.toPx())
+                        val held = heldId?.let { id -> plan.boxes.firstOrNull { it.id == id } }
+                        if (held != null) {
+                            // The gap the block will drop into.
                             drawRoundRect(
-                                primary,
-                                Offset(left, top),
-                                Size(b.width * k, b.height * k),
+                                primary.copy(alpha = 0.7f),
+                                Offset(held.left * k, held.top * k),
+                                Size(held.width * k, held.height * k),
                                 radius,
-                                style = Stroke(width = 2.5.dp.toPx())
+                                style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
                             )
-                            val right = left + b.width * k
-                            val bottom = top + b.height * k
-                            val corner = Offset(right - HANDLE_INSET.toPx(), bottom - HANDLE_INSET.toPx())
-                            drawCircle(primary, radius = 11.dp.toPx(), center = corner)
-                            drawCircle(Color.White, radius = 4.dp.toPx(), center = corner)
-                            val pill = Size(8.dp.toPx(), 30.dp.toPx())
-                            val mid = Offset(right - HANDLE_INSET.toPx(), (top + bottom) / 2f)
-                            drawRoundRect(primary, Offset(mid.x - pill.width / 2f, mid.y - pill.height / 2f), pill, CornerRadius(4.dp.toPx()))
+                            // Hold-to-split: the block underneath fills in as the half second runs down.
+                            val under = hoverId?.let { id -> plan.boxes.firstOrNull { it.id == id } }
+                            if (under != null && dragging != null) {
+                                val topLeft = finger - grab
+                                val onLeft = topLeft.x + held.width / 2f < under.left + under.width / 2f
+                                val half = under.width / 2f
+                                val sideLeft = if (onLeft) under.left else under.left + half
+                                drawRoundRect(
+                                    primary.copy(alpha = 0.10f + 0.30f * hoverProgress),
+                                    Offset(sideLeft * k, under.top * k),
+                                    Size(half * k, under.height * k),
+                                    radius
+                                )
+                                drawRoundRect(
+                                    primary.copy(alpha = 0.5f + 0.5f * hoverProgress),
+                                    Offset(under.left * k, under.top * k),
+                                    Size(under.width * k, under.height * k),
+                                    radius,
+                                    style = Stroke(width = 2.dp.toPx())
+                                )
+                            }
+                        } else {
+                            plan.boxes.firstOrNull { it.id == picked }?.let { b ->
+                                // Where the block is actually drawn: its place plus any glide still running.
+                                val shift = offsets[b.id] ?: Offset.Zero
+                                val left = (b.left + shift.x) * k
+                                val top = (b.top + shift.y) * k
+                                drawRoundRect(
+                                    primary,
+                                    Offset(left, top),
+                                    Size(b.width * k, b.height * k),
+                                    radius,
+                                    style = Stroke(width = 2.5.dp.toPx())
+                                )
+                                val right = left + b.width * k
+                                val bottom = top + b.height * k
+                                val corner = Offset(right - HANDLE_INSET.toPx(), bottom - HANDLE_INSET.toPx())
+                                drawCircle(primary, radius = 11.dp.toPx(), center = corner)
+                                drawCircle(Color.White, radius = 4.dp.toPx(), center = corner)
+                                val pill = Size(8.dp.toPx(), 30.dp.toPx())
+                                val mid = Offset(right - HANDLE_INSET.toPx(), (top + bottom) / 2f)
+                                drawRoundRect(primary, Offset(mid.x - pill.width / 2f, mid.y - pill.height / 2f), pill, CornerRadius(4.dp.toPx()))
+                            }
                         }
                     }
-                }
-            )
-        }
+                )
+            }
 
-        // Tap a block to bring up its size.
-        val block = spec.blocks.firstOrNull { it.id == picked }
-        AnimatedVisibility(visible = block != null) {
-            if (block != null) {
-                Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            // Tap a block: its name, where it is, and the way to its edit page.
+            val block = spec.blocks.firstOrNull { it.id == picked }
+            AnimatedVisibility(visible = block != null) {
+                if (block != null) {
+                    val position = plan.boxes.indexOfFirst { it.id == block.id } + 1
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            "${block.type.label} size",
+                            "${block.type.label} · $position of ${plan.boxes.size}",
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f)
                         )
@@ -594,39 +618,57 @@ internal fun FlexViewPage(
                             },
                             enabled = block.size != 1f || widthFraction(plan, block.id) < 0.999f
                         ) { Text("Reset") }
-                    }
-                    LabeledSlider(
-                        label = "Size (corner handle)",
-                        valueText = "${(block.size * 100).roundToInt()}%",
-                        value = block.size,
-                        range = MIN_BLOCK_SIZE..MAX_BLOCK_SIZE
-                    ) { sizeNow(block.id, it) }
-                    val share = widthFraction(plan, block.id)
-                    LabeledSlider(
-                        label = "Width (edge handle)",
-                        valueText = "${(share * 100).roundToInt()}% of the row",
-                        value = share,
-                        range = MIN_BLOCK_WIDTH..1f
-                    ) { v ->
-                        val widths = resizeWidth(plan, block.id, v)
-                        if (widths.isNotEmpty()) widthsNow(widths)
+                        Button(onClick = { onEdit(block.id) }) {
+                            Icon(Icons.Default.Edit, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Edit")
+                        }
                     }
                 }
             }
+            if (block == null) {
+                Text(
+                    "Tap a block to select it. Hold and drag to rearrange.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+
+            // The blocks (the old Content page), foldable so the card can have the whole page.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { listOpen = !listOpen }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Blocks · ${spec.blocks.size}",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    if (listOpen) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                    contentDescription = if (listOpen) "Hide blocks" else "Show blocks"
+                )
+            }
+            AnimatedVisibility(visible = listOpen) {
+                BlockListPanel(
+                    spec = spec,
+                    content = content,
+                    plan = plan,
+                    selectedId = selectedId,
+                    onSelect = onSelect,
+                    onEdit = onEdit,
+                    update = update,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(pageHeight * 0.32f)
+                )
+            }
+            Spacer(modifier = Modifier.height(bottom))
         }
-        val label = block?.type?.label
-        val position = plan.boxes.indexOfFirst { it.id == picked } + 1
-        Text(
-            text = if (label != null) {
-                "$label · $position of ${plan.boxes.size}. Hold it and drag to move it."
-            } else {
-                "Tap a block to size it. Hold and drag to rearrange; hold one over another for half a second to share the space."
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-        Spacer(modifier = Modifier.height(bottom))
     }
 }
 

@@ -36,6 +36,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
@@ -64,6 +65,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -114,24 +116,19 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Left to right: how the card looks, what is on it, the card itself. Opens on the middle one. */
+/** Left to right: how the card looks, the card with its blocks, card presets. Opens on the middle one. */
 private val FlexBarPages = listOf(
     BarPage("Look", Icons.Default.Palette),
-    BarPage("Content", Icons.Default.Widgets),
-    BarPage("Flex", Icons.Default.FitnessCenter)
+    BarPage("Flex", Icons.Default.FitnessCenter),
+    BarPage("Presets", Icons.Default.Dashboard)
 )
-private const val PAGE_CONTENT = 1
-
-/** What the shared image picker is currently choosing a photo for. */
-private sealed interface PickTarget {
-    data object Background : PickTarget
-    data class BlockPhoto(val blockId: Int) : PickTarget
-}
+private const val PAGE_FLEX = 1
 
 /**
  * Flex: the card maker behind every share button. Three swipeable pages, also tabs in the bottom bar:
- * Look (colours, text, background), Content (the blocks; hold and drag to reorder) and Flex (the card,
- * large; later the place to edit the content right on the card). Share and Save sit in the top bar.
+ * Look (colours, text, background), Flex (the card, large, edited right on the card, with its list of blocks
+ * under it; tap a block for its Edit button) and Presets (a placeholder for now). A block's edit page
+ * replaces the screen while it is open. Share and Save sit in the top bar.
  * The card starts from the [preset]'s defaults and comes back the way it was last left.
  */
 @Composable
@@ -186,26 +183,20 @@ fun FlexScreen(
         val ct = content
         if (sp != null && ct != null) FlexPainter.plan(sp, ct, assets) else null
     }
-    var previewCollapsed by rememberSaveable { mutableStateOf(false) }
+    /** The block selected on the Flex page (card and list share it), and the one whose edit page is open. */
+    var selectedBlock by remember(preset) { mutableStateOf<Int?>(null) }
+    var editingId by rememberSaveable(preset) { mutableStateOf<Int?>(null) }
 
     fun update(transform: (FlexSpec) -> FlexSpec) {
         spec = spec?.let(transform)
     }
     fun updateStyle(transform: (FlexStyle) -> FlexStyle) = update { it.copy(style = transform(it.style)) }
 
-    var pickTarget by remember { mutableStateOf<PickTarget?>(null) }
     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
-        val uriText = uri.toString()
-        when (val target = pickTarget) {
-            PickTarget.Background -> updateStyle { it.copy(photoUri = uriText, bgMode = FlexBgMode.PHOTO) }
-            is PickTarget.BlockPhoto -> update { sp ->
-                sp.copy(blocks = sp.blocks.map { bl -> if (bl.id == target.blockId) bl.copy(keys = listOf(uriText)) else bl })
-            }
-            null -> Unit
-        }
+        updateStyle { it.copy(photoUri = uri.toString(), bgMode = FlexBgMode.PHOTO) }
     }
 
-    val pagerState = rememberPagerState(initialPage = PAGE_CONTENT, pageCount = { FlexBarPages.size })
+    val pagerState = rememberPagerState(initialPage = PAGE_FLEX, pageCount = { FlexBarPages.size })
     val bar = rememberSubPageBar(pagerState, FlexBarPages)
     val ready = spec != null && content != null
 
@@ -222,91 +213,97 @@ fun FlexScreen(
         }
     }
 
-    ScreenScaffold(
-        title = "Flex",
-        subtitle = preset.label,
-        onBack = onBack,
-        onHome = onHome,
-        onOpenSettings = onOpenSettings,
-        subPages = bar,
-        topBarActions = {
-            IconButton(enabled = ready, onClick = { export { uri -> saveImageToDevice(context, uri) } }) {
-                Icon(Icons.Default.Download, contentDescription = "Save to gallery")
-            }
-            IconButton(enabled = ready, onClick = { export { uri -> FlexExport.share(context, uri) } }) {
-                Icon(Icons.Default.Share, contentDescription = "Share")
-            }
+    val editSpec = spec
+    val editContent = content
+    val editBlock = editingId?.takeIf { id -> editSpec?.blocks?.any { it.id == id } == true }
+    if (editBlock != null && editSpec != null && editContent != null) {
+        // A block's own edit page: it works on a copy and hands it back on Done.
+        key(editBlock) {
+            FlexEditPage(
+                blockId = editBlock,
+                initial = editSpec,
+                content = editContent,
+                onDone = { edited ->
+                    spec = edited
+                    if (edited.blocks.none { it.id == editBlock }) selectedBlock = null
+                    editingId = null
+                },
+                onFinish = { editingId = null },
+                onHome = onHome,
+                onOpenSettings = onOpenSettings
+            )
         }
-    ) { padding ->
-        val sp = spec
-        val ct = content
-        val pl = plan
-        if (sp == null || ct == null || pl == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+    } else {
+        ScreenScaffold(
+            title = "Flex",
+            subtitle = preset.label,
+            onBack = onBack,
+            onHome = onHome,
+            onOpenSettings = onOpenSettings,
+            subPages = bar,
+            topBarActions = {
+                IconButton(enabled = ready, onClick = { export { uri -> saveImageToDevice(context, uri) } }) {
+                    Icon(Icons.Default.Download, contentDescription = "Save to gallery")
+                }
+                IconButton(enabled = ready, onClick = { export { uri -> FlexExport.share(context, uri) } }) {
+                    Icon(Icons.Default.Share, contentDescription = "Share")
+                }
             }
-        } else {
-            val bottom = padding.calculateBottomPadding()
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val previewHeight = maxHeight * 0.38f
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    when (page) {
-                        0 -> EditorPage(sp, ct, assets, pl, previewHeight) {
-                            LookTab(
-                                spec = sp,
-                                hasDefaultPhoto = ct.photoUri != null,
-                                bottom = bottom,
-                                style = { updateStyle(it) },
-                                onPickPhoto = {
-                                    pickTarget = PickTarget.Background
-                                    picker.launch()
-                                },
-                                onReset = {
-                                    defaultSpec?.let { spec = it }
-                                    store.reset(preset)
-                                }
-                            )
-                        }
-                        1 -> EditorPage(
-                            spec = sp,
-                            content = ct,
-                            assets = assets,
-                            plan = pl,
-                            previewHeight = previewHeight,
-                            collapsible = true,
-                            collapsed = previewCollapsed,
-                            onToggleCollapsed = { previewCollapsed = !previewCollapsed }
-                        ) {
-                            ContentTab(
+        ) { padding ->
+            val sp = spec
+            val ct = content
+            val pl = plan
+            if (sp == null || ct == null || pl == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                val bottom = padding.calculateBottomPadding()
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val previewHeight = maxHeight * 0.38f
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        when (page) {
+                            0 -> EditorPage(sp, ct, assets, pl, previewHeight) {
+                                LookTab(
+                                    spec = sp,
+                                    hasDefaultPhoto = ct.photoUri != null,
+                                    bottom = bottom,
+                                    style = { updateStyle(it) },
+                                    onPickPhoto = {
+                                        picker.launch()
+                                    },
+                                    onReset = {
+                                        defaultSpec?.let { spec = it }
+                                        store.reset(preset)
+                                    }
+                                )
+                            }
+                            PAGE_FLEX -> FlexViewPage(
                                 spec = sp,
                                 content = ct,
                                 assets = assets,
                                 plan = pl,
                                 bottom = bottom,
-                                update = { update(it) },
-                                onPickPhoto = { blockId ->
-                                    pickTarget = PickTarget.BlockPhoto(blockId)
-                                    picker.launch()
-                                }
+                                onRowsChange = { shown, rows, old, moved -> update { applyRows(it, shown, rows, old, moved) } },
+                                onWidths = { weights ->
+                                    update { sp -> sp.copy(blocks = sp.blocks.map { b -> weights[b.id]?.let { b.copy(width = it) } ?: b }) }
+                                },
+                                onSizeBlock = { id, size ->
+                                    update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
+                                },
+                                selectedId = selectedBlock,
+                                onSelect = { selectedBlock = it },
+                                onEdit = { id ->
+                                    selectedBlock = id
+                                    editingId = id
+                                },
+                                update = { update(it) }
                             )
+                            else -> FlexPresetsPage(bottom = bottom)
                         }
-                        else -> FlexViewPage(
-                            spec = sp,
-                            content = ct,
-                            assets = assets,
-                            plan = pl,
-                            bottom = bottom,
-                            onRowsChange = { shown, rows, old, moved -> update { applyRows(it, shown, rows, old, moved) } },
-                            onWidths = { weights ->
-                                update { sp -> sp.copy(blocks = sp.blocks.map { b -> weights[b.id]?.let { b.copy(width = it) } ?: b }) }
-                            },
-                            onSizeBlock = { id, size ->
-                                update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
-                            }
-                        )
                     }
                 }
             }
@@ -314,10 +311,7 @@ fun FlexScreen(
     }
 }
 
-/**
- * A page with the live card on top and one tab's controls below it. The card can be collapsible (Content
- * page) to give the list the whole screen. A warning appears under it when the card is too full.
- */
+/** A page with the live card on top and one tab's controls below it. A warning appears under it when the card is too full. */
 @Composable
 private fun EditorPage(
     spec: FlexSpec,
@@ -325,39 +319,19 @@ private fun EditorPage(
     assets: FlexAssets,
     plan: FlexPlan,
     previewHeight: Dp,
-    collapsible: Boolean = false,
-    collapsed: Boolean = false,
-    onToggleCollapsed: () -> Unit = {},
     controls: @Composable () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        if (collapsible) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggleCollapsed)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Preview", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                Icon(
-                    if (collapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
-                    contentDescription = if (collapsed) "Show preview" else "Hide preview"
-                )
-            }
-        }
-        AnimatedVisibility(visible = !collapsible || !collapsed) {
-            FlexPreview(
-                spec = spec,
-                content = content,
-                assets = assets,
-                plan = plan,
-                boxHeight = previewHeight,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
+        FlexPreview(
+            spec = spec,
+            content = content,
+            assets = assets,
+            plan = plan,
+            boxHeight = previewHeight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
         FlexWarning(spec, plan, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         Box(modifier = Modifier
             .weight(1f)
@@ -408,278 +382,6 @@ fun FlexPreview(
                 native.restore()
             }
             overlay?.invoke(this, k)
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Content tab: the blocks
-// ---------------------------------------------------------------------------------------------
-
-@Composable
-private fun ContentTab(
-    spec: FlexSpec,
-    content: FlexContent,
-    assets: FlexAssets,
-    plan: FlexPlan,
-    bottom: Dp,
-    update: ((FlexSpec) -> FlexSpec) -> Unit,
-    onPickPhoto: (Int) -> Unit
-) {
-    var expanded by remember { mutableStateOf<Int?>(null) }
-    var menu by remember { mutableStateOf(false) }
-
-    // The hint is the first list item, so the blocks start at index 1.
-    val listState = rememberLazyListState()
-    val reorder = rememberReorderState(
-        listState = listState,
-        firstItemIndex = 1,
-        itemCount = spec.blocks.size
-    ) { from, to ->
-        update { sp ->
-            if (from !in sp.blocks.indices || to !in sp.blocks.indices) sp
-            else sp.copy(blocks = sp.blocks.toMutableList().also { it.add(to, it.removeAt(from)) })
-        }
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item(key = "hint") {
-            Text(
-                "Drag the handle, or hold a block, to reorder. Opening a block shows it on its own.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        items(spec.blocks, key = { it.id }) { block ->
-            ReorderableItem(reorder, block.id) {
-                BlockCard(
-                    block = block,
-                    spec = spec,
-                    content = content,
-                    assets = assets,
-                    plan = plan,
-                    expanded = expanded == block.id,
-                    onToggleExpanded = { expanded = if (expanded == block.id) null else block.id },
-                    onChange = { changed ->
-                        update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == block.id) changed else it }) }
-                    },
-                    onDelete = {
-                        update { sp -> sp.copy(blocks = sp.blocks.filter { it.id != block.id }) }
-                    },
-                    onPickPhoto = { onPickPhoto(block.id) },
-                    onWidth = { v ->
-                        update { sp ->
-                            val widths = resizeWidth(plan, block.id, v)
-                            if (widths.isEmpty()) {
-                                sp.copy(blocks = sp.blocks.map { if (it.id == block.id) it.copy(width = v) else it })
-                            } else {
-                                sp.copy(blocks = sp.blocks.map { b -> widths[b.id]?.let { b.copy(width = it) } ?: b })
-                            }
-                        }
-                    },
-                    onPlaceBeside = { beside ->
-                        // The first explicit choice freezes the current arrangement, so nothing else moves.
-                        update { sp ->
-                            val frozen = applyRows(sp, plan.shownIds, plan.rows)
-                            frozen.copy(blocks = frozen.blocks.map {
-                                if (it.id == block.id) it.copy(place = if (beside) FlexPlace.BESIDE else FlexPlace.BELOW) else it
-                            })
-                        }
-                    },
-                    dragModifier = Modifier.dragReorderOnLongPress(reorder, block.id),
-                    handleModifier = Modifier.dragReorderHandle(reorder, block.id)
-                )
-            }
-        }
-        item(key = "add") {
-            Box {
-                OutlinedButton(onClick = { menu = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add block")
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    FlexBlockType.entries.filter { content.has(it) }.forEach { type ->
-                        DropdownMenuItem(
-                            text = { Text(type.label) },
-                            onClick = {
-                                menu = false
-                                update { sp ->
-                                    sp.copy(
-                                        blocks = sp.blocks + FlexBlock(
-                                            id = sp.nextBlockId(),
-                                            type = type,
-                                            limit = if (type == FlexBlockType.ROUTINE) 10 else 3,
-                                            text = if (type == FlexBlockType.TEXT) "Your text here" else ""
-                                        )
-                                    )
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BlockCard(
-    block: FlexBlock,
-    spec: FlexSpec,
-    content: FlexContent,
-    assets: FlexAssets,
-    plan: FlexPlan,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
-    onChange: (FlexBlock) -> Unit,
-    onDelete: () -> Unit,
-    onPickPhoto: () -> Unit,
-    onPlaceBeside: (Boolean) -> Unit,
-    onWidth: (Float) -> Unit,
-    /** Put on the header row: hold it, then drag the block to a new place. */
-    dragModifier: Modifier = Modifier,
-    /** Put on the hamburger icon: drag straight away. */
-    handleModifier: Modifier = Modifier
-) {
-    val type = block.type
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(modifier = dragModifier, verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Menu,
-                    contentDescription = "Drag to reorder",
-                    modifier = handleModifier
-                        .size(40.dp)
-                        .padding(8.dp)
-                )
-                Switch(checked = block.enabled, onCheckedChange = { onChange(block.copy(enabled = it)) })
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = onToggleExpanded)) {
-                    Text(type.label, style = MaterialTheme.typography.titleMedium)
-                    val note = when {
-                        !content.has(type) -> "Nothing to show here"
-                        block.enabled && block.id in plan.hidden -> "Not shown: too many blocks for this size"
-                        else -> null
-                    }
-                    if (note != null) {
-                        Text(
-                            note,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                IconButton(onClick = onToggleExpanded) {
-                    Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Hide options" else "Show options"
-                    )
-                }
-            }
-
-            AnimatedVisibility(visible = expanded) {
-              Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                BlockPreview(spec, content, assets, plan, block)
-                LabeledSlider(
-                    label = "Size",
-                    valueText = "${(block.size * 100).roundToInt()}%",
-                    value = block.size,
-                    range = 0.5f..2f
-                ) { onChange(block.copy(size = it)) }
-                val row = plan.rows.firstOrNull { block.id in it }
-                val beside = if (row != null) row.indexOf(block.id) > 0 else block.place == FlexPlace.BESIDE
-                SwitchRow("Place beside the previous block", beside, onPlaceBeside)
-                val share = if (row != null) widthFraction(plan, block.id) else block.width.coerceIn(MIN_BLOCK_WIDTH, 1f)
-                LabeledSlider(
-                    label = "Width",
-                    valueText = "${(share * 100).roundToInt()}% of the row",
-                    value = share,
-                    range = MIN_BLOCK_WIDTH..1f
-                ) { onWidth(it) }
-                if (type.variants.size > 1) {
-                    ChipChoice(
-                        options = type.variants.indices.toList(),
-                        selected = block.variant,
-                        label = { type.variants[it] },
-                        onSelect = { onChange(block.copy(variant = it)) }
-                    )
-                }
-                if (type.listy) {
-                    val choices = content.choices(type)
-                    if (choices.isNotEmpty()) {
-                        MultiSelectDropdown("Show", choices, block.keys) { onChange(block.copy(keys = it)) }
-                    }
-                    if (block.keys == null) {
-                        LabeledSlider(
-                            label = "Max items",
-                            valueText = block.limit.toString(),
-                            value = block.limit.toFloat(),
-                            range = 1f..20f,
-                            steps = 18
-                        ) { onChange(block.copy(limit = it.roundToInt())) }
-                    }
-                }
-                type.flagLabel?.let { label ->
-                    SwitchRow(label, block.flag) { onChange(block.copy(flag = it)) }
-                }
-                if (type == FlexBlockType.HEADER || type == FlexBlockType.TEXT) {
-                    OutlinedTextField(
-                        value = block.text,
-                        onValueChange = { onChange(block.copy(text = it.take(300))) },
-                        label = { Text(if (type == FlexBlockType.TEXT) "Text" else "Title (empty = default)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (type == FlexBlockType.PHOTO) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = onPickPhoto) {
-                            Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Choose photo")
-                        }
-                        if (block.keys != null) {
-                            TextButton(onClick = { onChange(block.copy(keys = null)) }) { Text("Use default") }
-                        }
-                    }
-                    // Crop: what shapes are allowed depends on the card size; the crop can be changed any time.
-                    val aspect = spec.style.aspect
-                    val options = FlexPhotoRatio.entries.filter { it.allowedOn(aspect) }
-                    val current = options.firstOrNull { it != FlexPhotoRatio.ORIGINAL && abs(it.ratio - block.photoRatio) < 0.01f }
-                        ?: FlexPhotoRatio.ORIGINAL
-                    val real = options.filter { it != FlexPhotoRatio.ORIGINAL }
-                    val lowest = real.minByOrNull { it.ratio }?.label
-                    val highest = real.maxByOrNull { it.ratio }?.label
-                    DropdownField(
-                        label = "Crop shape" + if (lowest != null && highest != null) " (this size allows $lowest to $highest)" else "",
-                        options = options,
-                        selected = current,
-                        optionLabel = { if (it == FlexPhotoRatio.ORIGINAL) "Original, within what fits" else it.label }
-                    ) { onChange(block.copy(photoRatio = it.ratio)) }
-                    LabeledSlider("Zoom", "${(block.photoZoom * 10).roundToInt() / 10f}×", block.photoZoom, 1f..3f) {
-                        onChange(block.copy(photoZoom = it))
-                    }
-                    LabeledSlider("Move left / right", "${(block.photoX * 100).roundToInt()}%", block.photoX, 0f..1f) {
-                        onChange(block.copy(photoX = it))
-                    }
-                    LabeledSlider("Move up / down", "${(block.photoY * 100).roundToInt()}%", block.photoY, 0f..1f) {
-                        onChange(block.copy(photoY = it))
-                    }
-                }
-                TextButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Remove block", color = MaterialTheme.colorScheme.error)
-                }
-              }
-            }
         }
     }
 }
