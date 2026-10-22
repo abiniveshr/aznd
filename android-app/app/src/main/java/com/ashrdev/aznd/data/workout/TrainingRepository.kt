@@ -1,13 +1,13 @@
 package com.ashrdev.aznd.data.workout
 
-import com.ashrdev.aznd.domain.BodyweightProvider
-import com.ashrdev.aznd.domain.ExerciseType
-import com.ashrdev.aznd.domain.LoggedSetData
-import com.ashrdev.aznd.domain.StatsExercise
-import com.ashrdev.aznd.domain.PlaceholderBodyweightProvider
-import com.ashrdev.aznd.domain.SessionHistory
-import com.ashrdev.aznd.domain.SetRow
-import com.ashrdev.aznd.domain.SetTree
+import com.ashrdev.aznd.domain.body.BodyweightProvider
+import com.ashrdev.aznd.domain.workout.ExerciseType
+import com.ashrdev.aznd.domain.workout.LoggedSetData
+import com.ashrdev.aznd.domain.workout.StatsExercise
+import com.ashrdev.aznd.domain.body.PlaceholderBodyweightProvider
+import com.ashrdev.aznd.domain.workout.SessionHistory
+import com.ashrdev.aznd.domain.workout.SetRow
+import com.ashrdev.aznd.domain.workout.SetTree
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 

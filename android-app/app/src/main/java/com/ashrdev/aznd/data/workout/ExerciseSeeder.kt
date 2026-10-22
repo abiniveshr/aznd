@@ -1,7 +1,7 @@
 package com.ashrdev.aznd.data.workout
 
 import android.content.Context
-import com.ashrdev.aznd.domain.ExerciseSeedParser
+import com.ashrdev.aznd.domain.workout.ExerciseSeedParser
 
 const val SEED_ASSET = "exercise_seed.txt"
 

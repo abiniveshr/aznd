@@ -4,8 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
-import com.ashrdev.aznd.domain.SetRow
-import com.ashrdev.aznd.domain.SetTree
+import com.ashrdev.aznd.domain.workout.SetRow
+import com.ashrdev.aznd.domain.workout.SetTree
 import kotlinx.coroutines.flow.Flow
 
 /** Data access object for workout template sets. */

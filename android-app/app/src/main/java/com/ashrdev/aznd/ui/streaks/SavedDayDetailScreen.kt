@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Share
+import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.components.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,7 +30,7 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
-import com.ashrdev.aznd.ui.workout.SessionPhotoCard
+import com.ashrdev.aznd.ui.common.PhotoCard
 
 private const val REMARK_LIMIT = 50
 
@@ -136,7 +137,7 @@ fun SavedDayDetailScreen(
                 )
             }
             photoUri?.let { uri ->
-                item { SessionPhotoCard(uri) }
+                item { PhotoCard(uri) }
             }
             if (photoUri == null) {
                 item {

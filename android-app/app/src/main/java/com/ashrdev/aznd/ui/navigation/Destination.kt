@@ -1,7 +1,7 @@
 package com.ashrdev.aznd.ui.navigation
 
 import com.ashrdev.aznd.data.manage.DataApp
-import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.domain.workout.Muscle
 import com.ashrdev.aznd.ui.manage.ManagePage
 import com.ashrdev.aznd.ui.body.CompositionMetric
 

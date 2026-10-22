@@ -29,16 +29,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
-import com.ashrdev.aznd.domain.ExerciseType
-import com.ashrdev.aznd.domain.SetKind
-import com.ashrdev.aznd.domain.SetRow
-import com.ashrdev.aznd.domain.previousRowFor
-import com.ashrdev.aznd.domain.setLabels
-import com.ashrdev.aznd.domain.targetLabel
+import com.ashrdev.aznd.domain.workout.ExerciseType
+import com.ashrdev.aznd.domain.workout.SetKind
+import com.ashrdev.aznd.domain.workout.SetRow
+import com.ashrdev.aznd.domain.workout.previousRowFor
+import com.ashrdev.aznd.domain.workout.setLabels
+import com.ashrdev.aznd.domain.workout.targetLabel
 import com.ashrdev.aznd.ui.common.PrimaryAction
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.workout.exercise.MuscleBadge
+import com.ashrdev.aznd.ui.workout.session.formatPreviousSet
 
 /**
  * Read-only view of a workout's template details. Tapping an exercise opens the exercise viewer.

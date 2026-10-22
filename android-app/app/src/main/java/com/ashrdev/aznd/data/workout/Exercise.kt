@@ -5,10 +5,10 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.ashrdev.aznd.domain.ExerciseProfile
-import com.ashrdev.aznd.domain.ExerciseType
-import com.ashrdev.aznd.domain.Muscle
-import com.ashrdev.aznd.domain.SeedExercise
+import com.ashrdev.aznd.domain.workout.ExerciseProfile
+import com.ashrdev.aznd.domain.workout.ExerciseType
+import com.ashrdev.aznd.domain.workout.Muscle
+import com.ashrdev.aznd.domain.workout.SeedExercise
 
 /**
  * One catalog or custom exercise. Enums are stored as strings and

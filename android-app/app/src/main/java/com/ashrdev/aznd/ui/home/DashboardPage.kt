@@ -31,15 +31,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.domain.Muscle
-import com.ashrdev.aznd.domain.displayName
+import com.ashrdev.aznd.domain.workout.Muscle
+import com.ashrdev.aznd.domain.workout.displayName
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakWithCount
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
-import com.ashrdev.aznd.ui.workout.formatE1rm
-import com.ashrdev.aznd.ui.workout.formatTopSet
+import com.ashrdev.aznd.ui.workout.stats.formatE1rm
+import com.ashrdev.aznd.ui.workout.stats.formatTopSet
 
 @Composable
 fun DashboardPage(

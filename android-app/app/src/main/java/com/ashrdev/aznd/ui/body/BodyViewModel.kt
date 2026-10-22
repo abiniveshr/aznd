@@ -8,7 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.ashrdev.aznd.data.body.BodyDao
 import com.ashrdev.aznd.data.body.BodyMeasurement
 import com.ashrdev.aznd.data.body.BodyWeightEntry
-import com.ashrdev.aznd.domain.MeasurementSite
+import com.ashrdev.aznd.domain.body.MeasurementSite
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn

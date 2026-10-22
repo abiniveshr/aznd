@@ -9,8 +9,8 @@ import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.SetMode
 import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.data.workout.WorkoutEntity
-import com.ashrdev.aznd.domain.SetKind
-import com.ashrdev.aznd.domain.SetRow
+import com.ashrdev.aznd.domain.workout.SetKind
+import com.ashrdev.aznd.domain.workout.SetRow
 import com.ashrdev.aznd.ui.common.DayRange
 import org.json.JSONArray
 import org.json.JSONObject

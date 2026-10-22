@@ -13,8 +13,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.ashrdev.aznd.domain.CalorieGoal
-import com.ashrdev.aznd.domain.CalorieTarget
+import com.ashrdev.aznd.domain.macro.CalorieGoal
+import com.ashrdev.aznd.domain.macro.CalorieTarget
 import kotlinx.coroutines.flow.Flow
 
 /** One thing eaten. [eatenAt] is epoch millis; calories in kcal, macros in grams. */

@@ -4,8 +4,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.ashrdev.aznd.domain.SetKind
-import com.ashrdev.aznd.domain.SetRow
+import com.ashrdev.aznd.domain.workout.SetKind
+import com.ashrdev.aznd.domain.workout.SetRow
 
 /** One row of a workout's template (what the builder edits). One flat table, no per-exercise table. */
 @Entity(tableName = "template_set", indices = [Index("workoutId"), Index("exerciseId")])

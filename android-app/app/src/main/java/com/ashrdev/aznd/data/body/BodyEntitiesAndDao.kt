@@ -8,8 +8,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.ashrdev.aznd.domain.BodyweightProvider
-import com.ashrdev.aznd.domain.PLACEHOLDER_BODYWEIGHT_KG
+import com.ashrdev.aznd.domain.body.BodyweightProvider
+import com.ashrdev.aznd.domain.body.PLACEHOLDER_BODYWEIGHT_KG
 import kotlinx.coroutines.flow.Flow
 
 /** One bodyweight reading. [measuredAt] is epoch millis, [weightKg] in kilograms. */

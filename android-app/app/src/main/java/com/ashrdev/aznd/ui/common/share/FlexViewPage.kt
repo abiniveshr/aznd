@@ -26,10 +26,16 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Rotate90DegreesCw
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.automirrored.filled.ViewQuilt
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,7 +55,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.pow
 
 /**
@@ -62,12 +70,19 @@ import kotlin.math.pow
  *    opens that block's edit page.
  *  - Drag the corner handle to scale the tile's content: the tile grows or shrinks with it and the other tiles
  *    make room.
- *  - Hold a tile and drag it to move it: it lifts off the card and follows the finger, and the part of the cell
- *    under the finger that it will take lights up. Drop it on the left, right, top or bottom of another cell to
- *    sit beside that side of it, or on its middle to swap places.
+ *  - Hold a tile and drag it to move it: it lifts off the card and follows the finger, and the card shows where
+ *    every tile would go, the moved one lit up. Drop it on the left, right, top or bottom of another cell to sit
+ *    beside that side of it, or on its middle to swap places. Near the edge of a cell that is also the edge of a
+ *    row, a column or the card, it goes beside that whole part instead (the closer to the edge, the bigger the part,
+ *    which is outlined), and all of the part's tiles make room; the card's margins drop beside the whole card.
  *  - The list switches blocks on and off, reorders them (the tiles keep their places; the blocks swap) and adds
  *    new ones. It can be folded away to give the card the whole page.
- *  - A floating drop-down over the card has Undo, Redo and Auto align (finds the tiling that fits the blocks best).
+ *  - A selected tile shows pills on its borders with its neighbours: drag one to share the space between them (it
+ *    snaps to an even split). Turn and Flip next to its Edit button turn the split it is part of (a row into a
+ *    column) or mirror it.
+ *  - A floating drop-down over the card has Undo, Redo, Best fit (finds the tiling that fits the blocks best),
+ *    Another layout (steps through the other good tilings best fit found) and Even out tiles (every cell sized by
+ *    its content again).
  */
 @Composable
 internal fun FlexViewPage(
@@ -91,6 +106,10 @@ internal fun FlexViewPage(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onAutoAlign: () -> Unit,
+    /** The next good tiling best fit found (a shuffle). */
+    onAnotherLayout: () -> Unit,
+    /** A border between tiles being dragged: one undo step per drag. */
+    onResizeLayout: (FlexNode?) -> Unit,
     aligning: Boolean
 ) {
     val scope = rememberCoroutineScope()
@@ -99,10 +118,22 @@ internal fun FlexViewPage(
     var grab by remember { mutableStateOf(Offset.Zero) }
     var spot by remember { mutableStateOf<DropSpot?>(null) }
     val lift = remember { Animatable(0f) }
+    // The card as the aimed drop would leave it, worked out off the main thread: where every tile would go.
+    var ghost by remember { mutableStateOf<Pair<DropSpot, FlexPlan>?>(null) }
+    LaunchedEffect(spot) {
+        val aimed = spot ?: return@LaunchedEffect
+        val tree = aimed.tree ?: return@LaunchedEffect
+        val sp = spec
+        val p = withContext(Dispatchers.Default) {
+            runCatching { FlexPainter.plan(sp.copy(layout = tree), content, assets) }.getOrNull()
+        }
+        if (p != null && spot === aimed) ghost = aimed to p
+    }
 
     val planNow by rememberUpdatedState(plan)
     val layoutNow by rememberUpdatedState(onLayout)
     val sizeNow by rememberUpdatedState(onSizeBlock)
+    val resizeNow by rememberUpdatedState(onResizeLayout)
     val specNow by rememberUpdatedState(spec)
     val selectNow by rememberUpdatedState(onSelect)
     val primary = MaterialTheme.colorScheme.primary
@@ -116,8 +147,9 @@ internal fun FlexViewPage(
         val aimed = spot
         dragging = null
         spot = null
+        ghost = null
         if (apply && aimed != null) {
-            FlexTree.moveTo(planNow.tree, id, aimed.target, aimed.zone)?.let { layoutNow(it) }
+            (aimed.tree ?: FlexTree.moveTo(planNow.tree, id, aimed.target, aimed.zone))?.let { layoutNow(it) }
         }
         scope.launch { lift.snapTo(0f) }
     }
@@ -126,7 +158,7 @@ internal fun FlexViewPage(
         // Tap: select the tile under the finger (or nothing).
         .pointerInput(Unit) {
             detectTapGestures { p ->
-                val k = FLEX_CARD_WIDTH / size.width.toFloat()
+                val k = planNow.width / size.width.toFloat()
                 selectNow(planNow.hit(p.x * k, p.y * k)?.id)
             }
         }
@@ -134,7 +166,7 @@ internal fun FlexViewPage(
         .pointerInput(Unit) {
             detectDragGesturesAfterLongPress(
                 onDragStart = { p ->
-                    val k = FLEX_CARD_WIDTH / size.width.toFloat()
+                    val k = planNow.width / size.width.toFloat()
                     val at = Offset(p.x * k, p.y * k)
                     val hit = planNow.hit(at.x, at.y)
                     if (hit != null) {
@@ -150,9 +182,12 @@ internal fun FlexViewPage(
                     val id = dragging
                     if (id != null) {
                         change.consume()
-                        val k = FLEX_CARD_WIDTH / size.width.toFloat()
+                        val k = planNow.width / size.width.toFloat()
                         finger = Offset(change.position.x * k, change.position.y * k)
-                        spot = dropSpot(planNow, id, finger.x, finger.y)
+                        val next = dropSpot(planNow, id, finger.x, finger.y)
+                        // Only a different drop replaces the aimed one (so its preview is not worked out again on every move).
+                        val now = spot
+                        if (next == null || now == null || next.zone != now.zone || next.target != now.target || next.span != now.span) spot = next
                     }
                 },
                 onDragEnd = { endDrag(true) },
@@ -165,10 +200,25 @@ internal fun FlexViewPage(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val id = pickedNow ?: return@awaitEachGesture
+                val k = size.width / planNow.width
+                // A border of the selected tile: drag it to share the space between the tiles on either side.
+                val border = planNow.dividersOf(id).minByOrNull { (down.position - Offset(it.cx * k, it.cy * k)).getDistance() }
+                if (border != null && (down.position - Offset(border.cx * k, border.cy * k)).getDistance() <= HANDLE_REACH.toPx()) {
+                    down.consume()
+                    val tree = planNow.tree
+                    var travelled = 0f
+                    drag(down.id) { change ->
+                        change.consume()
+                        val step = change.position - change.previousPosition
+                        // A border between stacked tiles moves up and down; between tiles side by side, across.
+                        travelled += (if (border.vertical) step.y else step.x) / k
+                        resizeNow(FlexTree.resized(tree, border, travelled))
+                    }
+                    return@awaitEachGesture
+                }
                 val block = specNow.blocks.firstOrNull { it.id == id } ?: return@awaitEachGesture
                 if (block.type == FlexBlockType.PHOTO) return@awaitEachGesture   // a photo's size is its crop shape
                 val box = planNow.box(id) ?: return@awaitEachGesture
-                val k = size.width / FLEX_CARD_WIDTH.toFloat()
                 val inset = HANDLE_INSET.toPx()
                 val corner = Offset((box.left + box.width) * k - inset, (box.top + box.height) * k - inset)
                 if ((down.position - corner).getDistance() > HANDLE_REACH.toPx()) return@awaitEachGesture
@@ -225,13 +275,28 @@ internal fun FlexViewPage(
                             )
                         }
                         val aimed = spot
-                        val target = aimed?.let { s -> plan.boxes.firstOrNull { it.id == s.target } }
-                        if (aimed != null && target != null) {
-                            // The part of the target's cell the dropped tile will take.
-                            val l = target.cellLeft
-                            val t = target.cellTop
-                            val w = target.cellWidth
-                            val h = target.cellHeight
+                        val future = ghost?.takeIf { it.first === aimed }?.second
+                        val landing = future?.boxes?.firstOrNull { it.id == dragging }
+                        if (aimed != null && future != null && landing != null) {
+                            // Where every tile goes if it is dropped here: the others outlined, the dropped one lit up.
+                            val k2 = k * plan.width / future.width
+                            for (b in future.boxes) {
+                                if (b.id == landing.id) continue
+                                drawRoundRect(
+                                    primary.copy(alpha = 0.45f),
+                                    topLeft = Offset(b.cellLeft * k2, b.cellTop * k2),
+                                    size = Size(b.cellWidth * k2, b.cellHeight * k2),
+                                    cornerRadius = radius,
+                                    style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
+                                )
+                            }
+                            val at = Offset(landing.cellLeft * k2, landing.cellTop * k2)
+                            val extent = Size(landing.cellWidth * k2, landing.cellHeight * k2)
+                            drawRoundRect(primary.copy(alpha = 0.28f), topLeft = at, size = extent, cornerRadius = radius)
+                            drawRoundRect(primary, topLeft = at, size = extent, cornerRadius = radius, style = Stroke(width = 2.5.dp.toPx()))
+                        } else if (aimed != null) {
+                            // Until that is worked out: the side of the part the tile goes beside (a tile, or a whole row or column).
+                            val (l, t, w, h) = aimed.region.let { listOf(it[0], it[1], it[2], it[3]) }
                             val part = when (aimed.zone) {
                                 DropZone.LEFT -> floatArrayOf(l, t, w / 2f, h)
                                 DropZone.RIGHT -> floatArrayOf(l + w / 2f, t, w / 2f, h)
@@ -244,6 +309,17 @@ internal fun FlexViewPage(
                             drawRoundRect(primary.copy(alpha = 0.28f), topLeft = at, size = extent, cornerRadius = radius)
                             drawRoundRect(primary, topLeft = at, size = extent, cornerRadius = radius, style = Stroke(width = 2.5.dp.toPx()))
                         }
+                        if (aimed != null && aimed.spans) {
+                            // A drop that spans several tiles: the whole part that makes room, outlined.
+                            val r = aimed.region
+                            drawRoundRect(
+                                primary,
+                                topLeft = Offset(r[0] * k, r[1] * k),
+                                size = Size(r[2] * k, r[3] * k),
+                                cornerRadius = radius,
+                                style = Stroke(width = 1.5.dp.toPx())
+                            )
+                        }
                         val sel = if (held == null) picked?.let { plan.box(it) } else null
                         if (sel != null) {
                             drawRoundRect(
@@ -253,6 +329,15 @@ internal fun FlexViewPage(
                                 cornerRadius = radius,
                                 style = Stroke(width = 2.dp.toPx())
                             )
+                            // Its borders with its neighbours: pills to drag.
+                            for (d in plan.dividersOf(sel.id)) {
+                                val long = 26.dp.toPx()
+                                val thin = 7.dp.toPx()
+                                val pill = if (d.vertical) Size(long, thin) else Size(thin, long)
+                                val at = Offset(d.cx * k - pill.width / 2f, d.cy * k - pill.height / 2f)
+                                drawRoundRect(primary, topLeft = at, size = pill, cornerRadius = CornerRadius(thin / 2f))
+                                drawRoundRect(Color.White, topLeft = at, size = pill, cornerRadius = CornerRadius(thin / 2f), style = Stroke(width = 1.5.dp.toPx()))
+                            }
                             // The corner handle: drag it to scale the content.
                             if (spec.blocks.firstOrNull { it.id == sel.id }?.type != FlexBlockType.PHOTO) {
                                 val corner = Offset((sel.left + sel.width) * k - HANDLE_INSET.toPx(), (sel.top + sel.height) * k - HANDLE_INSET.toPx())
@@ -270,9 +355,13 @@ internal fun FlexViewPage(
                             FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", canRedo) { onRedo() },
                             FlexMenuAction(
                                 Icons.Default.AutoFixHigh,
-                                if (aligning) "Aligning…" else "Auto align",
+                                if (aligning) "Fitting…" else "Best fit",
                                 !aligning
-                            ) { onAutoAlign() }
+                            ) { onAutoAlign() },
+                            FlexMenuAction(Icons.Default.Shuffle, "Another layout", !aligning && plan.boxes.size > 1) { onAnotherLayout() },
+                            FlexMenuAction(Icons.AutoMirrored.Filled.ViewQuilt, "Even out tiles", plan.tree is FlexGroup) {
+                                onLayout(FlexTree.relaxed(plan.tree))
+                            }
                         ),
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -295,6 +384,15 @@ internal fun FlexViewPage(
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f)
                         )
+                        // The split this tile is part of: turn it (a row becomes a column) or flip it (mirror its order).
+                        if (FlexTree.refOf(plan.tree, block.id) != null) {
+                            IconButton(onClick = { FlexTree.turned(plan.tree, block.id)?.let { onLayout(it) } }) {
+                                Icon(Icons.Default.Rotate90DegreesCw, contentDescription = "Turn the split")
+                            }
+                            IconButton(onClick = { FlexTree.flipped(plan.tree, block.id)?.let { onLayout(it) } }) {
+                                Icon(Icons.Default.SwapHoriz, contentDescription = "Flip the split")
+                            }
+                        }
                         Button(onClick = { onEdit(block.id) }) {
                             Icon(Icons.Default.Edit, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))

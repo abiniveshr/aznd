@@ -24,7 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.macro.FoodEntry
 import com.ashrdev.aznd.data.macro.Ingredient
-import com.ashrdev.aznd.domain.MacroStats
+import com.ashrdev.aznd.domain.macro.MacroStats
 import com.ashrdev.aznd.ui.common.DropdownField
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 

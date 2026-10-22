@@ -1,6 +1,6 @@
 package com.ashrdev.aznd.data.workout
 
-import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.domain.workout.Muscle
 
 const val PICKER_MAX_RESULTS = 30
 

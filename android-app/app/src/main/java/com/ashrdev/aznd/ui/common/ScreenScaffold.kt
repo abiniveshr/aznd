@@ -41,11 +41,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.TopAppBar
-import com.ashrdev.aznd.ui.home.TabsHeight
-import com.ashrdev.aznd.ui.home.bottomBarClearance
-import com.ashrdev.aznd.ui.home.bottomBarHeight
-import com.ashrdev.aznd.ui.home.rememberTrayState
-import com.ashrdev.aznd.ui.home.settleTo
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.themedFill
 import kotlin.math.roundToInt

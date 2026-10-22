@@ -63,7 +63,7 @@ internal fun BlockPreview(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val ratio = FLEX_CARD_WIDTH / soloPlan.height
+                val ratio = soloPlan.width / soloPlan.height
                 FlexPreview(
                     spec = soloSpec,
                     content = content,
@@ -92,7 +92,7 @@ internal fun BlockPreview(
 /** A tiny outline of the card with every block as a bar; the one with [highlightId] is coloured. */
 @Composable
 private fun PositionMap(plan: FlexPlan, highlightId: Int) {
-    val ratio = FLEX_CARD_WIDTH / plan.height
+    val ratio = plan.width / plan.height
     val outline = MaterialTheme.colorScheme.outline
     val bar = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)
     val highlight = MaterialTheme.colorScheme.primary
@@ -101,7 +101,7 @@ private fun PositionMap(plan: FlexPlan, highlightId: Int) {
         Canvas(modifier = Modifier
             .width(h * ratio)
             .height(h)) {
-            val k = size.width / FLEX_CARD_WIDTH
+            val k = size.width / plan.width
             drawRoundRect(outline, style = Stroke(width = 1.dp.toPx()), cornerRadius = CornerRadius(6.dp.toPx()))
             plan.boxes.forEach { b ->
                 drawRoundRect(

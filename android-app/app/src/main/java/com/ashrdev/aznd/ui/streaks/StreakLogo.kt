@@ -20,7 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import com.ashrdev.aznd.ui.workout.PhotoStore
+import com.ashrdev.aznd.ui.common.PhotoStore
 
 /** Streak logos are cropped square by the image picker and shown as a circle. */
 const val STREAK_LOGO_ASPECT = 1f

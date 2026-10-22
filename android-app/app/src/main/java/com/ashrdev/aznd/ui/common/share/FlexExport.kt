@@ -7,7 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
 import androidx.core.content.FileProvider
-import com.ashrdev.aznd.ui.workout.PhotoStore
+import com.ashrdev.aznd.ui.common.PhotoStore
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.roundToInt
@@ -17,10 +17,16 @@ object FlexExport {
     private const val DIR = "shared"
     private const val MAX_AGE_MS = 24L * 60 * 60 * 1000
 
-    /** Draws the card at [width] pixels wide (1080 is native). The height comes from the layout: fixed by the size, or by the content for Free size. */
-    fun render(spec: FlexSpec, content: FlexContent, assets: FlexAssets, width: Int = FLEX_CARD_WIDTH): Bitmap {
+    /**
+     * Draws the card with its shorter side [short] pixels long (1080: 1080 × 1350 for a post, 1920 × 1080 for 16:9).
+     * The height comes from the layout: fixed by the size, or by the content for Free size, where a card shorter than
+     * it is wide is scaled up to keep its height at [short] too.
+     */
+    fun render(spec: FlexSpec, content: FlexContent, assets: FlexAssets, short: Int = FLEX_CARD_SHORT): Bitmap {
         val plan = FlexPainter.plan(spec, content, assets)
-        val height = (plan.height * width / FLEX_CARD_WIDTH.toFloat()).roundToInt().coerceAtLeast(1)
+        val k = short / minOf(plan.width, plan.height).coerceAtLeast(1f)
+        val width = (plan.width * k).roundToInt().coerceAtLeast(1)
+        val height = (plan.height * k).roundToInt().coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         FlexPainter.draw(Canvas(bitmap), width.toFloat(), spec, content, assets, plan)
         return bitmap

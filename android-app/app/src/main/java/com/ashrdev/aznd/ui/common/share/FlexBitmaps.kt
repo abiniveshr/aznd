@@ -7,7 +7,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
-import com.ashrdev.aznd.ui.workout.PhotoStore
+import com.ashrdev.aznd.ui.common.PhotoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -18,7 +18,9 @@ import kotlin.math.roundToInt
  */
 class FlexAssets(
     val background: Bitmap? = null,
-    val images: Map<String, Bitmap> = emptyMap()
+    val images: Map<String, Bitmap> = emptyMap(),
+    /** False while the pictures the card's blocks need are still loading (their sizes are not known yet). */
+    val ready: Boolean = true
 )
 
 object FlexBitmaps {
@@ -117,11 +119,14 @@ fun rememberFlexAssets(spec: FlexSpec?, content: FlexContent?): FlexAssets {
     }.value
 
     val needed = remember(spec?.blocks, content) { neededImages(spec, content) }
-    val images = produceState<Map<String, Bitmap>>(emptyMap(), needed) {
-        value = withContext(Dispatchers.IO) {
+    // Remembers which uris it loaded, so the assets can say when the pictures for the current blocks are in.
+    val loaded = produceState<Pair<Set<String>, Map<String, Bitmap>>?>(null, needed) {
+        value = needed to withContext(Dispatchers.IO) {
             needed.mapNotNull { uri -> FlexBitmaps.load(context, uri, 720)?.let { uri to it } }.toMap()
         }
     }.value
+    val images = loaded?.second ?: emptyMap()
+    val ready = spec != null && content != null && loaded?.first == needed
 
-    return remember(background, images) { FlexAssets(background, images) }
+    return remember(background, images, ready) { FlexAssets(background, images, ready) }
 }

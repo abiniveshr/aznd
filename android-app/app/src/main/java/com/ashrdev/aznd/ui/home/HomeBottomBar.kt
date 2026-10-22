@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.ashrdev.aznd.ui.common.BarPage
+import com.ashrdev.aznd.ui.common.BottomBarShell
 import com.ashrdev.aznd.ui.common.SubPageBar
 import com.ashrdev.aznd.ui.common.SubPageTabs
 

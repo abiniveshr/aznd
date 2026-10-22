@@ -41,14 +41,14 @@ import com.ashrdev.aznd.data.workout.SessionEntity
 import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.ExerciseDao
 import com.ashrdev.aznd.data.workout.ExerciseSeeder
-import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.domain.workout.Muscle
 import com.ashrdev.aznd.data.workout.TemplateSet
 import com.ashrdev.aznd.data.workout.LoggedSession
 import com.ashrdev.aznd.data.workout.LoggedSet
 import com.ashrdev.aznd.data.workout.TemplateDao
 import com.ashrdev.aznd.data.workout.SessionDao
 import com.ashrdev.aznd.data.workout.TrainingRepository
-import com.ashrdev.aznd.domain.SetRow
+import com.ashrdev.aznd.domain.workout.SetRow
 import com.ashrdev.aznd.data.workout.assetSeedReader
 import java.text.SimpleDateFormat
 import java.util.Date

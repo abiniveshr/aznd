@@ -16,6 +16,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import com.ashrdev.aznd.domain.streaks.StreakStats
+import com.ashrdev.aznd.domain.streaks.computeCurrentStreak
+import com.ashrdev.aznd.domain.streaks.computeStreakStats
+import com.ashrdev.aznd.domain.streaks.dateKey
+import com.ashrdev.aznd.domain.streaks.displayDate
+import com.ashrdev.aznd.domain.streaks.todayKey
 import com.ashrdev.aznd.ui.components.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton

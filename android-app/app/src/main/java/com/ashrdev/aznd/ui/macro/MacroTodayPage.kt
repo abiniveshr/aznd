@@ -43,9 +43,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.macro.FoodEntry
-import com.ashrdev.aznd.domain.MacroGoals
-import com.ashrdev.aznd.domain.MacroStats
-import com.ashrdev.aznd.domain.MacroTotals
+import com.ashrdev.aznd.domain.macro.MacroGoals
+import com.ashrdev.aznd.domain.macro.MacroStats
+import com.ashrdev.aznd.domain.macro.MacroTotals
 import com.ashrdev.aznd.ui.components.Card
 import java.text.SimpleDateFormat
 import java.util.Calendar

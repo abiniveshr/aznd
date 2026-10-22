@@ -11,9 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.ui.home.ActionTile
-import com.ashrdev.aznd.ui.home.BottomBarShell
-import com.ashrdev.aznd.ui.home.TabsHeight
 
 data class ThirdAction(
     val icon: ImageVector,

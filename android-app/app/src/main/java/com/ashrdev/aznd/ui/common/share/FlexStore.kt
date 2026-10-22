@@ -71,6 +71,11 @@ private fun specToJson(spec: FlexSpec): JSONObject {
         .put("borderColor", s.borderColor)
         .put("watermark", s.watermark)
         .put("watermarkText", s.watermarkText)
+        .put("watermarkAlign", s.watermarkAlign.name)
+        .put("moduleScale", s.moduleScale.toDouble())
+        .put("fitBoost", s.fitBoost.toDouble())
+        .put("autoFit", s.autoFit)
+        .put("growToFill", s.growToFill)
     val blocks = JSONArray()
     spec.blocks.forEach { b ->
         blocks.put(
@@ -183,7 +188,12 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         borderWidth = s.optInt("borderWidth", d.borderWidth),
         borderColor = s.optInt("borderColor", d.borderColor),
         watermark = s.optBoolean("watermark", d.watermark),
-        watermarkText = s.optString("watermarkText", d.watermarkText)
+        watermarkText = s.optString("watermarkText", d.watermarkText),
+        watermarkAlign = enumOr(s.optString("watermarkAlign"), d.watermarkAlign),
+        moduleScale = s.optDouble("moduleScale", d.moduleScale.toDouble()).toFloat().coerceIn(FLEX_MODULE_MIN, FLEX_MODULE_MAX),
+        fitBoost = s.optDouble("fitBoost", d.fitBoost.toDouble()).toFloat().coerceIn(1f, FLEX_BOOST_MAX),
+        autoFit = s.optBoolean("autoFit", d.autoFit),
+        growToFill = s.optBoolean("growToFill", d.growToFill)
     )
     // Before alignment belonged to each block it was one setting for the whole card: carry it over.
     val oldAlign = enumOr(s.optString("align"), FlexAlign.START)

@@ -18,13 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.body.BodyMeasurement
 import com.ashrdev.aznd.data.body.BodyWeightEntry
-import com.ashrdev.aznd.domain.BodyStats
+import com.ashrdev.aznd.domain.body.BodyStats
 import com.ashrdev.aznd.domain.GraphMode
 import com.ashrdev.aznd.domain.GraphPoint
 import com.ashrdev.aznd.domain.GraphRange
 import com.ashrdev.aznd.domain.GraphStyle
 import com.ashrdev.aznd.domain.GraphWindow
-import com.ashrdev.aznd.domain.MeasurementSite
+import com.ashrdev.aznd.domain.body.MeasurementSite
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 

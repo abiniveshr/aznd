@@ -2,6 +2,7 @@ package com.ashrdev.aznd.ui.common.share
 
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 /*
  * The tile layout of a card, in the manner of a tiling window manager (Hyprland, i3).
@@ -33,7 +34,21 @@ data class FlexGroup(val vertical: Boolean, val children: List<FlexNode>, val we
 /** Where a dragged tile is dropped on another: beside it on that side, or in its place (swapping). */
 enum class DropZone { LEFT, RIGHT, TOP, BOTTOM, SWAP }
 
-class DropSpot(val target: Int, val zone: DropZone)
+/**
+ * A drop: on [zone]'s side of [span] (the blocks of one part of the tiling: a single tile, or a whole row,
+ * column or the card, which then make room together), or swapping places with [target]. [region] is that part's
+ * area in card pixels (x, y, width, height), [tree] the tiling the drop makes.
+ */
+class DropSpot(
+    val target: Int,
+    val zone: DropZone,
+    val span: Set<Int> = setOf(target),
+    val region: FloatArray = FloatArray(4),
+    val tree: FlexNode? = null
+) {
+    /** More than one tile makes room: the drop spans a row, a column or the card. */
+    val spans: Boolean get() = span.size > 1
+}
 
 /**
  * The border between two neighbours of one group, for resizing. [cx], [cy] is its middle in card pixels,
@@ -64,6 +79,14 @@ class FlexSolved(
 /** The smallest a tile can be dragged to, in card pixels. */
 const val MIN_TILE = 140f
 
+/** A border dragged this close (a share of the two tiles' total) to an even split snaps to it. */
+private const val SNAP = 0.03f
+
+/** An automatic pair side by side is split between these shares when it evens their heights out (see [FlexTiler]). */
+private const val SPLIT_LOW = 0.25f
+private const val SPLIT_HIGH = 0.75f
+private const val SPLIT_STEPS = 16
+
 private const val BIG = 1e9f
 
 object FlexTree {
@@ -72,6 +95,13 @@ object FlexTree {
         null -> emptyList()
         is FlexLeaf -> listOf(node.id)
         is FlexGroup -> node.children.flatMap { leaves(it) }
+    }
+
+    /** The blocks whose tiles touch the top edge of [node]: the first of a stack, every one of a row. */
+    fun topEdge(node: FlexNode?): Set<Int> = when (node) {
+        null -> emptySet()
+        is FlexLeaf -> setOf(node.id)
+        is FlexGroup -> if (node.vertical) topEdge(node.children.firstOrNull()) else node.children.flatMapTo(HashSet()) { topEdge(it) }
     }
 
     /** [node] with only the blocks in [keep]: emptied groups vanish, a group of one is replaced by its child. */
@@ -167,42 +197,86 @@ object FlexTree {
         return FlexGroup(true, listOf(root, leaf), zeros(2))
     }
 
-    /** Drops [dragged] on [target]: beside it on the side [zone] says (sharing its space), or in its place. */
+    /**
+     * Drops [dragged] on [target]: beside it on the side [zone] says, or in its place. Every group the move changes
+     * (the ones that held the block, and the ones that hold it now) shares its space by content again: shares that
+     * were set for the old contents (by a resize or by auto align) would leave cells far bigger than what is in them.
+     * Groups the move does not touch keep their shares.
+     */
     fun moveTo(root: FlexNode?, dragged: Int, target: Int, zone: DropZone): FlexNode? {
         if (root == null || dragged == target) return null
-        if (zone == DropZone.SWAP) return swap(root, dragged, target)
-        val without = prune(root, leaves(root).toSet() - dragged) ?: return null
-        val vertical = zone == DropZone.TOP || zone == DropZone.BOTTOM
-        val before = zone == DropZone.LEFT || zone == DropZone.TOP
-        return insertBeside(without, target, dragged, vertical, before)
+        if (zone == DropZone.SWAP) return byContent(byContent(swap(root, dragged, target), dragged), target)
+        return moveBeside(root, dragged, setOf(target), zone)
     }
 
-    private fun insertBeside(node: FlexNode, target: Int, id: Int, vertical: Boolean, before: Boolean): FlexNode {
+    /**
+     * Drops [dragged] on the [zone] side of the part of the tiling that holds exactly the blocks [span] (a tile, a
+     * row, a column, the whole card): the new tile runs along that whole side and every tile of the part makes room,
+     * so a block dropped beside a column of two takes the full height and the two share what is left. As with
+     * [moveTo], the groups the move touches share by content again. Null when there is nothing to drop beside.
+     */
+    fun moveBeside(root: FlexNode?, dragged: Int, span: Set<Int>, zone: DropZone): FlexNode? {
+        if (root == null || zone == DropZone.SWAP) return null
+        val rest = span - dragged
+        if (rest.isEmpty()) return null
+        val all = leaves(root).toSet()
+        if (dragged !in all) return null
+        val without = prune(byContent(root, dragged), all - dragged) ?: return null
+        val vertical = zone == DropZone.TOP || zone == DropZone.BOTTOM
+        val before = zone == DropZone.LEFT || zone == DropZone.TOP
+        val placed = insertAt(without, rest, dragged, vertical, before)
+        // Tidy: a group put inside one that splits the same way is merged into it.
+        return prune(byContent(placed, dragged), all)
+    }
+
+    /** [node] with a tile for [id] on one side of the part that holds exactly [span]. */
+    private fun insertAt(node: FlexNode, span: Set<Int>, id: Int, vertical: Boolean, before: Boolean): FlexNode {
         val leaf = FlexLeaf(id)
-        return when (node) {
-            is FlexLeaf -> if (node.id == target) {
-                FlexGroup(vertical, if (before) listOf(leaf, node) else listOf(node, leaf), zeros(2))
-            } else node
-            is FlexGroup -> {
-                val i = node.children.indexOfFirst { it is FlexLeaf && it.id == target }
-                if (i >= 0 && node.vertical == vertical) {
+        fun wrap(n: FlexNode): FlexNode = FlexGroup(vertical, if (before) listOf(leaf, n) else listOf(n, leaf), zeros(2))
+        if (leaves(node).toSet() == span) return wrap(node)
+        if (node !is FlexGroup) return node
+        // A run of this group's children that holds exactly the span (a part that tidying merged into its group).
+        val sets = node.children.map { leaves(it).toSet() }
+        for (a in sets.indices) {
+            if (!span.containsAll(sets[a])) continue
+            var union = HashSet<Int>()
+            for (b in a until sets.size) {
+                if (!span.containsAll(sets[b])) break
+                union.addAll(sets[b])
+                if (union.size == span.size && union == span) {
+                    if (a == 0 && b == sets.lastIndex) return wrap(node)
                     val kids = node.children.toMutableList()
                     val ws = node.weights.toMutableList()
-                    val at = if (before) i else i + 1
-                    kids.add(at, leaf)
-                    if (node.isAuto) {
-                        ws.add(at, 0f)
+                    if (node.vertical == vertical) {
+                        val at = if (before) a else b + 1
+                        kids.add(at, leaf)
+                        ws.add(at, if (node.isAuto) 0f else node.weights.slice(a..b).average().toFloat())
                     } else {
-                        val half = node.weights[i] / 2f
-                        ws[i] = half
-                        ws.add(at, half)
+                        val run = FlexGroup(node.vertical, node.children.slice(a..b), node.weights.slice(a..b))
+                        val share = node.weights.slice(a..b).sum()
+                        for (k in b downTo a) {
+                            kids.removeAt(k)
+                            ws.removeAt(k)
+                        }
+                        kids.add(a, wrap(run))
+                        ws.add(a, share)
                     }
-                    FlexGroup(node.vertical, kids, ws)
-                } else {
-                    FlexGroup(node.vertical, node.children.map { insertBeside(it, target, id, vertical, before) }, node.weights)
+                    return FlexGroup(node.vertical, kids, ws)
                 }
             }
         }
+        // Deeper: the child that holds the span.
+        val i = sets.indexOfFirst { it.containsAll(span) }
+        if (i < 0) return wrap(node)
+        val kids = node.children.toMutableList()
+        kids[i] = insertAt(kids[i], span, id, vertical, before)
+        return FlexGroup(node.vertical, kids, node.weights)
+    }
+
+    /** [node] with every group that holds block [id] (at any depth) sharing its space by content. */
+    private fun byContent(node: FlexNode, id: Int): FlexNode {
+        if (node !is FlexGroup || id !in leaves(node)) return node
+        return FlexGroup(node.vertical, node.children.map { byContent(it, id) }, zeros(node.children.size))
     }
 
     fun swap(root: FlexNode, a: Int, b: Int): FlexNode = mapLeaves(root) { id ->
@@ -256,18 +330,54 @@ object FlexTree {
         return setWeights(node, path, zeros(group.children.size))
     }
 
-    /** Moves the border [d] by [travelled] card pixels, never leaving a tile smaller than [MIN_TILE]. */
+    /**
+     * Moves the border [d] by [travelled] card pixels, never leaving a tile smaller than [MIN_TILE]. Close to where
+     * the two sides would be equal (within [SNAP] of their total) it snaps there.
+     */
     fun resized(tree: FlexNode?, d: FlexDivider, travelled: Float): FlexNode? {
         if (d.index + 1 >= d.sizes.size) return tree
         val a = d.sizes[d.index]
         val b = d.sizes[d.index + 1]
         val low = -(a - MIN_TILE).coerceAtLeast(0f)
         val high = (b - MIN_TILE).coerceAtLeast(0f)
-        val t = travelled.coerceIn(low, high)
+        var t = travelled.coerceIn(low, high)
+        val even = (b - a) / 2f
+        if (abs(t - even) < SNAP * (a + b) && even in low..high) t = even
         val sizes = d.sizes.toMutableList()
         sizes[d.index] = a + t
         sizes[d.index + 1] = b - t
         return setWeights(tree, d.path, sizes)
+    }
+
+    /** The group that holds block [id] as a direct child, split the other way (a row becomes a column), sharing by content. */
+    fun turned(root: FlexNode?, id: Int): FlexNode? = editParent(root, id) { g ->
+        FlexGroup(!g.vertical, g.children, zeros(g.children.size))
+    }
+
+    /** The group that holds block [id] as a direct child, its parts in the opposite order (mirrored). */
+    fun flipped(root: FlexNode?, id: Int): FlexNode? = editParent(root, id) { g ->
+        FlexGroup(g.vertical, g.children.reversed(), g.weights.reversed())
+    }
+
+    /** Every group of the tiling sharing its space by content again: the cells fit what is in them (resizes and auto align's shares are cleared). */
+    fun relaxed(root: FlexNode?): FlexNode? = when (root) {
+        null -> null
+        is FlexLeaf -> root
+        is FlexGroup -> FlexGroup(root.vertical, root.children.map { relaxed(it)!! }, zeros(root.children.size))
+    }
+
+    private fun editParent(root: FlexNode?, id: Int, edit: (FlexGroup) -> FlexGroup): FlexNode? {
+        val ref = refOf(root, id) ?: return null
+        fun at(node: FlexNode, path: List<Int>): FlexNode {
+            if (path.isEmpty()) return edit(node as FlexGroup)
+            val g = node as FlexGroup
+            val kids = g.children.toMutableList()
+            kids[path[0]] = at(kids[path[0]], path.drop(1))
+            return FlexGroup(g.vertical, kids, g.weights)
+        }
+        val out = at(root!!, ref.path)
+        // Tidy: a turned group that now splits the same way as its parent is merged into it.
+        return prune(out, leaves(out).toSet())
     }
 
     /** Gives the child [index] of the group at [path] the share [fraction] (0 to 1) of the group, the others keeping their proportions. */
@@ -288,20 +398,109 @@ object FlexTree {
 }
 
 /**
- * What dropping something held at card pixel [x], [y] would do: the cell under it (the space the tiling gave a
- * tile, which can be bigger than the tile itself) and which part of it.
+ * What dropping something held at card pixel [x], [y] would do. Over another tile's cell (the space the tiling gave
+ * it, which can be bigger than the tile itself): its middle swaps the two; a side puts the dropped tile beside it.
+ * Near the side of a cell that is also the side of a bigger part (a row, a column, the whole card), the drop goes
+ * beside that part instead, so several tiles make room together: the closer to the edge, the bigger the part. The
+ * card's margins drop beside the whole card. Parts that would make the same tiling count once.
  */
 internal fun dropSpot(plan: FlexPlan, dragged: Int, x: Float, y: Float): DropSpot? {
-    val t = plan.boxes.firstOrNull { it.id != dragged && it.cellContains(x, y) } ?: return null
+    val root = plan.tree ?: return null
+    val cells = plan.boxes.associate { it.id to floatArrayOf(it.cellLeft, it.cellTop, it.cellWidth, it.cellHeight) }
+    if (cells.size < 2) return null
+    val cl = plan.contentLeft
+    val ct = plan.contentTop
+    val cr = cl + plan.contentWidth
+    val cb = ct + plan.contentHeight
+
+    fun regionOf(ids: Set<Int>): FloatArray {
+        var l = Float.MAX_VALUE
+        var t = Float.MAX_VALUE
+        var r = -Float.MAX_VALUE
+        var b = -Float.MAX_VALUE
+        for (id in ids) {
+            val c = cells[id] ?: continue
+            l = min(l, c[0]); t = min(t, c[1]); r = max(r, c[0] + c[2]); b = max(b, c[1] + c[3])
+        }
+        return floatArrayOf(l, t, r - l, b - t)
+    }
+    fun spot(target: Int, zone: DropZone, span: Set<Int>): DropSpot? {
+        val tree = FlexTree.moveBeside(root, dragged, span, zone) ?: return null
+        return DropSpot(target, zone, span, regionOf(span - dragged), tree)
+    }
+
+    // In the margin round the tiles: beside the whole card.
+    if (x < cl || x > cr || y < ct || y > cb) {
+        val zone = listOf(
+            DropZone.LEFT to cl - x, DropZone.RIGHT to x - cr, DropZone.TOP to ct - y, DropZone.BOTTOM to y - cb
+        ).maxByOrNull { it.second }!!.first
+        val all = FlexTree.leaves(root).toSet()
+        return spot(all.first { it != dragged }, zone, all)
+    }
+
+    // In a gap between tiles: between the two, beside the nearest one (only that tile's own part, not a bigger one).
+    val under = plan.boxes.firstOrNull { it.id != dragged && it.cellContains(x, y) }
+    if (under == null) {
+        if (plan.boxes.any { it.id == dragged && it.cellContains(x, y) }) return null
+        val near = plan.boxes.filter { it.id != dragged }.minByOrNull { b ->
+            val ox = max(0f, max(b.cellLeft - x, x - (b.cellLeft + b.cellWidth)))
+            val oy = max(0f, max(b.cellTop - y, y - (b.cellTop + b.cellHeight)))
+            ox + oy
+        } ?: return null
+        val ox = max(near.cellLeft - x, x - (near.cellLeft + near.cellWidth))
+        val oy = max(near.cellTop - y, y - (near.cellTop + near.cellHeight))
+        if (max(ox, oy) > plan.gap + 12f) return null
+        val zone = if (ox >= oy) {
+            if (x < near.cellLeft) DropZone.LEFT else DropZone.RIGHT
+        } else {
+            if (y < near.cellTop) DropZone.TOP else DropZone.BOTTOM
+        }
+        return spot(near.id, zone, setOf(near.id))
+    }
+    val t = under
     val dx = x - (t.cellLeft + t.cellWidth / 2f)
     val dy = y - (t.cellTop + t.cellHeight / 2f)
-    if (abs(dx) < t.cellWidth * 0.2f && abs(dy) < t.cellHeight * 0.2f) return DropSpot(t.id, DropZone.SWAP)
-    val zone = if (abs(dx) / t.cellWidth > abs(dy) / t.cellHeight) {
+    if (abs(dx) < t.cellWidth * 0.2f && abs(dy) < t.cellHeight * 0.2f) {
+        val tree = FlexTree.moveTo(root, dragged, t.id, DropZone.SWAP)
+        return DropSpot(t.id, DropZone.SWAP, setOf(t.id), floatArrayOf(t.cellLeft, t.cellTop, t.cellWidth, t.cellHeight), tree)
+    }
+    val horizontal = abs(dx) / t.cellWidth > abs(dy) / t.cellHeight
+    val zone = if (horizontal) {
         if (dx < 0f) DropZone.LEFT else DropZone.RIGHT
     } else {
         if (dy < 0f) DropZone.TOP else DropZone.BOTTOM
     }
-    return DropSpot(t.id, zone)
+    val cell = cells.getValue(t.id)
+    fun edgeOf(r: FloatArray): Float = when (zone) {
+        DropZone.LEFT -> r[0]
+        DropZone.RIGHT -> r[0] + r[2]
+        DropZone.TOP -> r[1]
+        else -> r[1] + r[3]
+    }
+    val edge = edgeOf(cell)
+
+    // The parts that hold this tile and share its side, from the tile out to the whole card.
+    val chain = ArrayList<Set<Int>>()
+    fun walk(node: FlexNode): Boolean {
+        val ids = FlexTree.leaves(node).toSet()
+        if (t.id !in ids) return false
+        if (node is FlexGroup) node.children.forEach { if (walk(it)) return@forEach }
+        if (abs(edgeOf(regionOf(ids)) - edge) <= 2f) chain += ids
+        return true
+    }
+    walk(root)
+    val options = ArrayList<DropSpot>()
+    for (ids in chain) {
+        val s = spot(t.id, zone, ids) ?: continue
+        if (options.none { it.tree == s.tree }) options += s
+    }
+    if (options.isEmpty()) return null
+    // How near the edge the finger is: 0 at the edge, 1 where the middle (the swap) starts.
+    val half = if (horizontal) t.cellWidth / 2f else t.cellHeight / 2f
+    val dist = abs((if (horizontal) x else y) - edge)
+    val u = (dist / (half * 0.6f).coerceAtLeast(1f)).coerceIn(0f, 0.999f)
+    val level = ((1f - u) * options.size).toInt().coerceIn(0, options.size - 1)
+    return options[level]
 }
 
 /**
@@ -365,47 +564,88 @@ internal object FlexTiler {
         }
     }
 
-    /** The widest line of the least width a node can have without breaking a word or cutting text. */
-    private fun floorOf(node: FlexNode, gap: Float, need: (Int) -> Float): Float = when (node) {
-        is FlexLeaf -> need(node.id) * MIN_FLOOR_SCALE
+    /** The least width a node can have, given a tile's own ([floor] or a need): side by side the sum, stacked the widest. */
+    private fun floorOf(node: FlexNode, gap: Float, floor: (Int) -> Float): Float = when (node) {
+        is FlexLeaf -> floor(node.id)
         is FlexGroup -> if (node.vertical) {
-            node.children.maxOf { floorOf(it, gap, need) }
+            node.children.maxOf { floorOf(it, gap, floor) }
         } else {
-            node.children.sumOf { floorOf(it, gap, need).toDouble() }.toFloat() + gap * (node.children.size - 1)
+            node.children.sumOf { floorOf(it, gap, floor).toDouble() }.toFloat() + gap * (node.children.size - 1)
         }
     }
 
-    /** Side by side children share the width by how much each wants (or by their real shares). */
-    private fun widthShares(g: FlexGroup, gap: Float, hug: (Int) -> Float): List<Float> {
+    /**
+     * How side by side children share [axis] (the row's width without its gaps): by their real shares; else by how much each wants, except that a
+     * pair is split where both come out equally tall (within a quarter to three quarters each), so neither leaves
+     * empty space under it. Same idea as the auto aligner's even rows.
+     */
+    private fun widthShares(
+        g: FlexGroup, axis: Float, gap: Float, nat: (Int, Float) -> Float, hug: (Int) -> Float, need: (Int) -> Float
+    ): List<Float> {
         if (!g.isAuto) return fractionsOf(g)
         val wants = g.children.map { hugOf(it, gap, hug).coerceAtLeast(1f) }
         val total = wants.sum()
-        return wants.map { it / total }
+        val byWant = wants.map { it / total }
+        if (g.children.size != 2 || axis <= 0f) return byWant
+        val a = g.children[0]
+        val b = g.children[1]
+        fun uneven(f: Float): Float = abs(natural(a, axis * f, gap, nat, hug, need) - natural(b, axis * (1f - f), gap, nat, hug, need))
+        // Evening out never takes a part below the width its content needs at full size (or below its share by want, if
+        // that is less): a narrower part would shrink, which is worse than a gap under it.
+        val low = max(SPLIT_LOW, min(byWant[0], floorOf(a, gap, need) / axis))
+        val high = min(SPLIT_HIGH, 1f - min(byWant[1], floorOf(b, gap, need) / axis))
+        if (high <= low) return byWant
+        // The heights need not move one way as the split moves (a photo grows taller as it widens, text shorter), so look along it, then closer in.
+        var best = byWant[0].coerceIn(low, high)
+        var bestGap = uneven(best)
+        val start = bestGap
+        for (i in 0..SPLIT_STEPS) {
+            val f = low + (high - low) * i / SPLIT_STEPS
+            val u = uneven(f)
+            if (u < bestGap - 0.5f) {
+                best = f
+                bestGap = u
+            }
+        }
+        var step = (high - low) / SPLIT_STEPS
+        for (i in 0 until 8) {
+            step /= 2f
+            for (f in floatArrayOf(best - step, best + step)) {
+                if (f < low || f > high) continue
+                val u = uneven(f)
+                if (u < bestGap) {
+                    best = f
+                    bestGap = u
+                }
+            }
+        }
+        // Keep the split by what they want unless evening them out is worth it.
+        return if (start - bestGap < 4f) byWant else listOf(best, 1f - best)
     }
 
     /**
      * The height [node] needs when it is [w] wide; [nat] says how tall a block's content is at a width.
      * A group with real shares needs enough for the tile that is the tightest fit for its share.
      */
-    fun natural(node: FlexNode, w: Float, gap: Float, nat: (Int, Float) -> Float, hug: (Int) -> Float): Float = when (node) {
+    fun natural(node: FlexNode, w: Float, gap: Float, nat: (Int, Float) -> Float, hug: (Int) -> Float, need: (Int) -> Float): Float = when (node) {
         is FlexLeaf -> nat(node.id, w)
         is FlexGroup -> {
             val gaps = gap * (node.children.size - 1)
             if (node.vertical) {
                 if (node.isAuto) {
-                    node.children.sumOf { natural(it, w, gap, nat, hug).toDouble() }.toFloat() + gaps
+                    node.children.sumOf { natural(it, w, gap, nat, hug, need).toDouble() }.toFloat() + gaps
                 } else {
                     val fr = fractionsOf(node)
                     var most = 0f
                     node.children.forEachIndexed { i, child ->
-                        most = max(most, natural(child, w, gap, nat, hug) / fr[i].coerceAtLeast(0.02f))
+                        most = max(most, natural(child, w, gap, nat, hug, need) / fr[i].coerceAtLeast(0.02f))
                     }
                     most + gaps
                 }
             } else {
-                val fr = widthShares(node, gap, hug)
+                val fr = widthShares(node, w - gaps, gap, nat, hug, need)
                 var most = 0f
-                node.children.forEachIndexed { i, child -> most = max(most, natural(child, (w - gaps) * fr[i], gap, nat, hug)) }
+                node.children.forEachIndexed { i, child -> most = max(most, natural(child, (w - gaps) * fr[i], gap, nat, hug, need)) }
                 most
             }
         }
@@ -413,15 +653,17 @@ internal object FlexTiler {
 
     /**
      * Lays [root] out in the box x, y, w, h into cells: the space each tile may use, which fills the box. [nat] is
-     * a block's natural height at a width, [hug] the width it wants, [need] the least width it can have without
-     * breaking a word or cutting text, and [cap] the most a block's cell may take along an axis (photos are
-     * held to half the card), or a huge number for no limit.
+     * a block's natural height at a width, [hug] the width it wants, [floor] the least width its cell can have
+     * (what keeps its words whole at its class's smallest scale), [need] the least width at which it is not shrunk
+     * at all, and [cap] the most a block's cell may take along an axis (drawables keep to their size caps, photos to
+     * half the card), or a huge number for no limit.
      */
     fun solve(
         root: FlexNode?, x: Float, y: Float, w: Float, h: Float, gap: Float,
         nat: (Int, Float) -> Float,
         cap: (id: Int, vertical: Boolean) -> Float,
         hug: (Int) -> Float,
+        floor: (Int) -> Float,
         need: (Int) -> Float
     ): FlexSolved {
         val rects = LinkedHashMap<Int, FloatArray>()
@@ -458,13 +700,13 @@ internal object FlexTiler {
             val desired: List<Float> = when {
                 !g.isAuto -> fractionsOf(g).map { it * axis }
                 g.vertical -> {
-                    val needs = g.children.map { natural(it, pw, gap, nat, hug).coerceAtLeast(1f) }
+                    val needs = g.children.map { natural(it, pw, gap, nat, hug, need).coerceAtLeast(1f) }
                     val total = needs.sum()
                     needs.map { it / total * axis }
                 }
-                else -> widthShares(g, gap, hug).map { it * axis }
+                else -> widthShares(g, axis, gap, nat, hug, need).map { it * axis }
             }
-            val floors = g.children.map { if (g.vertical) 0f else floorOf(it, gap, need) }
+            val floors = g.children.map { if (g.vertical) 0f else floorOf(it, gap, floor) }
             val sizes = distribute(axis, desired, g.children.map { capOf(it, g.vertical) }, floors)
             groupSizes[path] = sizes
             var off = 0f
@@ -488,6 +730,3 @@ internal object FlexTiler {
         return FlexSolved(rects, dividers, groupSizes)
     }
 }
-
-/** A tile may be given this much of the width its block needs to keep its words whole, since content can shrink to that scale. */
-private const val MIN_FLOOR_SCALE = 0.6f

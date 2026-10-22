@@ -6,7 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
-import com.ashrdev.aznd.domain.SetTree
+import com.ashrdev.aznd.domain.workout.SetTree
 import kotlinx.coroutines.flow.Flow
 
 /** Data access object for catalog and custom exercise entities. */

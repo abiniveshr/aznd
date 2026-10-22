@@ -23,8 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.ui.home.ActionTile
-import com.ashrdev.aznd.ui.home.TabsHeight
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.themedFill

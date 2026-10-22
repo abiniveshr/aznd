@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.res.AssetManager
 import android.graphics.Typeface
 import android.os.Build
-import com.ashrdev.aznd.domain.formatWeight
+import com.ashrdev.aznd.domain.workout.formatWeight
 import com.ashrdev.aznd.ui.theme.FillBase
 import com.ashrdev.aznd.ui.theme.FillStyle
 import com.ashrdev.aznd.ui.theme.GradientKind
@@ -29,21 +29,38 @@ import kotlin.math.min
  *  - FlexScreen.kt     the editor
  */
 
-/** Every card is drawn on a canvas this wide; the height follows the aspect. Export scales from it. */
-const val FLEX_CARD_WIDTH = 1080
+/**
+ * Every card is laid out (in card pixels) and exported with its shorter side this long: 1080 wide for the upright
+ * and square sizes, 1080 tall for 16:9 (so 1920 × 1080). A Free size card is 1080 wide; one that comes out shorter
+ * than that is exported scaled up so its height is 1080.
+ */
+const val FLEX_CARD_SHORT = 1080
 
 /**
- * Card sizes. [maxBlocks] is how many blocks a size can show before they would be squeezed too small:
- * further blocks are left out (and the editor says so). [FREE] has no fixed height: the card grows or
+ * How big blocks' content is drawn as standard, on top of each block's own size: below 1 so more blocks fit on a
+ * card before any has to shrink.
+ */
+const val FLEX_MODULE_SCALE = 0.8f
+
+/** The range of the Module size slider ([FlexStyle.moduleScale]). */
+const val FLEX_MODULE_MIN = 0.6f
+const val FLEX_MODULE_MAX = 1.5f
+
+/** The most best fit grows a card's modules by when there is room to spare ([FlexStyle.fitBoost]). */
+const val FLEX_BOOST_MAX = 2f
+
+/**
+ * Card sizes, in card pixels. [maxBlocks] is how many blocks a size can show before they would be squeezed too
+ * small: further blocks are left out (and the editor says so). [FREE] has no fixed height: the card grows or
  * shrinks to fit whatever is on it, so nothing is ever squeezed (its [height] is 0, the real height comes
  * from the layout plan).
  */
 enum class FlexAspect(val label: String, val width: Int, val height: Int, val maxBlocks: Int) {
-    SQUARE("Square 1:1", FLEX_CARD_WIDTH, 1080, 3),
-    PORTRAIT("Post 4:5", FLEX_CARD_WIDTH, 1350, 5),
-    STORY("Story 9:16", FLEX_CARD_WIDTH, 1920, 7),
-    WIDE("Wide 16:9", FLEX_CARD_WIDTH, 608, 4),
-    FREE("Free size (fits content)", FLEX_CARD_WIDTH, 0, Int.MAX_VALUE)
+    SQUARE("Square 1:1", FLEX_CARD_SHORT, 1080, 5),
+    PORTRAIT("Post 4:5", FLEX_CARD_SHORT, 1350, 7),
+    STORY("Story 9:16", FLEX_CARD_SHORT, 1920, 10),
+    WIDE("Wide 16:9", 1920, FLEX_CARD_SHORT, 8),
+    FREE("Free size (fits content)", FLEX_CARD_SHORT, 0, Int.MAX_VALUE)
 }
 
 /** The photo shapes offered in a photo block's crop menu (those inside the card's [photoLimit]). */
@@ -80,7 +97,7 @@ class FlexPhotoLimit(val maxWidth: Float, val maxHeight: Float, val range: Close
 fun FlexStyle.photoLimit(): FlexPhotoLimit {
     val pad = padding.toFloat()
     val footer = if (watermark && watermarkText.isNotBlank()) FLEX_FOOTER else 0f
-    val w = (FLEX_CARD_WIDTH - 2 * pad).coerceAtLeast(100f)
+    val w = (aspect.width - 2 * pad).coerceAtLeast(100f)
     // Free size has no height of its own: judge it as a 4:5 post.
     val cardH = if (aspect.height > 0) aspect.height else FlexAspect.PORTRAIT.height
     val h = (cardH - 2 * pad - footer).coerceAtLeast(100f)
@@ -187,7 +204,7 @@ object FlexPalettes {
     val all = listOf(Midnight, Ember, Forest, Violet, Ocean, Sunset, Paper, MonoDark, MonoLight)
 }
 
-/** Everything about how a card looks, nothing about what it says. All sizes are in card pixels (1080 wide). */
+/** Everything about how a card looks, nothing about what it says. All sizes are in card pixels (see [FLEX_CARD_SHORT]). */
 data class FlexStyle(
     val aspect: FlexAspect = FlexAspect.PORTRAIT,
     val bgMode: FlexBgMode = FlexBgMode.GRADIENT,
@@ -221,8 +238,30 @@ data class FlexStyle(
     val borderWidth: Int = 0,
     val borderColor: Int = FlexPalettes.Midnight.accent,
     val watermark: Boolean = true,
-    val watermarkText: String = "aznd"
+    val watermarkText: String = "aznd",
+    /** Where the watermark sits along the bottom of the card. */
+    val watermarkAlign: FlexAlign = FlexAlign.START,
+    /** Module size, the person's: every block's content is drawn at this on top of [FLEX_MODULE_SCALE] and its own size. */
+    val moduleScale: Float = 1f,
+    /**
+     * Best fit's own growth on top of [moduleScale], 1 or more: when a fixed-size card has room to spare, best fit
+     * draws its modules bigger to fill it (only while [growToFill] is on). Not a control; set by best fit.
+     */
+    val fitBoost: Float = 1f,
+    /** Best fit runs by itself: when the card opens and whenever its blocks or their sizes change. Off keeps a hand-made layout. */
+    val autoFit: Boolean = true,
+    /** Best fit may grow the modules of a card with spare room ([fitBoost]). */
+    val growToFill: Boolean = true
 ) {
+    /** How big modules are drawn: the person's module size times best fit's growth. */
+    val moduleSize: Float get() = moduleScale * fitBoost
+
+    /**
+     * The air a title keeps above it when it is the first tile at the top edge: about half the card padding,
+     * at least 24 px. It counts in the title's tile height, and gives way before the title would shrink below 0.92.
+     */
+    val titleInset: Float get() = max(24f, padding / 2f)
+
     fun withPalette(p: FlexPalette): FlexStyle = copy(
         bgA = p.bgA, bgB = p.bgB, textColor = p.text, accent = p.accent,
         panelColor = p.panel, borderColor = p.accent,
@@ -242,26 +281,43 @@ data class FlexStyle(
 fun flexStyleOf(palette: FlexPalette, aspect: FlexAspect = FlexAspect.PORTRAIT): FlexStyle =
     FlexStyle(aspect = aspect).withPalette(palette)
 
-/** What a block shows. Each type reads its own part of [FlexContent]. */
+/**
+ * How a block takes its tile: the rules it is measured, scaled, fitted and priced by. The painter's plan and
+ * the auto aligner both go through [FlexFit] with one function per class, so the two never disagree.
+ *
+ *  - [TITLE]      read first; never shrunk if it can help it, wraps only when it must; at the top edge of the card
+ *                 it keeps a little air above it (see [FlexStyle.titleInset]).
+ *  - [DRAWABLE]   a picture of some kind (photo, chart, a 3D snapshot later): no text scale; it has a shape (a range
+ *                 of aspect ratios) and min / max sizes, and fills its cell edge to edge within them.
+ *  - [STATISTIC]  numbers with units and labels: nothing ever wraps; the block scales as one unit (one scale for
+ *                 every number in it) and reflows its columns (3 → 2 → 1) before it shrinks by more than a little.
+ *  - [TEXT]       running text: wraps on whole words only (never mid-word, never an ellipsis), and when the cell is
+ *                 narrower than its longest word it scales down until that word fits.
+ */
+enum class FlexBlockClass { TITLE, DRAWABLE, STATISTIC, TEXT }
+
+/** What a block shows. Each type reads its own part of [FlexContent]; [blockClass] says how its tile behaves. */
 enum class FlexBlockType(
     val label: String,
     val variants: List<String>,
     /** Label of the block's on/off detail switch, null when it has none. */
     val flagLabel: String?,
     /** True for blocks that show a list of items (so "max items" and item picking make sense). */
-    val listy: Boolean
+    val listy: Boolean,
+    val blockClass: FlexBlockClass
 ) {
-    HEADER("Title", listOf("Standard", "Huge", "Compact"), "Show date", false),
-    STREAKS("Streaks", listOf("Cards", "Grid", "Hero number"), "Show longest run", true),
-    TOP_SET("Top set", listOf("Hero", "Rows"), "Show RPE and date", true),
-    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show \"calculated from\"", true),
-    SESSION_STATS("Workout stats", listOf("Tiles", "One line"), null, false),
-    EXERCISES("Exercises", listOf("Detailed", "Compact", "Best set only"), "Show RPE", true),
-    ROUTINE("Routine", listOf("Detailed", "Compact"), "Show targets", true),
-    CHART("1RM chart", listOf("Line", "Bars"), "Show axis labels", false),
-    DAY_NOTE("Day note", listOf("Quote", "Plain"), "Show date", false),
-    PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false),
-    TEXT("Text", listOf("Plain", "Quote", "Big"), null, false)
+    HEADER("Title", listOf("Standard", "Huge", "Compact"), "Show date", false, FlexBlockClass.TITLE),
+    STREAKS("Streaks", listOf("Cards", "Grid", "Hero number"), "Show longest run", true, FlexBlockClass.STATISTIC),
+    TOP_SET("Top set", listOf("Hero", "Rows"), "Show RPE and date", true, FlexBlockClass.STATISTIC),
+    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show \"calculated from\"", true, FlexBlockClass.STATISTIC),
+    SESSION_STATS("Workout stats", listOf("Tiles", "One line"), null, false, FlexBlockClass.STATISTIC),
+    // Lists of names: they wrap like text (on whole words).
+    EXERCISES("Exercises", listOf("Detailed", "Compact", "Best set only"), "Show RPE", true, FlexBlockClass.TEXT),
+    ROUTINE("Routine", listOf("Detailed", "Compact"), "Show targets", true, FlexBlockClass.TEXT),
+    CHART("1RM chart", listOf("Line", "Bars"), "Show axis labels", false, FlexBlockClass.DRAWABLE),
+    DAY_NOTE("Day note", listOf("Quote", "Plain"), "Show date", false, FlexBlockClass.TEXT),
+    PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false, FlexBlockClass.DRAWABLE),
+    TEXT("Text", listOf("Plain", "Quote", "Big"), null, false, FlexBlockClass.TEXT)
 }
 
 /**

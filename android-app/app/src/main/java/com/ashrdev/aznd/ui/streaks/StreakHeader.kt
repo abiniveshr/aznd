@@ -35,7 +35,7 @@ import com.ashrdev.aznd.ui.common.PhotoViewerDialog
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.FilledTonalButton
 import com.ashrdev.aznd.ui.components.OutlinedButton
-import com.ashrdev.aznd.ui.workout.PhotoStore
+import com.ashrdev.aznd.ui.common.PhotoStore
 
 private val BannerHeight = 200.dp
 

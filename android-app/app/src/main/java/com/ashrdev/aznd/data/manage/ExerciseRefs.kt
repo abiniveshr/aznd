@@ -2,8 +2,8 @@ package com.ashrdev.aznd.data.manage
 
 import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.ExerciseDao
-import com.ashrdev.aznd.domain.ExerciseType
-import com.ashrdev.aznd.domain.Muscle
+import com.ashrdev.aznd.domain.workout.ExerciseType
+import com.ashrdev.aznd.domain.workout.Muscle
 import org.json.JSONArray
 import org.json.JSONObject
 

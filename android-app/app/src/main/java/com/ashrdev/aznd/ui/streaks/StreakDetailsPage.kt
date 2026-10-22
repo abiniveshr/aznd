@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ashrdev.aznd.data.streaks.StreakEntity
+import com.ashrdev.aznd.domain.streaks.StreakStats
+import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.components.Card
 
 private fun days(n: Int) = "$n day${if (n == 1) "" else "s"}"

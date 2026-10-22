@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.domain.GraphWindow
-import com.ashrdev.aznd.domain.MeasurementSite
+import com.ashrdev.aznd.domain.body.MeasurementSite
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar

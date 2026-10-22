@@ -2,17 +2,17 @@ package com.ashrdev.aznd.ui.common.share
 
 import android.net.Uri
 import com.ashrdev.aznd.data.workout.SetMode
-import com.ashrdev.aznd.domain.ExerciseType
-import com.ashrdev.aznd.domain.SetKind
-import com.ashrdev.aznd.domain.targetLabel
+import com.ashrdev.aznd.domain.workout.ExerciseType
+import com.ashrdev.aznd.domain.workout.SetKind
+import com.ashrdev.aznd.domain.workout.targetLabel
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
-import com.ashrdev.aznd.ui.streaks.displayDate
+import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
-import com.ashrdev.aznd.ui.workout.estimatedOneRepMax
+import com.ashrdev.aznd.ui.workout.stats.estimatedOneRepMax
 import com.ashrdev.aznd.ui.workout.formatDuration
-import com.ashrdev.aznd.ui.workout.loadExerciseStats
+import com.ashrdev.aznd.ui.workout.stats.loadExerciseStats
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

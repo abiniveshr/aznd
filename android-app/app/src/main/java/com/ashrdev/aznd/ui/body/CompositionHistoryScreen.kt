@@ -28,7 +28,7 @@ import com.ashrdev.aznd.data.body.BodyMeasurement
 import com.ashrdev.aznd.data.body.BodyWeightEntry
 import com.ashrdev.aznd.domain.GraphMode
 import com.ashrdev.aznd.domain.GraphWindow
-import com.ashrdev.aznd.domain.MeasurementSite
+import com.ashrdev.aznd.domain.body.MeasurementSite
 import com.ashrdev.aznd.ui.calendar.BottomAnchoredPage
 import com.ashrdev.aznd.ui.calendar.DayDecoration
 import com.ashrdev.aznd.ui.calendar.DayFill

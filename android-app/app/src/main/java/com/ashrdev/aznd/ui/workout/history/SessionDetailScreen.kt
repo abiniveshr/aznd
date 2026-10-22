@@ -1,0 +1,190 @@
+package com.ashrdev.aznd.ui.workout.history
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.data.workout.LoggedSetEntity
+import com.ashrdev.aznd.data.workout.SessionEntity
+import com.ashrdev.aznd.data.workout.SessionWithSets
+import com.ashrdev.aznd.ui.common.PhotoCard
+import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.workout.WorkoutViewModel
+import com.ashrdev.aznd.ui.workout.formatClock
+import com.ashrdev.aznd.ui.workout.formatDuration
+import com.ashrdev.aznd.ui.workout.formatExerciseShare
+import com.ashrdev.aznd.ui.workout.formatSet
+import com.ashrdev.aznd.ui.workout.formatSingleSetShare
+import com.ashrdev.aznd.ui.workout.formatTimestamp
+
+@Composable
+fun SessionDetailScreen(
+    sessionId: Long,
+    viewModel: WorkoutViewModel,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit,
+    // Opens Flex on the workout preset for this session.
+    onShare: () -> Unit
+) {
+    var data by remember { mutableStateOf<SessionWithSets?>(null) }
+    var loaded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(setOf<String>()) }
+
+    LaunchedEffect(sessionId) {
+        data = viewModel.getSession(sessionId)
+        loaded = true
+    }
+
+    if (!loaded) return
+    val item = data
+    if (item == null) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
+
+    val grouped = item.sets.sortedBy { it.orderIndex }.groupBy { it.exerciseName }
+    val elapsed = ((item.session.finishedAt - item.session.startedAt) / 1000L).toInt()
+
+    ScreenScaffold(
+        title = item.session.workoutName,
+        onBack = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        third = ThirdAction(
+            icon = Icons.Default.Share,
+            label = "Share",
+            onClick = onShare
+        )
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Column {
+                    Text(
+                        formatTimestamp(item.session.startedAt),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Finished ${formatClock(item.session.finishedAt)} · ${formatDuration(elapsed)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            item.session.photoUri?.let { uri ->
+                item { PhotoCard(uri) }
+            }
+            grouped.forEach { (exerciseName, sets) ->
+                item {
+                    ExerciseGroupCard(
+                        session = item.session,
+                        exerciseName = exerciseName,
+                        sets = sets,
+                        expanded = exerciseName in expanded,
+                        onToggle = {
+                            expanded = if (exerciseName in expanded) expanded - exerciseName
+                            else expanded + exerciseName
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseGroupCard(
+    session: SessionEntity,
+    exerciseName: String,
+    sets: List<LoggedSetEntity>,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val context = LocalContext.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(exerciseName, style = MaterialTheme.typography.titleMedium)
+                    Text("${sets.size} sets", style = MaterialTheme.typography.bodySmall)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = {
+                        SessionShare.share(
+                            context = context,
+                            subject = "$exerciseName · ${formatTimestamp(session.startedAt)}",
+                            body = formatExerciseShare(session, exerciseName, sets)
+                        )
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Share exercise")
+                    }
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null
+                    )
+                }
+            }
+            if (expanded) {
+                sets.forEachIndexed { index, set ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Set ${index + 1}: ${formatSet(set)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        IconButton(onClick = {
+                            SessionShare.share(
+                                context = context,
+                                subject = "$exerciseName set ${index + 1}",
+                                body = formatSingleSetShare(session, exerciseName, index, set)
+                            )
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share set")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -2,6 +2,8 @@
 
 package com.ashrdev.aznd.ui.common.share
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.shape.CircleShape
 import com.ashrdev.aznd.ui.components.AlertDialog
@@ -41,10 +44,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -61,6 +66,56 @@ fun FlexSection(title: String, content: @Composable ColumnScope.() -> Unit) {
         ) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             content()
+        }
+    }
+}
+
+/**
+ * A titled card of controls that folds: tap its header to open or close it. Closed, the header shows [summary] (what
+ * the section is set to now) so the page reads at a glance. Whether it is open is kept by [title].
+ */
+@Composable
+fun FlexFoldSection(
+    title: String,
+    summary: String = "",
+    initiallyOpen: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var open by rememberSaveable(title) { mutableStateOf(initiallyOpen) }
+    val turn by animateFloatAsState(if (open) 180f else 0f, label = "foldArrow")
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.animateContentSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { open = !open }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    if (!open && summary.isNotBlank()) {
+                        Text(
+                            summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Icon(
+                    Icons.Default.ExpandMore,
+                    contentDescription = if (open) "Close $title" else "Open $title",
+                    modifier = Modifier.rotate(turn)
+                )
+            }
+            if (open) {
+                Column(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) { content() }
+            }
         }
     }
 }

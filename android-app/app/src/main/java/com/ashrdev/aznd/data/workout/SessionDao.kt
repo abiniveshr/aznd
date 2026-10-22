@@ -5,9 +5,9 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
-import com.ashrdev.aznd.domain.LoggedSetData
-import com.ashrdev.aznd.domain.SetRow
-import com.ashrdev.aznd.domain.SetTree
+import com.ashrdev.aznd.domain.workout.LoggedSetData
+import com.ashrdev.aznd.domain.workout.SetRow
+import com.ashrdev.aznd.domain.workout.SetTree
 import kotlinx.coroutines.flow.Flow
 
 /** Data access object for logged sessions and sets. */

@@ -6,7 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.domain.SetRow
+import com.ashrdev.aznd.domain.workout.SetRow
 
 /**
  * How one nested row (drop / superset) is wired into the guide lines of its card.

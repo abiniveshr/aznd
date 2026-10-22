@@ -11,11 +11,11 @@ import com.ashrdev.aznd.data.macro.FoodEntry
 import com.ashrdev.aznd.data.macro.Ingredient
 import com.ashrdev.aznd.data.macro.IngredientDao
 import com.ashrdev.aznd.data.workout.TrainingRepository
-import com.ashrdev.aznd.domain.BodyInputs
-import com.ashrdev.aznd.domain.E1rmCalculator
-import com.ashrdev.aznd.domain.MacroStats
-import com.ashrdev.aznd.domain.MeasurementSite
-import com.ashrdev.aznd.domain.SessionStatsCalculator
+import com.ashrdev.aznd.domain.macro.BodyInputs
+import com.ashrdev.aznd.domain.workout.E1rmCalculator
+import com.ashrdev.aznd.domain.macro.MacroStats
+import com.ashrdev.aznd.domain.body.MeasurementSite
+import com.ashrdev.aznd.domain.workout.SessionStatsCalculator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

@@ -6,7 +6,7 @@ import com.ashrdev.aznd.data.body.BodyWeightEntry
 import com.ashrdev.aznd.data.macro.FoodEntry
 import com.ashrdev.aznd.data.macro.Ingredient
 import com.ashrdev.aznd.data.macro.MacroTargetsStore
-import com.ashrdev.aznd.domain.CalorieGoal
+import com.ashrdev.aznd.domain.macro.CalorieGoal
 import com.ashrdev.aznd.ui.common.DayRange
 import org.json.JSONObject
 

@@ -38,6 +38,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.DEFAULT_MILESTONES
+import com.ashrdev.aznd.domain.streaks.dateKey
+import com.ashrdev.aznd.domain.streaks.displayDate
+import com.ashrdev.aznd.domain.streaks.todayKey
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField

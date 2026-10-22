@@ -47,6 +47,8 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.workout.exercise.ExerciseSearchContent
+import com.ashrdev.aznd.ui.workout.exercise.LocalOpenCustomExercise
 
 private const val PAGE_EXERCISES = 0
 private const val PAGE_VIEW = 1
