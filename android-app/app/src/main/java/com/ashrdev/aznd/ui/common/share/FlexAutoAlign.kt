@@ -20,6 +20,10 @@ import kotlin.math.roundToInt
  *  - Restrictions: no tile is made smaller than its floor (a word is never broken, content is never shrunk
  *    below [FlexFit.MIN_SCALE], a tile is never smaller than [MIN_TILE]); photos never exceed the card's
  *    half limit.
+ *  - Full width: every text tile spans the whole width of its cell (see [FlexBlock.fillWidth]), and a card is
+ *    stacked, one module under the other and edge to edge, unless splitting pays for itself. A split (side by
+ *    side) costs [AutoCost.SPLIT]; it is kept centred ([AutoCost.OFF_CENTRE]) unless a part needs more room, and its parts
+ *    are kept equally tall ([AutoCost.UNEVEN]), so the modules in a row shrink together.
  *  - Priorities: photos win spare room (their area is rewarded, and they are the ones to grow when there is
  *    slack and the last to shrink when there is none); titles are never shrunk, never wrapped when avoidable, and
  *    like the top edge.
@@ -166,7 +170,8 @@ internal object FlexFit {
     /** [text] on the optimiser's numbers: the width a tile takes is estimated, not searched for. */
     fun of(item: AutoItem, space: AutoSpace, cw: Float, ch: Float): TileFit =
         if (item.kind == AutoKind.PHOTO) photo(item, space, cw, ch)
-        else text(cw, ch, item.need, { item.height(it) }, { s, _ -> min(cw, item.hug * s) })
+        // Auto align sets every text block to fill its cell, so the tile is as wide as the cell.
+        else text(cw, ch, item.need, { item.height(it) }, { _, _ -> cw })
 }
 
 /** The price of a tile: lower is a better fit. The same numbers judge the optimiser's guesses and the real layouts. */
@@ -174,6 +179,36 @@ internal object AutoCost {
     const val CUT = 60.0
     const val GROUP = 0.05
     const val HIDDEN = 25.0
+
+    /** Putting modules side by side instead of one under the other (per extra part): a card stays stacked unless the height it saves pays for it. */
+    const val SPLIT = 0.15
+
+    /** Side by side, a part's share off the equal share (0 = all equal, 1 = the most it can be): centre is preferred. */
+    const val OFF_CENTRE = 1.2
+
+    /** Side by side, how unequal the parts' heights are (0 = equal, 1 = one is empty): the modules of a row are as tall as each other. */
+    const val UNEVEN = 2.0
+
+    /** Rows of columns whose edges do not line up (0 = all rows cut at the same places). */
+    const val RAGGED = 1.0
+
+    /**
+     * What a group costs beyond its tiles. [sizes] is what each part got along the split and [used] how far each
+     * reaches across it (for side by side parts, how tall the tile or stack in it is).
+     */
+    fun group(stacked: Boolean, sizes: FloatArray, used: FloatArray): Double {
+        var c = GROUP
+        if (stacked || sizes.size < 2) return c
+        val m = sizes.size
+        val total = sizes.sum().toDouble().coerceAtLeast(1.0)
+        var off = 0.0
+        for (s in sizes) off += abs(s / total - 1.0 / m)
+        c += SPLIT * (m - 1) + OFF_CENTRE * off / 2.0
+        val tall = used.maxOrNull() ?: 0f
+        val short = used.minOrNull() ?: 0f
+        if (tall > 0f) c += UNEVEN * (tall - short) / tall
+        return c
+    }
 
     fun tile(item: AutoItem, space: AutoSpace, cw: Float, ch: Float, fit: TileFit, top: Boolean): Double {
         val area = (space.width * space.height).toDouble().coerceAtLeast(1.0)
@@ -214,7 +249,8 @@ internal object AutoCost {
 /** A tiling the search found, and what it cost by the optimiser's own numbers. */
 internal class AutoCandidate(val tree: FlexNode, val cost: Double)
 
-private class AutoSub(val cost: Double, val node: FlexNode?, val floorW: Float)
+/** [used]: how tall the tiling is (a tile's own height; stacked, the sum; side by side, the tallest). */
+private class AutoSub(val cost: Double, val node: FlexNode?, val floorW: Float, val used: Float = 0f)
 
 internal class FlexAutoAligner(private val items: List<AutoItem>, private val space: AutoSpace) {
 
@@ -255,7 +291,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         val item = items[i]
         val fit = FlexFit.of(item, space, w, h)
         val cost = AutoCost.tile(item, space, w, h, fit, top)
-        return AutoSub(cost, FlexLeaf(item.id), floorOf(item))
+        return AutoSub(cost, FlexLeaf(item.id), floorOf(item), fit.h)
     }
 
     /** The narrowest the solver lets a tile be: what its words need at the smallest scale. A photo has no floor there. */
@@ -301,8 +337,9 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
 
     private fun evaluate(stacked: Boolean, from: IntArray, to: IntArray, sizes: FloatArray, cross: Float, top: Boolean): AutoSub {
         val m = sizes.size
-        var cost = AutoCost.GROUP
+        var cost = 0.0
         val kids = ArrayList<FlexNode>(m)
+        val used = FloatArray(m)
         var floor = 0f
         for (k in 0 until m) {
             val cw = if (stacked) cross else sizes[k]
@@ -313,10 +350,13 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
             if (!stacked && sub.floorW > sizes[k] + 0.5f) return none
             cost += sub.cost
             kids += node
+            used[k] = sub.used
             floor = if (stacked) max(floor, sub.floorW) else floor + sub.floorW
         }
         if (!stacked) floor += gap * (m - 1)
-        return AutoSub(cost, FlexGroup(stacked, kids, sizes.toList()), floor)
+        cost += AutoCost.group(stacked, sizes, used)
+        val extent = if (stacked) used.sum() + gap * (m - 1) else (used.maxOrNull() ?: 0f)
+        return AutoSub(cost, FlexGroup(stacked, kids, sizes.toList()), floor, extent)
     }
 
     // ---- what a part asks for ------------------------------------------------------------------------------
@@ -447,8 +487,26 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         if (m == 2) {
             val ones = FloatArray(2) { 1f }
             for (q in SPLITS) add(fill(axis, floatArrayOf(q * axis, (1f - q) * axis), floors, caps, ones, ones))
+            // Side by side: the split that makes the two parts equally tall, so the modules of a row shrink together.
+            if (!stacked) evenHeights(from, to, axis, floors, caps)?.let { x -> add(fill(axis, floatArrayOf(x, axis - x), floors, caps, ones, ones)) }
         }
         return out
+    }
+
+    /** The width of the first of two parts side by side that makes both equally tall (null when no split is allowed). */
+    private fun evenHeights(from: IntArray, to: IntArray, axis: Float, floors: FloatArray, caps: FloatArray): Float? {
+        var lo = max(floors[0], axis - caps[1])
+        var hi = min(caps[0], axis - floors[1])
+        if (hi <= lo) return null
+        fun heightGap(x: Float): Float = wantsHeight(from[0], to[0], x) - wantsHeight(from[1], to[1], axis - x)
+        // The first part gets taller as it narrows, the second as it widens: find where they meet, or the closest end.
+        if (heightGap(lo) <= 0f) return lo
+        if (heightGap(hi) >= 0f) return hi
+        for (i in 0 until 14) {
+            val mid = (lo + hi) / 2f
+            if (heightGap(mid) > 0f) lo = mid else hi = mid
+        }
+        return (lo + hi) / 2f
     }
 
     /**
@@ -516,4 +574,11 @@ internal fun alignGrid(node: FlexNode): FlexNode {
         kids = groups.map { g -> FlexGroup(g.vertical, g.children, shares.map { it * 1000f }) }
     }
     return FlexGroup(node.vertical, kids, node.weights)
+}
+
+/** Puts every side by side group of a tiling on equal shares: all rows are cut in the middle, however many parts they have. */
+internal fun centreColumns(node: FlexNode): FlexNode {
+    if (node !is FlexGroup) return node
+    val kids = node.children.map { centreColumns(it) }
+    return if (node.vertical) FlexGroup(true, kids, node.weights) else FlexGroup(false, kids, List(kids.size) { 1000f })
 }

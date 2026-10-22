@@ -285,6 +285,8 @@ data class FlexBlock(
     /** Where the content sits inside the block's tile, across and down. Every tile has its own. */
     val hAlign: FlexAlign = FlexAlign.START,
     val vAlign: FlexVAlign = FlexVAlign.TOP,
+    /** Text-like blocks: the tile takes the whole width of its cell instead of only what its content needs. Auto align sets it, so modules line up edge to edge. */
+    val fillWidth: Boolean = false,
     /** PHOTO: the crop shape (width / height); 0 = the photo's own shape. Limited by [FlexStyle.photoLimit]. */
     val photoRatio: Float = 0f,
     /** PHOTO: zoom into the picture, 1 to 3. */

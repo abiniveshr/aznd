@@ -231,7 +231,8 @@ object FlexPainter {
                 } else {
                     // Words must stay whole: scale far enough for the box to be as wide as they need. Content that is
                     // still too big at the smallest scale is cut off at the tile's edge.
-                    val fit = FlexFit.text(cw, ch, needOf(b), { w -> heightOf(b, w) }, { sc, dh -> hugWidth(b, cw, sc, dh) })
+                    // A block set to fill its cell (auto align does that) is as wide as the cell, else only as wide as it needs.
+                    val fit = FlexFit.text(cw, ch, needOf(b), { w -> heightOf(b, w) }, { sc, dh -> if (b.fillWidth) cw else hugWidth(b, cw, sc, dh) })
                     s = fit.scale
                     if (fit.cut) clipped = true
                     th = fit.h
@@ -326,9 +327,6 @@ object FlexPainter {
         }
     }
 
-    private fun countGroups(node: FlexNode?): Int =
-        if (node is FlexGroup) 1 + node.children.sumOf { countGroups(it) } else 0
-
     /** A block as the auto aligner sees it: its kind, its least and its hugging width, and its height at a range of widths. */
     private fun autoItem(c: Ctx, m: Metrics, b: FlexBlock, ct: FlexContent, availW: Float): AutoItem {
         if (b.type == FlexBlockType.PHOTO) {
@@ -353,6 +351,8 @@ object FlexPainter {
         val blocks = spec.blocks.toMutableList()
         var next = 0
         spec.blocks.forEachIndexed { i, b -> if (drawable.any { it.id == b.id }) blocks[i] = order[next++] }
+        // Every module takes the full width of its cell, so a stack reads edge to edge (photos are cropped to their cells by fillCells).
+        for (i in blocks.indices) if (blocks[i].type != FlexBlockType.PHOTO && !blocks[i].fillWidth) blocks[i] = blocks[i].copy(fillWidth = true)
         return spec.copy(blocks = blocks, layout = tree)
     }
 
@@ -404,12 +404,41 @@ object FlexPainter {
         // What a laid out card costs: the same prices the search uses, on the real tiles.
         fun score(p: FlexPlan): Double {
             val space = AutoSpace(p.contentWidth, p.contentHeight, gap, limits.maxWidth, limits.maxHeight)
-            var total = AutoCost.GROUP * countGroups(p.tree)
+            var total = 0.0
+            val boxes = p.boxes.associateBy { it.id }
             for (box in p.boxes) {
                 val item = items[box.id] ?: continue
                 val fit = TileFit(box.width, box.height, box.scale, false)
                 total += AutoCost.tile(item, space, box.cellWidth, box.cellHeight, fit, box.cellTop <= p.contentTop + 1f)
             }
+            // The structure: splits, how far they are from the middle, how unequal the modules of a row are, and rows whose columns do not line up.
+            fun walk(node: FlexNode, path: List<Int>): Float {
+                if (node is FlexLeaf) return boxes[node.id]?.height ?: 0f
+                val g = node as FlexGroup
+                val used = FloatArray(g.children.size) { walk(g.children[it], path + it) }
+                val sizes = p.groupSizes[path]?.toFloatArray() ?: FloatArray(used.size) { 1f }
+                total += AutoCost.group(g.vertical, sizes, used)
+                if (g.vertical) {
+                    var before: FloatArray? = null
+                    g.children.forEachIndexed { i, kid ->
+                        if (kid is FlexGroup && !kid.vertical) {
+                            val row = p.groupSizes[path + i]?.toFloatArray()
+                            if (row != null && row.sum() > 0f) {
+                                val shares = FloatArray(row.size) { row[it] / row.sum() }
+                                val prev = before
+                                if (prev != null && prev.size == shares.size) {
+                                    var off = 0f
+                                    for (c in shares.indices) off += abs(shares[c] - prev[c])
+                                    total += AutoCost.RAGGED * off / 2f
+                                }
+                                before = shares
+                            }
+                        }
+                    }
+                }
+                return if (g.vertical) used.sum() + gap * (used.size - 1) else (used.maxOrNull() ?: 0f)
+            }
+            p.tree?.let { walk(it, emptyList()) }
             if (p.clipped) total += AutoCost.CUT
             total += AutoCost.HIDDEN * p.hidden.size
             // Free size: a card no taller than its content needs is a better fit.
@@ -430,7 +459,8 @@ object FlexPainter {
             for (h in heights) {
                 val space = AutoSpace(availW, h, gap, limits.maxWidth, limits.maxHeight)
                 for (cand in FlexAutoAligner(list, space).solve()) {
-                    for (tree in listOf(cand.tree, alignGrid(cand.tree))) if (tree !in out) out += tree
+                    // As found; with the columns of the rows lined up; and with every row cut in the middle.
+                    for (tree in listOf(cand.tree, alignGrid(cand.tree), centreColumns(cand.tree))) if (tree !in out) out += tree
                 }
             }
             return out

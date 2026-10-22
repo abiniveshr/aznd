@@ -86,6 +86,7 @@ private fun specToJson(spec: FlexSpec): JSONObject {
                 .put("size", b.size.toDouble())
                 .put("hAlign", b.hAlign.name)
                 .put("vAlign", b.vAlign.name)
+                .put("fillWidth", b.fillWidth)
                 .put("photoRatio", b.photoRatio.toDouble())
                 .put("photoZoom", b.photoZoom.toDouble())
                 .put("photoX", b.photoX.toDouble())
@@ -208,6 +209,7 @@ private fun specFromJson(o: JSONObject): FlexSpec {
             size = b.optDouble("size", 1.0).toFloat().coerceIn(0.5f, 2f),
             hAlign = enumOr(b.optString("hAlign"), oldAlign),
             vAlign = enumOr(b.optString("vAlign"), oldVAlign),
+            fillWidth = b.optBoolean("fillWidth", false),
             photoRatio = b.optDouble("photoRatio", 0.0).toFloat().coerceAtLeast(0f),
             photoZoom = b.optDouble("photoZoom", 1.0).toFloat().coerceIn(1f, 3f),
             photoX = b.optDouble("photoX", 0.5).toFloat().coerceIn(0f, 1f),
