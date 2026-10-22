@@ -20,13 +20,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,7 @@ import kotlin.math.pow
  *    sit beside that side of it, or on its middle to swap places.
  *  - The list switches blocks on and off, reorders them (the tiles keep their places; the blocks swap) and adds
  *    new ones. It can be folded away to give the card the whole page.
+ *  - A floating drop-down over the card has Undo, Redo and Auto align (finds the tiling that fits the blocks best).
  */
 @Composable
 internal fun FlexViewPage(
@@ -81,7 +84,14 @@ internal fun FlexViewPage(
     onSelect: (Int?) -> Unit,
     onEdit: (Int) -> Unit,
     /** Changes the card's spec (switching, reordering, adding blocks from the list). */
-    update: ((FlexSpec) -> FlexSpec) -> Unit
+    update: ((FlexSpec) -> FlexSpec) -> Unit,
+    /** The floating drop-down over the card: undo and redo the changes made to the card, and auto align. */
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onAutoAlign: () -> Unit,
+    aligning: Boolean
 ) {
     val scope = rememberCoroutineScope()
     var dragging by remember { mutableStateOf<Int?>(null) }
@@ -252,6 +262,23 @@ internal fun FlexViewPage(
                         }
                     }
                 )
+                // Undo, redo and auto align float over the card (out of the way while a tile is being moved).
+                if (dragging == null) {
+                    FlexFloatingMenu(
+                        actions = listOf(
+                            FlexMenuAction(Icons.AutoMirrored.Filled.Undo, "Undo", canUndo) { onUndo() },
+                            FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", canRedo) { onRedo() },
+                            FlexMenuAction(
+                                Icons.Default.AutoFixHigh,
+                                if (aligning) "Aligning…" else "Auto align",
+                                !aligning
+                            ) { onAutoAlign() }
+                        ),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 4.dp, end = 4.dp)
+                    )
+                }
             }
 
             // Tap a tile: its name, where it is, and the way to its edit page.
@@ -290,9 +317,6 @@ internal fun FlexViewPage(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f)
                 )
-                if (spec.layout != null) {
-                    TextButton(onClick = { update { it.copy(layout = null) } }) { Text("Auto layout") }
-                }
                 Icon(
                     if (listOpen) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
                     contentDescription = if (listOpen) "Hide blocks" else "Show blocks"

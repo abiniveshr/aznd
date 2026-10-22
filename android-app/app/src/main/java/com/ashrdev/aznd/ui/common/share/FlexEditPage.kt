@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
-import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedButton
@@ -58,74 +57,44 @@ import kotlin.math.roundToInt
 
 /**
  * The undo / redo history of one visit to the edit page. Every change is a new [FlexSpec]; the page works
- * on this copy and the card only gets it when Done is tapped. Changes from a slider or a text field
+ * on this copy and the card only gets it when Finish is tapped. Changes from a slider or a text field
  * ([change] with `continuous = true`) that follow each other closely count as one step, so one drag
  * of a slider is one Undo, not hundreds.
  */
 internal class FlexEditHistory(private val initial: FlexSpec) {
+    private val stack = UndoStack<FlexSpec>()
+
     var current by mutableStateOf(initial)
         private set
-    var canUndo by mutableStateOf(false)
-        private set
-    var canRedo by mutableStateOf(false)
-        private set
+
+    val canUndo: Boolean get() = stack.canUndo
+    val canRedo: Boolean get() = stack.canRedo
 
     /** True once the page's copy differs from what it started with. */
     val dirty: Boolean get() = current != initial
 
-    private val undoStack = ArrayList<FlexSpec>()
-    private val redoStack = ArrayList<FlexSpec>()
-    private var lastEditAt = 0L
-    private var lastWasContinuous = false
-
     fun change(continuous: Boolean = false, transform: (FlexSpec) -> FlexSpec) {
         val next = transform(current)
         if (next == current) return
-        val now = System.currentTimeMillis()
-        val merge = continuous && lastWasContinuous && undoStack.isNotEmpty() && now - lastEditAt < MERGE_MS
-        if (!merge) {
-            undoStack.add(current)
-            if (undoStack.size > MAX_STEPS) undoStack.removeAt(0)
-        }
-        lastEditAt = now
-        lastWasContinuous = continuous
-        redoStack.clear()
+        stack.push(current, continuous)
         current = next
-        sync()
     }
 
     fun undo() {
-        if (undoStack.isEmpty()) return
-        redoStack.add(current)
-        current = undoStack.removeAt(undoStack.lastIndex)
-        lastWasContinuous = false
-        sync()
+        stack.undo(current)?.let { current = it }
     }
 
     fun redo() {
-        if (redoStack.isEmpty()) return
-        undoStack.add(current)
-        current = redoStack.removeAt(redoStack.lastIndex)
-        lastWasContinuous = false
-        sync()
-    }
-
-    private fun sync() {
-        canUndo = undoStack.isNotEmpty()
-        canRedo = redoStack.isNotEmpty()
-    }
-
-    private companion object {
-        const val MERGE_MS = 800L
-        const val MAX_STEPS = 100
+        stack.redo(current)?.let { current = it }
     }
 }
 
 /**
  * Edit page of one block. Top: the card with everything dimmed except this block's tile, so its position and
  * size are what you see. Below: its position (swap places), size and alignment,
- * then everything else the block can do (look, items, text, photo). Bottom bar: Finish (leave without keeping this visit's changes, like closing a screen), Undo,
- * Redo, Done (keep the changes and go back).
+ * then everything else the block can do (look, items, text, photo). Top bar: Discard (leave without keeping this
+ * visit's changes, like closing a screen) and Finish (keep the changes and go back). A floating drop-down over the
+ * card holds Undo and Redo.
  */
 @Composable
 internal fun FlexEditPage(
@@ -175,12 +144,14 @@ internal fun FlexEditPage(
         onBack = { requestFinish() },
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        third = ThirdAction(Icons.Default.Close, "Finish") { requestFinish() },
-        extraActions = listOf(
-            ThirdAction(Icons.AutoMirrored.Filled.Undo, "Undo", enabled = history.canUndo) { history.undo() },
-            ThirdAction(Icons.AutoMirrored.Filled.Redo, "Redo", enabled = history.canRedo) { history.redo() },
-            ThirdAction(Icons.Default.Check, "Done") { onDone(history.current) }
-        )
+        topBarActions = {
+            IconButton(onClick = { requestFinish() }) {
+                Icon(Icons.Default.Close, contentDescription = "Discard")
+            }
+            IconButton(onClick = { onDone(history.current) }) {
+                Icon(Icons.Default.Check, contentDescription = "Finish")
+            }
+        }
     ) { padding ->
         if (block == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -320,6 +291,16 @@ internal fun FlexEditPage(
                         }
                     }
                 }
+                // Undo and Redo float over the card.
+                FlexFloatingMenu(
+                    actions = listOf(
+                        FlexMenuAction(Icons.AutoMirrored.Filled.Undo, "Undo", history.canUndo) { history.undo() },
+                        FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", history.canRedo) { history.redo() }
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 12.dp, end = 20.dp)
+                )
             }
         }
     }
@@ -328,7 +309,7 @@ internal fun FlexEditPage(
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
             title = { Text("Discard your changes?") },
-            text = { Text("Finish leaves this page without keeping what you changed here. Done keeps it.") },
+            text = { Text("Discard leaves this page without keeping what you changed here. Finish keeps it.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDiscard = false

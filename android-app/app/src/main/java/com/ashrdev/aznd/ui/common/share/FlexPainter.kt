@@ -106,6 +106,9 @@ class FlexPlan(
     fun dividersOf(id: Int): List<FlexDivider> = dividers.filter { id in it.adjacent }
 }
 
+/** What [FlexPainter.autoAlign] came to: the card to use (the same one when [changed] is false) and a line for the person. */
+class FlexAutoResult(val spec: FlexSpec, val changed: Boolean, val message: String)
+
 /**
  * Draws a Flex card with plain android.graphics, in a fixed 1080-wide design space that is scaled to
  * whatever width it is asked for. The editor preview (a Compose Canvas) and the exported PNG both
@@ -154,46 +157,11 @@ object FlexPainter {
         val gap = st.spacing.toFloat()
         val limits = c.limits
 
-        // Heights are measured a lot (every tile, every fit step), so remember them.
-        val heights = HashMap<String, Float>()
-        fun heightOf(b: FlexBlock, w: Float): Float =
-            heights.getOrPut("${b.id}@${(w * 100).roundToInt()}") { measure(c, b, content, w) }
-
-        // The least width a block can have without a broken word, a text cut short or text shrunk to a fraction.
-        val needs = HashMap<Int, Float>()
-        fun needOf(b: FlexBlock): Float = needs.getOrPut(b.id) {
-            if (b.type == FlexBlockType.PHOTO) {
-                0f
-            } else {
-                var w = 90f
-                for (i in 0 until 14) {
-                    c.overflow = 0f
-                    measure(c, b, content, w)
-                    if (c.overflow <= 0.5f) break
-                    w += c.overflow * 2f * max(1f, b.size)
-                    if (w >= availW) {
-                        w = availW
-                        break
-                    }
-                }
-                w.coerceAtMost(availW)
-            }
-        }
-
-        // The narrowest a block can be in a cell [cw] wide, at content scale [s], and still be [dh] tall with nothing broken or cut:
-        // a block takes only what it needs.
-        fun hugWidth(b: FlexBlock, cw: Float, s: Float, dh: Float): Float {
-            var lo = min(cw, needOf(b) * s)
-            var hi = cw
-            var i = 0
-            while (hi - lo > 3f && i++ < 8) {
-                val mid = (lo + hi) / 2f
-                c.overflow = 0f
-                val h = measure(c, b, content, mid / s) * s
-                if (c.overflow <= 0.5f && abs(h - dh) <= 1.5f) hi = mid else lo = mid
-            }
-            return min(cw, hi + 2f)
-        }
+        // Heights are measured a lot (every tile, every fit step), so they are remembered.
+        val m = Metrics(c, content, availW)
+        fun heightOf(b: FlexBlock, w: Float): Float = m.heightOf(b, w)
+        fun needOf(b: FlexBlock): Float = m.needOf(b)
+        fun hugWidth(b: FlexBlock, cw: Float, s: Float, dh: Float): Float = m.hugWidth(b, cw, s, dh)
 
         // 1. Which blocks draw anything. A size only fits so many.
         val drawable = spec.blocks
@@ -261,33 +229,13 @@ object FlexPainter {
                         th = size.second
                     }
                 } else {
-                    val need1 = needOf(b)
-                    // Words must stay whole: scale far enough for the box to be as wide as they need.
-                    val widest = if (need1 > cw) (cw / need1).coerceAtLeast(MIN_TILE_SCALE) else 1f
-                    s = widest
-                    var dh = heightOf(b, cw / s) * s
-                    if (dh > ch) {
-                        var tall = dh
-                        for (i in 0 until 6) {
-                            val next = (s * ch / tall).coerceIn(MIN_TILE_SCALE, widest)
-                            if (abs(next - s) < 0.0005f) {
-                                s = next
-                                break
-                            }
-                            s = next
-                            tall = heightOf(b, cw / s) * s
-                        }
-                        // Wrapping can make the last step slightly too big; never end up over.
-                        var guard = 0
-                        while (heightOf(b, cw / s) * s > ch + 0.5f && s > MIN_TILE_SCALE && guard++ < 40) {
-                            s = max(MIN_TILE_SCALE, s - 0.004f)
-                        }
-                        dh = heightOf(b, cw / s) * s
-                    }
-                    val cut = dh > ch + 1f || need1 > cw / s + 1f
-                    if (cut) clipped = true
-                    th = min(dh, ch)
-                    tw = if (cut) cw else hugWidth(b, cw, s, dh)
+                    // Words must stay whole: scale far enough for the box to be as wide as they need. Content that is
+                    // still too big at the smallest scale is cut off at the tile's edge.
+                    val fit = FlexFit.text(cw, ch, needOf(b), { w -> heightOf(b, w) }, { sc, dh -> hugWidth(b, cw, sc, dh) })
+                    s = fit.scale
+                    if (fit.cut) clipped = true
+                    th = fit.h
+                    tw = fit.w
                 }
                 minScale = min(minScale, s)
                 val tx = cx + when (b.hAlign) {
@@ -332,6 +280,198 @@ object FlexPainter {
             limit = limit,
             tooTall = st.aspect == FlexAspect.FREE && arranged.height > TOO_TALL
         )
+    }
+
+    /** Measured sizes of blocks, remembered: their heights at widths and the least width each can have. */
+    private class Metrics(val c: Ctx, val ct: FlexContent, val availW: Float) {
+        private val heights = HashMap<String, Float>()
+        private val needs = HashMap<Int, Float>()
+
+        fun heightOf(b: FlexBlock, w: Float): Float =
+            heights.getOrPut("${b.id}@${(w * 100).roundToInt()}") { measure(c, b, ct, w) }
+
+        // The least width a block can have without a broken word, a text cut short or text shrunk to a fraction.
+        fun needOf(b: FlexBlock): Float = needs.getOrPut(b.id) {
+            if (b.type == FlexBlockType.PHOTO) {
+                0f
+            } else {
+                var w = 90f
+                for (i in 0 until 14) {
+                    c.overflow = 0f
+                    measure(c, b, ct, w)
+                    if (c.overflow <= 0.5f) break
+                    w += c.overflow * 2f * max(1f, b.size)
+                    if (w >= availW) {
+                        w = availW
+                        break
+                    }
+                }
+                w.coerceAtMost(availW)
+            }
+        }
+
+        // The narrowest a block can be in a cell [cw] wide, at content scale [s], and still be [dh] tall with nothing
+        // broken or cut: a block takes only what it needs.
+        fun hugWidth(b: FlexBlock, cw: Float, s: Float, dh: Float): Float {
+            var lo = min(cw, needOf(b) * s)
+            var hi = cw
+            var i = 0
+            while (hi - lo > 3f && i++ < 8) {
+                val mid = (lo + hi) / 2f
+                c.overflow = 0f
+                val h = measure(c, b, ct, mid / s) * s
+                if (c.overflow <= 0.5f && abs(h - dh) <= 1.5f) hi = mid else lo = mid
+            }
+            return min(cw, hi + 2f)
+        }
+    }
+
+    private fun countGroups(node: FlexNode?): Int =
+        if (node is FlexGroup) 1 + node.children.sumOf { countGroups(it) } else 0
+
+    /** A block as the auto aligner sees it: its kind, its least and its hugging width, and its height at a range of widths. */
+    private fun autoItem(c: Ctx, m: Metrics, b: FlexBlock, ct: FlexContent, availW: Float): AutoItem {
+        if (b.type == FlexBlockType.PHOTO) {
+            val uri = b.keys?.firstOrNull() ?: ct.photoUri
+            val bmp = uri?.let { c.assets.images[it] }
+            val lim = c.limits
+            val ratio = (if (b.photoRatio > 0f) b.photoRatio else bmp?.let { it.width.toFloat() / it.height } ?: 1f)
+                .coerceIn(lim.range.start, lim.range.endInclusive)
+            return AutoItem(b.id, AutoKind.PHOTO, 0f, availW, FloatArray(0), bmp != null, ratio, b.variant == 1, lim.range.start, lim.range.endInclusive)
+        }
+        val widths = AutoItem.sampleWidths(availW / FlexFit.MIN_SCALE)
+        val heights = FloatArray(widths.size) { m.heightOf(b, widths[it]) }
+        val kind = if (b.type == FlexBlockType.HEADER) AutoKind.TITLE else AutoKind.TEXT
+        return AutoItem(b.id, kind, m.needOf(b), m.hugWidth(b, availW, 1f, m.heightOf(b, availW)), heights)
+    }
+
+    /** [spec] with the blocks in [live] tiled as [tree]: they take the first places in the list, in tile order, as the list shows tile order. */
+    private fun withLayout(spec: FlexSpec, drawable: List<FlexBlock>, live: List<FlexBlock>, tree: FlexNode): FlexSpec {
+        val tiles = FlexTree.leaves(tree).mapNotNull { id -> live.firstOrNull { it.id == id } }
+        val rest = drawable.filter { d -> tiles.none { it.id == d.id } }
+        val order = tiles + rest
+        val blocks = spec.blocks.toMutableList()
+        var next = 0
+        spec.blocks.forEachIndexed { i, b -> if (drawable.any { it.id == b.id }) blocks[i] = order[next++] }
+        return spec.copy(blocks = blocks, layout = tree)
+    }
+
+    /** [spec] with every photo cropped to the shape that fills its cell from edge to edge (within the crop range and the half-card limit). */
+    private fun fillCells(spec: FlexSpec, p: FlexPlan, byId: Map<Int, FlexBlock>, lim: FlexPhotoLimit): FlexSpec {
+        var out = spec
+        for (box in p.boxes) {
+            val b = byId[box.id] ?: continue
+            if (b.type != FlexBlockType.PHOTO || b.variant == 1) continue
+            val ratio = (min(box.cellWidth, lim.maxWidth) / min(box.cellHeight, lim.maxHeight)).coerceIn(lim.range.start, lim.range.endInclusive)
+            if (abs(ratio - b.photoRatio) < 0.01f) continue
+            out = out.copy(blocks = out.blocks.map { if (it.id == b.id) it.copy(photoRatio = ratio) else it })
+        }
+        return out
+    }
+
+    /**
+     * Finds the tiling that fits the card's blocks best (see FlexAutoAlign.kt for the search) and returns the card
+     * with it. The blocks keep their reading order (the title is read first), photos and titles get the room
+     * they are owed, no block is shrunk below the smallest scale; when not everything can be shown, the least
+     * important blocks are left off, never the title or the photo. Heavy: run it off the main thread.
+     */
+    fun autoAlign(spec: FlexSpec, content: FlexContent, assets: FlexAssets): FlexAutoResult {
+        val st = spec.style
+        val before = plan(spec, content, assets)
+        val c = Ctx(Canvas(), st, assets)
+        c.dry = true
+        val pad = st.padding.toFloat()
+        val footer = if (st.watermark && st.watermarkText.isNotBlank()) FLEX_FOOTER else 0f
+        val availW = FLEX_CARD_WIDTH - 2 * pad
+        val gap = st.spacing.toFloat()
+        val limits = c.limits
+        val free = st.aspect == FlexAspect.FREE
+        val m = Metrics(c, content, availW)
+
+        // The blocks that can be on the card, in the order they read now (the tiles, then the ones left out), the title first.
+        val drawable = spec.blocks.filter { it.enabled && content.has(it.type) }.filter { m.heightOf(it, availW) > 0f }
+        if (drawable.isEmpty()) return FlexAutoResult(spec, false, "Nothing to align")
+        val byId = drawable.associateBy { it.id }
+        val seen = FlexTree.leaves(before.tree).filter { it in byId }
+        val reading = (seen + drawable.map { it.id }.filter { it !in seen }).mapNotNull { byId[it] }
+        val ordered = reading.filter { it.type == FlexBlockType.HEADER } + reading.filter { it.type != FlexBlockType.HEADER }
+
+        val items = HashMap<Int, AutoItem>()
+        for (b in drawable) items[b.id] = autoItem(c, m, b, content, availW)
+        val stackSpace = AutoSpace(availW, 1f, gap, limits.maxWidth, limits.maxHeight)
+        val stacked = FlexAutoAligner.stackedHeight(ordered.map { items.getValue(it.id) }, stackSpace).coerceAtLeast(1f)
+
+        // What a laid out card costs: the same prices the search uses, on the real tiles.
+        fun score(p: FlexPlan): Double {
+            val space = AutoSpace(p.contentWidth, p.contentHeight, gap, limits.maxWidth, limits.maxHeight)
+            var total = AutoCost.GROUP * countGroups(p.tree)
+            for (box in p.boxes) {
+                val item = items[box.id] ?: continue
+                val fit = TileFit(box.width, box.height, box.scale, false)
+                total += AutoCost.tile(item, space, box.cellWidth, box.cellHeight, fit, box.cellTop <= p.contentTop + 1f)
+            }
+            if (p.clipped) total += AutoCost.CUT
+            total += AutoCost.HIDDEN * p.hidden.size
+            // Free size: a card no taller than its content needs is a better fit.
+            if (free) total += 1.4 * (p.contentHeight / stacked)
+            return total
+        }
+
+        fun trees(live: List<FlexBlock>): List<FlexNode> {
+            val list = live.map { items.getValue(it.id) }
+            val heights = if (free) {
+                val base = FlexAutoAligner.stackedHeight(list, stackSpace)
+                val least = max(300f, MIN_FREE_HEIGHT - 2 * pad - footer)
+                listOf(1f, 0.82f, 0.68f, 0.56f).map { max(least, it * base) }.distinct()
+            } else {
+                listOf(st.aspect.height - 2 * pad - footer)
+            }
+            val out = ArrayList<FlexNode>()
+            for (h in heights) {
+                val space = AutoSpace(availW, h, gap, limits.maxWidth, limits.maxHeight)
+                for (cand in FlexAutoAligner(list, space).solve()) {
+                    for (tree in listOf(cand.tree, alignGrid(cand.tree))) if (tree !in out) out += tree
+                }
+            }
+            return out
+        }
+
+        class Found(val spec: FlexSpec, val plan: FlexPlan, val score: Double)
+
+        // Try every block; if the best layout cannot show them all, leave off the least important and try again.
+        var live = ordered.take(st.aspect.maxBlocks)
+        var best: Found? = null
+        while (live.isNotEmpty()) {
+            var round: Found? = null
+            for (tree in trees(live)) {
+                var candidate = withLayout(spec, drawable, live, tree)
+                var p = plan(candidate, content, assets)
+                // Photos stick to the margins of their tiles: each takes the crop shape that fills its cell.
+                val filled = fillCells(candidate, p, byId, limits)
+                if (filled != candidate) {
+                    candidate = filled
+                    p = plan(candidate, content, assets)
+                }
+                val sc = score(p)
+                if (round == null || sc < round.score) round = Found(candidate, p, sc)
+            }
+            val found = round ?: break
+            if (best == null || found.score < best.score) best = found
+            if (free || live.size == 1 || found.plan.shownIds.size >= live.size) break
+            val drop = live.indexOfLast { it.type != FlexBlockType.HEADER && it.type != FlexBlockType.PHOTO }
+                .takeIf { it >= 0 } ?: live.lastIndex
+            live = live.filterIndexed { i, _ -> i != drop }
+        }
+        val chosen = best ?: return FlexAutoResult(spec, false, "Too many blocks to align")
+        if (chosen.spec == spec || score(before) - chosen.score < 0.005) {
+            return FlexAutoResult(spec, false, "Already the best fit")
+        }
+        val message = when {
+            chosen.plan.hidden.size > before.hidden.size -> "Aligned; ${chosen.plan.hidden.size} block(s) don't fit this size"
+            chosen.plan.minScale < CROWDED_SCALE -> "Aligned; it's a tight fit"
+            else -> "Aligned"
+        }
+        return FlexAutoResult(chosen.spec, true, message)
     }
 
     /** How tall a block's content is at the width [w]. A photo takes the biggest size the half-card limit allows. */

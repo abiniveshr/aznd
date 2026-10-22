@@ -187,10 +187,52 @@ fun FlexScreen(
     var selectedBlock by remember(preset) { mutableStateOf<Int?>(null) }
     var editingId by rememberSaveable(preset) { mutableStateOf<Int?>(null) }
 
-    fun update(transform: (FlexSpec) -> FlexSpec) {
-        spec = spec?.let(transform)
+    // Everything done to the card on this screen can be undone and redone (from the drop-down over the card).
+    val history = remember(preset) { UndoStack<FlexSpec>() }
+    fun commit(next: FlexSpec, continuous: Boolean = false) {
+        val before = spec
+        if (before != null && before != next) history.push(before, continuous)
+        spec = next
     }
-    fun updateStyle(transform: (FlexStyle) -> FlexStyle) = update { it.copy(style = transform(it.style)) }
+    /** [continuous]: changes that follow each other closely (a slider, a dragged handle) are one undo step. */
+    fun update(continuous: Boolean = false, transform: (FlexSpec) -> FlexSpec) {
+        spec?.let { commit(transform(it), continuous) }
+    }
+    fun updateStyle(transform: (FlexStyle) -> FlexStyle) = update(continuous = true) { it.copy(style = transform(it.style)) }
+    fun undo() {
+        val now = spec ?: return
+        history.undo(now)?.let { spec = it }
+    }
+    fun redo() {
+        val now = spec ?: return
+        history.redo(now)?.let { spec = it }
+    }
+
+    var aligning by remember { mutableStateOf(false) }
+    /** Finds the tiling that fits the blocks best, off the main thread, and applies it as one undo step. */
+    fun autoAlign() {
+        val sp = spec ?: return
+        val ct = content ?: return
+        if (aligning) return
+        aligning = true
+        val snapshot = assets
+        scope.launch {
+            val result = try {
+                withContext(Dispatchers.Default) { FlexPainter.autoAlign(sp, ct, snapshot) }
+            } catch (e: Exception) {
+                null
+            } finally {
+                aligning = false
+            }
+            if (result == null) {
+                Toast.makeText(context, "Couldn't align the card", Toast.LENGTH_SHORT).show()
+            } else {
+                // Only if the card is still the one that was aligned.
+                if (result.changed && spec == sp) commit(result.spec)
+                Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
         updateStyle { it.copy(photoUri = uri.toString(), bgMode = FlexBgMode.PHOTO) }
@@ -224,7 +266,7 @@ fun FlexScreen(
                 initial = editSpec,
                 content = editContent,
                 onDone = { edited ->
-                    spec = edited
+                    commit(edited)
                     if (edited.blocks.none { it.id == editBlock }) selectedBlock = null
                     editingId = null
                 },
@@ -276,7 +318,7 @@ fun FlexScreen(
                                         picker.launch()
                                     },
                                     onReset = {
-                                        defaultSpec?.let { spec = it }
+                                        defaultSpec?.let { commit(it) }
                                         store.reset(preset)
                                     }
                                 )
@@ -289,7 +331,7 @@ fun FlexScreen(
                                 bottom = bottom,
                                 onLayout = { tree -> update { it.copy(layout = tree) } },
                                 onSizeBlock = { id, size ->
-                                    update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
+                                    update(continuous = true) { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(size = size) else it }) }
                                 },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
@@ -297,7 +339,13 @@ fun FlexScreen(
                                     selectedBlock = id
                                     editingId = id
                                 },
-                                update = { update(it) }
+                                update = { transform -> update(transform = transform) },
+                                canUndo = history.canUndo,
+                                canRedo = history.canRedo,
+                                onUndo = { undo() },
+                                onRedo = { redo() },
+                                onAutoAlign = { autoAlign() },
+                                aligning = aligning
                             )
                             else -> FlexPresetsPage(bottom = bottom)
                         }
