@@ -119,6 +119,20 @@ val DefaultDarkPalette = Palette(
     outline = Color(0xFF938F99)
 )
 
+/** How the high contrast theme makes its shades from its base colour (see [HighContrast]). */
+enum class ContrastShade(val label: String) {
+    /** The base colour at less and less opacity over black: darker shades of the same colour. */
+    ALPHA("Opacity"),
+    /** The base colour with less and less saturation: paler, greyer shades at the same brightness. */
+    SATURATION("Saturation")
+}
+
+/**
+ * The high contrast theme's own setting: every surface pitch black, every accent a shade of [color], made by
+ * [shade]. A theme that has one was made by [HighContrast] and is remade from it whenever it changes.
+ */
+data class ContrastBase(val color: Color, val shade: ContrastShade = ContrastShade.ALPHA)
+
 /** Largest border width the Appearance sliders offer, in dp. */
 const val MAX_BORDER_DP = 8f
 
@@ -135,7 +149,9 @@ data class ThemeSettings(
     val outlinedButtonBorder: Float = 1f,
     val filledButtonBorder: Float = 0f,
     val light: Palette = DefaultLightPalette,
-    val dark: Palette = DefaultDarkPalette
+    val dark: Palette = DefaultDarkPalette,
+    /** Set only for the high contrast theme: the base colour its palette is made from (see [HighContrast]). */
+    val contrast: ContrastBase? = null
 )
 
 fun Color.toHexString(): String = String.format(Locale.US, "#%06X", 0xFFFFFF and toArgb())
@@ -199,6 +215,7 @@ fun ThemeSettings.toJson(): String = JSONObject().apply {
     put("filledButtonBorder", filledButtonBorder.toDouble())
     put("light", light.toJson())
     put("dark", dark.toJson())
+    contrast?.let { put("contrast", JSONObject().put("color", it.color.toHexString()).put("shade", it.shade.name)) }
 }.toString(2)
 
 /** Reads a border width: the new key if there is one, else the old on/off switch (on = 1 dp). */
@@ -229,7 +246,13 @@ fun themeFromJson(text: String): ThemeSettings {
         outlinedButtonBorder = o.border("outlinedButtonBorder", "outlinedButtonOutline", d.outlinedButtonBorder),
         filledButtonBorder = o.border("filledButtonBorder", "filledButtonOutline", d.filledButtonBorder),
         light = paletteFrom(o.optJSONObject("light"), d.light),
-        dark = paletteFrom(o.optJSONObject("dark"), d.dark)
+        dark = paletteFrom(o.optJSONObject("dark"), d.dark),
+        contrast = o.optJSONObject("contrast")?.let { c ->
+            ContrastBase(
+                color = parseHex(c.str("color"), Color.White),
+                shade = runCatching { ContrastShade.valueOf(c.optString("shade")) }.getOrDefault(ContrastShade.ALPHA)
+            )
+        }
     )
 }
 

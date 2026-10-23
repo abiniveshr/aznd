@@ -8,11 +8,15 @@ import com.ashrdev.aznd.domain.workout.targetLabel
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.domain.streaks.displayDate
+import com.ashrdev.aznd.ui.calendar.dayOfMonthOf
+import com.ashrdev.aznd.ui.calendar.monthKeyOf
+import com.ashrdev.aznd.ui.calendar.todayDayKey
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.stats.estimatedOneRepMax
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.workout.stats.loadExerciseStats
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -159,16 +163,36 @@ object FlexContentLoader {
             }
 
     private suspend fun home(workout: WorkoutViewModel, streaks: StreakViewModel): FlexContent {
-        val streakItems = streaks.streakSnapshots()
-            .map { FlexStreakItem(it.streak.id, it.streak.name, it.current, it.longest, it.streak.photoUri) }
-            .sortedByDescending { it.days }
+        val snapshots = streaks.streakSnapshots().sortedByDescending { it.current }
+        val streakItems = snapshots.map { FlexStreakItem(it.streak.id, it.streak.name, it.current, it.longest, it.streak.photoUri) }
+        // The Calendar block shows this month of the longest running streak.
+        val top = snapshots.firstOrNull()
         return FlexContent(
-            kicker = "Flex",
+            kicker = "",
             title = "My progress",
             dateText = date(System.currentTimeMillis()),
             streaks = streakItems,
-            lifts = liftsFrom(workout.getTopExercises(40))
+            lifts = liftsFrom(workout.getTopExercises(40)),
+            calendar = top?.let { runCatching { streakMonth(streaks, it.streak.id, it.streak.name, it.streak.startDate, todayDayKey()) }.getOrNull() }
         )
+    }
+
+    /**
+     * The month of [dayKey] as the Calendar block shows it: the streak's kept days marked (from its start to today,
+     * its slips left out), today ringed.
+     */
+    private suspend fun streakMonth(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, dayKey: String): FlexCalendar {
+        val month = monthKeyOf(dayKey)
+        val today = todayDayKey()
+        val breaks = streaks.breaksForStreak(streakId).first().toSet()
+        val marked = (1..month.daysInMonth()).filter { d ->
+            val key = month.dayKey(d)
+            key >= startDate && key <= today && key !in breaks
+        }.toSet()
+        // java.util.Calendar counts Sunday as 1 and Monday as 2; the block starts its weeks on Monday.
+        val first = (month.firstWeekday() + 5) % 7
+        val todayDay = if (monthKeyOf(today) == month) dayOfMonthOf(today) else 0
+        return FlexCalendar(month.title(), month.daysInMonth(), first, marked, todayDay, name)
     }
 
     private suspend fun workoutSession(workout: WorkoutViewModel, sessionId: Long): FlexContent {
@@ -270,7 +294,8 @@ object FlexContentLoader {
             dateText = displayDate(dateKey),
             streaks = listOf(FlexStreakItem(streak.id, streak.name, count, count, streak.photoUri)),
             dayNote = day?.remark.orEmpty(),
-            photoUri = day?.photoUri
+            photoUri = day?.photoUri,
+            calendar = runCatching { streakMonth(streaks, streak.id, streak.name, streak.startDate, dateKey) }.getOrNull()
         )
     }
 }

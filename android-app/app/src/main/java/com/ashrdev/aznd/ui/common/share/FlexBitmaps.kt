@@ -97,6 +97,7 @@ private fun neededImages(spec: FlexSpec?, content: FlexContent?): Set<String> {
     spec.blocks.filter { it.enabled && it.type == FlexBlockType.PHOTO }.forEach { b ->
         (b.keys?.firstOrNull() ?: content.photoUri)?.let { out += it }
     }
+    if (spec.blocks.any { it.enabled && it.type == FlexBlockType.MODEL }) content.modelUri?.let { out += it }
     return out
 }
 

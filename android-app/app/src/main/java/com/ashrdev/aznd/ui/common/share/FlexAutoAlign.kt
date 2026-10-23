@@ -213,6 +213,25 @@ internal object FlexFit {
     /** Statistics have no wrapping to fall back on, so they may shrink further. */
     const val STAT_MIN_SCALE = 0.45f
 
+    /**
+     * A tile's content takes up its cell: it is drawn bigger than its size (the block's own and the module size) when
+     * the cell has room, up to this. The size control of the block's menu sets where it starts.
+     */
+    const val FILL_MAX = 1.5f
+
+    /** A title grows less: past this it shouts. Its cell is never given more height than it takes at this. */
+    const val FILL_TITLE = 1.25f
+
+    /**
+     * A picture hugs a side of its cell it nearly reaches: when the room left beside it (or above and below it) is at
+     * most this share of the cell's side (and at least [HUG_PX]), it stretches to fill it, its shape going up to
+     * [HUG_SLACK] past its range (a photo is re-cropped, a chart or calendar stretched). Further away, it sits in the
+     * middle of the cell.
+     */
+    const val HUG_SHARE = 0.12f
+    const val HUG_PX = 40f
+    const val HUG_SLACK = 1.3f
+
     /** A title gives up the air above it before it would be shrunk below this. */
     const val TITLE_KEEP = 0.92f
 
@@ -239,9 +258,11 @@ internal object FlexFit {
         need1: Float,
         height: (Float) -> Float,
         hugAt: (scale: Float, drawnHeight: Float) -> Float,
-        minScale: Float = MIN_SCALE
+        minScale: Float = MIN_SCALE,
+        /** A tile's content grows to take up its cell, up to this (measuring passes 1: content as it is). */
+        maxScale: Float = 1f
     ): TileFit {
-        val widest = if (need1 > cw) (cw / need1).coerceAtLeast(minScale) else 1f
+        val widest = (if (need1 > 0f) min(maxScale, cw / need1) else maxScale).coerceAtLeast(minScale)
         var s = widest
         var dh = height(cw / s) * s
         if (dh > ch) {
@@ -259,6 +280,17 @@ internal object FlexFit {
             var guard = 0
             while (height(cw / s) * s > ch + 0.5f && s > minScale && guard++ < 40) {
                 s = max(minScale, s - 0.004f)
+            }
+            // Still over (wrapping makes the height jump about as the scale moves, and growth can start far above): a
+            // scale between the least and this one at which it fits, found by halving.
+            if (height(cw / s) * s > ch + 0.5f && s > minScale && height(cw / minScale) * minScale <= ch + 0.5f) {
+                var lo = minScale
+                var hi = s
+                for (i in 0 until 12) {
+                    val mid = (lo + hi) / 2f
+                    if (height(cw / mid) * mid <= ch + 0.5f) lo = mid else hi = mid
+                }
+                s = lo
             }
             dh = height(cw / s) * s
         }
@@ -279,13 +311,14 @@ internal object FlexFit {
         need1: Float,
         inset: Float,
         height: (Float) -> Float,
-        hugAt: (scale: Float, drawnHeight: Float) -> Float
+        hugAt: (scale: Float, drawnHeight: Float) -> Float,
+        maxScale: Float = 1f
     ): TileFit {
-        if (inset <= 0f) return text(cw, ch, need1, height, hugAt)
+        if (inset <= 0f) return text(cw, ch, need1, height, hugAt, maxScale = maxScale)
         // Most cells have room for the air: one fit settles it.
-        val full = text(cw, ch - inset, need1, height, hugAt)
+        val full = text(cw, ch - inset, need1, height, hugAt, maxScale = maxScale)
         if (!full.cut && full.scale >= TITLE_KEEP) return withInset(full, inset)
-        val bare = text(cw, ch, need1, height, hugAt)
+        val bare = text(cw, ch, need1, height, hugAt, maxScale = maxScale)
         if (bare.cut) return bare
         val keep = min(bare.scale, TITLE_KEEP) - 0.001f
         if (!full.cut && full.scale >= keep) return withInset(full, inset)
@@ -294,7 +327,7 @@ internal object FlexFit {
         var best = bare
         for (i in 0 until 7) {
             val mid = (lo + hi) / 2f
-            val f = text(cw, ch - mid, need1, height, hugAt)
+            val f = text(cw, ch - mid, need1, height, hugAt, maxScale = maxScale)
             if (!f.cut && f.scale >= keep) {
                 lo = mid
                 best = f
@@ -319,6 +352,16 @@ internal object FlexFit {
             pw = ph * ratio
         }
         val cut = cw < shape.minW - 0.5f || ch < shape.minH - 0.5f
+        // Nearly reaching a side: reach it. A shape that cannot change (a circle) keeps its size.
+        if (shape.crops || shape.ratioMax > shape.ratioMin + 0.001f) {
+            val lo = shape.ratioMin / HUG_SLACK
+            val hi = shape.ratioMax * HUG_SLACK
+            val w2 = if (cw - pw > 0.5f && cw - pw <= max(HUG_PX, HUG_SHARE * cw)) cw else pw
+            val h2 = if (ch - ph > 0.5f && ch - ph <= max(HUG_PX, HUG_SHARE * ch)) ch else ph
+            if (w2 / h2 in lo..hi) return TileFit(w2, h2, 1f, cut)
+            if (w2 / ph in lo..hi) return TileFit(w2, ph, 1f, cut)
+            if (pw / h2 in lo..hi) return TileFit(pw, h2, 1f, cut)
+        }
         return TileFit(pw, ph, 1f, cut)
     }
 
@@ -338,7 +381,7 @@ internal object FlexFit {
      * [REFLOW_KEEP] of that; then it shrinks as one unit, never below [minScale]. [fill] makes the tile as wide as
      * the cell; else it is as wide as its layout.
      */
-    fun statistic(shape: StatShape, cw: Float, ch: Float, fill: Boolean, minScale: Float = STAT_MIN_SCALE): TileFit {
+    fun statistic(shape: StatShape, cw: Float, ch: Float, fill: Boolean, minScale: Float = STAT_MIN_SCALE, maxScale: Float = 1f): TileFit {
         var best = 0
         var bestS = -1f
         for (k in shape.widths.indices) {
@@ -348,6 +391,9 @@ internal object FlexFit {
                 bestS = s
             }
         }
+        // The layout is picked as for content at its size (reflowing only to keep from shrinking); then a layout with
+        // room to spare grows into its cell, up to [maxScale].
+        if (maxScale > 1f && bestS >= 1f) bestS = min(maxScale, min(cw / shape.widths[best], ch / shape.heights[best].coerceAtLeast(1f)))
         val cut = bestS < minScale - 0.0005f
         val s = max(bestS, minScale)
         val th = min(shape.heights[best] * s, ch)
@@ -355,13 +401,22 @@ internal object FlexFit {
         return TileFit(tw, th, s, cut, shape.columns[best])
     }
 
-    /** [FlexFit] on the optimiser's numbers. Auto align sets every non-drawable block to fill its cell, so the tile is as wide as the cell. */
-    fun of(item: AutoItem, cw: Float, ch: Float, top: Boolean): TileFit = when (item.kind) {
+    /**
+     * [FlexFit] on the optimiser's numbers. Auto align sets every non-drawable block to fill its cell, so the tile is as
+     * wide as the cell. [banner]: the tile runs across the top of the card (see [FlexTree.banner]), so a title keeps its air.
+     */
+    fun of(item: AutoItem, cw: Float, ch: Float, banner: Boolean): TileFit = when (item.kind) {
         FlexBlockClass.DRAWABLE -> drawable(item.drawable!!, cw, ch)
-        FlexBlockClass.STATISTIC -> statistic(item.stat!!, cw, ch, true)
-        FlexBlockClass.TITLE -> title(cw, ch, item.need, if (top) item.inset else 0f, { item.height(it) }, { _, _ -> cw })
-        FlexBlockClass.TEXT -> text(cw, ch, item.need, { item.height(it) }, { _, _ -> cw })
+        FlexBlockClass.STATISTIC -> statistic(item.stat!!, cw, ch, true, maxScale = FILL_MAX)
+        FlexBlockClass.TITLE -> title(cw, ch, item.need, if (banner) item.inset else 0f, { item.height(it) }, { _, _ -> cw }, FILL_TITLE)
+        FlexBlockClass.TEXT -> text(cw, ch, item.need, { item.height(it) }, { _, _ -> cw }, maxScale = FILL_MAX)
     }
+}
+
+/** The most a drawable's cell can use along a split ([stacked]: its height), [cross] the cell's size across it. */
+internal fun drawableCap(shape: DrawableShape, stacked: Boolean, cross: Float): Float {
+    if (!shape.hasContent) return if (stacked) shape.maxH else shape.maxW
+    return if (stacked) min(shape.maxH, cross / shape.ratioMin) else min(shape.maxW, cross * shape.ratioMax)
 }
 
 /** The price of a tile: lower is a better fit. The same numbers judge the optimiser's guesses and the real layouts. */
@@ -382,8 +437,20 @@ internal object AutoCost {
     /** Rows of columns whose edges do not line up (0 = all rows cut at the same places). */
     const val RAGGED = 1.0
 
+    /**
+     * Side by side, how far apart the visible bottoms of the parts are, as a share of the row's height: a picture that
+     * cannot be cropped tall enough to fill its cell next to a panel that stretches to the bottom of its own.
+     */
+    const val EDGES = 2.0
+
     /** A statistic reflowed into fewer columns than it is designed with, per column. */
     const val REFLOW = 0.2
+
+    /** What a picture earns per share of the card it covers (up to half the card). */
+    const val PICTURE = 3.5
+
+    /** Card height no cell was given (a share of the content height): wasted like room inside a cell. */
+    const val LEFT_OVER = 1.2
 
     /** A title at the top that had to give up the air above it (all of it). */
     const val NO_AIR = 0.6
@@ -406,10 +473,14 @@ internal object AutoCost {
         return c
     }
 
-    fun tile(item: AutoItem, space: AutoSpace, cw: Float, ch: Float, fit: TileFit, top: Boolean): Double {
+    /** [top]: the tile touches the top edge; [air]: it runs across the top (a title there is owed its air). */
+    fun tile(item: AutoItem, space: AutoSpace, cw: Float, ch: Float, fit: TileFit, top: Boolean, air: Boolean = top): Double {
         val area = (space.width * space.height).toDouble().coerceAtLeast(1.0)
         val waste = (cw.toDouble() * ch - fit.w.toDouble() * fit.h) / area
-        val s = fit.scale.toDouble()
+        // Content grown into its cell is not rewarded or charged for its scale (only shrinking is), and its wrapping
+        // is judged at its own size.
+        val s = min(1.0, fit.scale.toDouble())
+        val ws = min(1f, fit.scale)
         var c = if (fit.cut) CUT else 0.0
         when (item.kind) {
             FlexBlockClass.TEXT -> {
@@ -418,7 +489,7 @@ internal object AutoCost {
                 // Not a thin sliver, and not text broken into many more lines than it needs.
                 c += 4.0 * max(0.0, 0.30 - cw.toDouble() / space.width)
                 val full = item.height(space.width).toDouble().coerceAtLeast(1.0)
-                val wrapped = item.height(cw / fit.scale) * fit.scale / full
+                val wrapped = item.height(cw / ws) * ws / full
                 c += 0.25 * min(max(0.0, wrapped - 1.6), 4.0)
             }
             FlexBlockClass.STATISTIC -> {
@@ -433,17 +504,18 @@ internal object AutoCost {
                 // A title is not shrunk, not broken into lines if it can help it, and sits at the top.
                 c += 14.0 * (1.0 - s) + 20.0 * max(0.0, 0.92 - s)
                 val full = item.height(space.width).toDouble().coerceAtLeast(1.0)
-                val wrapped = item.height(cw / fit.scale) * fit.scale / full
+                val wrapped = item.height(cw / ws) * ws / full
                 c += 1.2 * min(max(0.0, wrapped - 1.0), 3.0)
                 c += 2.0 * waste
                 if (!top) c += 0.5
-                else if (item.inset > 0f) c += NO_AIR * (1.0 - fit.inset / item.inset).coerceIn(0.0, 1.0)
+                else if (air && item.inset > 0f) c += NO_AIR * (1.0 - fit.inset / item.inset).coerceIn(0.0, 1.0)
             }
             FlexBlockClass.DRAWABLE -> {
-                // A drawable is rewarded for every bit of the card it covers, up to about half of it.
+                // A drawable is rewarded for every bit of the card it covers, up to about half of it: pictures are what a
+                // card is for, so a tiling that shows one bigger is worth a little shrinking elsewhere.
                 val frac = fit.w.toDouble() * fit.h / area
                 c += 1.6 * waste
-                c -= 2.0 * min(frac, 0.5)
+                c -= PICTURE * min(frac, 0.5)
                 if (frac < 0.12) c += 3.0 * (0.12 - frac)
             }
         }
@@ -478,7 +550,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         if (n == 1) return listOf(AutoCandidate(FlexLeaf(items[0].id), 0.0))
         val out = ArrayList<AutoCandidate>(2)
         for (avoid in intArrayOf(ROWS, COLUMNS)) {
-            val sub = solveSub(0, n - 1, space.width, space.height, avoid, true)
+            val sub = solveSub(0, n - 1, space.width, space.height, avoid, BANNER)
             sub.node?.let { out += AutoCandidate(it, sub.cost) }
         }
         return out
@@ -491,15 +563,15 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
      */
     fun solveFixed(tree: FlexNode): AutoCandidate? {
         if (n == 0 || FlexTree.leaves(tree) != items.map { it.id }) return null
-        val sub = fixed(tree, 0, n - 1, space.width, space.height, true)
+        val sub = fixed(tree, 0, n - 1, space.width, space.height, BANNER)
         return sub.node?.let { AutoCandidate(it, sub.cost) }
     }
 
     private val fixedMemo = HashMap<Long, AutoSub>()
 
-    private fun fixed(node: FlexNode, i: Int, j: Int, w: Float, h: Float, top: Boolean): AutoSub {
+    private fun fixed(node: FlexNode, i: Int, j: Int, w: Float, h: Float, top: Int): AutoSub {
         if (node is FlexLeaf) return leaf(i, w, h, top)
-        val key = ((((i * 16L + j) * 2 + (if (top) 1 else 0)) * 4096L + (w / 2f).roundToInt().coerceIn(0, 4095)) * 4096L) +
+        val key = ((((i * 16L + j) * 3 + top) * 4096L + (w / 2f).roundToInt().coerceIn(0, 4095)) * 4096L) +
             (h / 2f).roundToInt().coerceIn(0, 4095)
         fixedMemo[key]?.let { return it }
         val g = node as FlexGroup
@@ -527,7 +599,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
                 for (k in 0 until m) {
                     val cw = if (stacked) cross else sizes[k]
                     val ch = if (stacked) sizes[k] else cross
-                    val sub = fixed(g.children[k], from[k], to[k], cw, ch, top && (!stacked || k == 0))
+                    val sub = fixed(g.children[k], from[k], to[k], cw, ch, childTop(top, stacked, k))
                     val kid = sub.node
                     if (kid == null || (!stacked && sub.floorW > sizes[k] + 0.5f)) {
                         ok = false
@@ -554,8 +626,8 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
      * same size tile the same way, and not solving them again leaves the search's budget for different structures,
      * which finds better layouts as well as faster ones.
      */
-    private fun solveSub(i: Int, j: Int, w: Float, h: Float, avoid: Int, top: Boolean): AutoSub {
-        val key = ((((((i * 16L + j) * 3 + avoid) * 2 + (if (top) 1 else 0)) * 2048L) + (w / MEMO_STEP).roundToInt().coerceIn(0, 2047)) * 4096L) +
+    private fun solveSub(i: Int, j: Int, w: Float, h: Float, avoid: Int, top: Int): AutoSub {
+        val key = ((((((i * 16L + j) * 3 + avoid) * 3 + top) * 2048L) + (w / MEMO_STEP).roundToInt().coerceIn(0, 2047)) * 4096L) +
             (h / MEMO_STEP).roundToInt().coerceIn(0, 4095)
         memo[key]?.let { return it }
         val out = if (i == j) leaf(i, w, h, top) else group(i, j, w, h, avoid, top)
@@ -563,10 +635,10 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         return out
     }
 
-    private fun leaf(i: Int, w: Float, h: Float, top: Boolean): AutoSub {
+    private fun leaf(i: Int, w: Float, h: Float, top: Int): AutoSub {
         val item = items[i]
-        val fit = FlexFit.of(item, w, h, top)
-        val cost = AutoCost.tile(item, space, w, h, fit, top)
+        val fit = FlexFit.of(item, w, h, top == BANNER)
+        val cost = AutoCost.tile(item, space, w, h, fit, top != NOT_TOP, top == BANNER)
         return AutoSub(cost, FlexLeaf(item.id), floorOf(item), fit.h)
     }
 
@@ -574,7 +646,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
     private fun floorOf(item: AutoItem): Float = if (item.kind == FlexBlockClass.DRAWABLE) 0f else item.need * item.planScale
 
     /** Cuts the run [i]..[j] (in the way [avoid] does not say) into neighbouring parts, each part a tile or a group cut the other way. */
-    private fun group(i: Int, j: Int, w: Float, h: Float, avoid: Int, top: Boolean): AutoSub {
+    private fun group(i: Int, j: Int, w: Float, h: Float, avoid: Int, top: Int): AutoSub {
         var best = none
         val cuts = j - i
         for (o in intArrayOf(ROWS, COLUMNS)) {
@@ -611,7 +683,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         return best
     }
 
-    private fun evaluate(stacked: Boolean, from: IntArray, to: IntArray, sizes: FloatArray, cross: Float, top: Boolean): AutoSub {
+    private fun evaluate(stacked: Boolean, from: IntArray, to: IntArray, sizes: FloatArray, cross: Float, top: Int): AutoSub {
         val m = sizes.size
         var cost = 0.0
         val kids = ArrayList<FlexNode>(m)
@@ -620,7 +692,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         for (k in 0 until m) {
             val cw = if (stacked) cross else sizes[k]
             val ch = if (stacked) sizes[k] else cross
-            val sub = solveSub(from[k], to[k], cw, ch, if (stacked) ROWS else COLUMNS, top && (!stacked || k == 0))
+            val sub = solveSub(from[k], to[k], cw, ch, if (stacked) ROWS else COLUMNS, childTop(top, stacked, k))
             val node = sub.node ?: return none
             // Side by side, the solver widens a tile to its own floor and takes it from the others: not a layout the search priced.
             if (!stacked && sub.floorW > sizes[k] + 0.5f) return none
@@ -653,12 +725,22 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         else item.hug.coerceAtLeast(1f)
 
     /** The narrowest width at which the content is no taller than [h]; the width it wants when it cannot be that short. */
-    private fun leafWantsWidth(item: AutoItem, h: Float, maxW: Float): Float {
+    internal fun leafWantsWidth(item: AutoItem, h: Float, maxW: Float): Float {
         if (item.kind == FlexBlockClass.DRAWABLE) return FlexFit.drawableAsk(item.drawable!!, BIG, h).w
         val room = if (item.kind == FlexBlockClass.TITLE) (h - item.inset).coerceAtLeast(1f) else h
         val top = min(item.hug, maxW).coerceAtLeast(1f)
         val low = min(item.need, top)
-        if (item.height(top) > room) return top
+        if (item.height(top) > room) {
+            // Too tall for [h] even as wide as it likes: it will be shrunk to fit the height, and then needs only that
+            // shrunk width (more would sit empty beside it, width a picture next to it could use).
+            val stat = item.stat
+            if (stat != null) {
+                val f = FlexFit.statistic(stat, top, room, false)
+                return (stat.widths[stat.columns.indexOf(f.columns).coerceAtLeast(0)] * f.scale).coerceIn(min(low * f.scale, top), top)
+            }
+            val f = FlexFit.text(top, room, item.need, { item.height(it) }, { s, _ -> min(top, item.hug * s) }, item.planScale)
+            return (item.hug * f.scale).coerceIn(min(item.need * f.scale, top), top)
+        }
         if (item.height(low) <= room) return low
         var lo = low
         var hi = top
@@ -727,11 +809,16 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         return floor
     }
 
-    private fun capOf(from: Int, to: Int, stacked: Boolean): Float {
+    /**
+     * The most the run may take along the split, [cross] across it: a drawable's size cap, and also what its shape range
+     * allows at that cross size (a picture [cross] wide is never taller than its narrowest crop makes it), so a stack
+     * does not give a picture height it cannot fill.
+     */
+    private fun capOf(from: Int, to: Int, stacked: Boolean, cross: Float): Float {
         var cap = BIG
         for (k in from..to) {
             val shape = items[k].drawable ?: continue
-            cap = min(cap, if (stacked) shape.maxH else shape.maxW)
+            cap = min(cap, drawableCap(shape, stacked, cross))
         }
         return cap
     }
@@ -747,7 +834,7 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         val key = (((from * 16L + to) * 2 + (if (stacked) 1 else 0)) shl 32) or (cross.toRawBits().toLong() and 0xFFFFFFFFL)
         return parts.getOrPut(key) {
             val floor = if (stacked) floorHeight(from, to, cross) else floorWidth(from, to)
-            val cap = capOf(from, to, stacked)
+            val cap = capOf(from, to, stacked, cross)
             var prio = 0f
             var hunger = 0f
             for (b in from..to) {
@@ -851,6 +938,15 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
         private const val MEMO_STEP = 12f
         private const val ROWS = 1      // a group that stacks its parts: one under the other
         private const val COLUMNS = 2   // a group that puts its parts side by side
+
+        // Where a part is: not at the top, along the top edge (in a row there), or across the whole top (a banner).
+        private const val NOT_TOP = 0
+        private const val TOP_EDGE = 1
+        private const val BANNER = 2
+
+        /** Where part [k] of a group at [top] is: a stack's first part is where the stack is; a row's parts touch the top, none across it. */
+        private fun childTop(top: Int, stacked: Boolean, k: Int): Int =
+            if (stacked) (if (k == 0) top else NOT_TOP) else min(top, TOP_EDGE)
         private val SPLITS = floatArrayOf(0.3f, 0.4f, 0.5f, 0.6f, 0.7f)
 
         /** The height all [items] need one under the other at the full [FlexAutoAligner] width: the card Free size would make without a layout. */

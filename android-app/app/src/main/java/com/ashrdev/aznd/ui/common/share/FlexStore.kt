@@ -74,8 +74,7 @@ private fun specToJson(spec: FlexSpec): JSONObject {
         .put("watermarkAlign", s.watermarkAlign.name)
         .put("moduleScale", s.moduleScale.toDouble())
         .put("fitBoost", s.fitBoost.toDouble())
-        .put("autoFit", s.autoFit)
-        .put("growToFill", s.growToFill)
+        .put("layoutMode", s.layoutMode.name)
     val blocks = JSONArray()
     spec.blocks.forEach { b ->
         blocks.put(
@@ -96,6 +95,10 @@ private fun specToJson(spec: FlexSpec): JSONObject {
                 .put("photoZoom", b.photoZoom.toDouble())
                 .put("photoX", b.photoX.toDouble())
                 .put("photoY", b.photoY.toDouble())
+                .put("freeX", b.freeX.toDouble())
+                .put("freeY", b.freeY.toDouble())
+                .put("freeW", b.freeW.toDouble())
+                .put("freeH", b.freeH.toDouble())
         )
     }
     val out = JSONObject().put("style", style).put("blocks", blocks)
@@ -192,8 +195,7 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         watermarkAlign = enumOr(s.optString("watermarkAlign"), d.watermarkAlign),
         moduleScale = s.optDouble("moduleScale", d.moduleScale.toDouble()).toFloat().coerceIn(FLEX_MODULE_MIN, FLEX_MODULE_MAX),
         fitBoost = s.optDouble("fitBoost", d.fitBoost.toDouble()).toFloat().coerceIn(1f, FLEX_BOOST_MAX),
-        autoFit = s.optBoolean("autoFit", d.autoFit),
-        growToFill = s.optBoolean("growToFill", d.growToFill)
+        layoutMode = enumOr(s.optString("layoutMode"), d.layoutMode)
     )
     // Before alignment belonged to each block it was one setting for the whole card: carry it over.
     val oldAlign = enumOr(s.optString("align"), FlexAlign.START)
@@ -223,7 +225,11 @@ private fun specFromJson(o: JSONObject): FlexSpec {
             photoRatio = b.optDouble("photoRatio", 0.0).toFloat().coerceAtLeast(0f),
             photoZoom = b.optDouble("photoZoom", 1.0).toFloat().coerceIn(1f, 3f),
             photoX = b.optDouble("photoX", 0.5).toFloat().coerceIn(0f, 1f),
-            photoY = b.optDouble("photoY", 0.5).toFloat().coerceIn(0f, 1f)
+            photoY = b.optDouble("photoY", 0.5).toFloat().coerceIn(0f, 1f),
+            freeX = b.optDouble("freeX", 0.0).toFloat(),
+            freeY = b.optDouble("freeY", 0.0).toFloat(),
+            freeW = b.optDouble("freeW", 0.0).toFloat().coerceAtLeast(0f),
+            freeH = b.optDouble("freeH", 0.0).toFloat().coerceAtLeast(0f)
         )
     }
     val layout = o.optJSONObject("layout")?.let { nodeFromJson(it) } ?: legacyLayout(arr, blocks)

@@ -174,7 +174,7 @@ private fun BlockRow(
                 Text(type.label, style = MaterialTheme.typography.titleMedium)
                 val note = when {
                     !content.has(type) -> "Nothing to show here"
-                    block.enabled && block.id in plan.hidden -> "Not shown: too many blocks for this size"
+                    block.enabled && block.id in plan.hidden -> "Not shown: this card cannot fit any more content"
                     else -> null
                 }
                 if (note != null) {

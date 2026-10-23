@@ -125,15 +125,28 @@ internal fun FlexEditPage(
     }
     BackHandler { requestFinish() }
 
+    // The card's content budget holds here too: a change that would take the card past what it can hold (more items,
+    // a bigger size, a longer text, ...) is not made, and the page says the card cannot fit any more content.
+    var full by remember { mutableStateOf(false) }
+    fun change(continuous: Boolean = false, transform: (FlexSpec) -> FlexSpec) {
+        val before = history.current
+        val next = transform(before)
+        if (next != before && FlexPainter.refuses(before, next, content, assets)) {
+            full = true
+            return
+        }
+        history.change(continuous) { next }
+    }
+
     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
         val uriText = uri.toString()
-        history.change { sp ->
+        change { sp ->
             sp.copy(blocks = sp.blocks.map { if (it.id == blockId) it.copy(keys = listOf(uriText)) else it })
         }
     }
 
     fun onChange(changed: FlexBlock, continuous: Boolean = false) {
-        history.change(continuous) { sp ->
+        change(continuous) { sp ->
             sp.copy(blocks = sp.blocks.map { if (it.id == blockId) changed else it })
         }
     }
@@ -211,7 +224,7 @@ internal fun FlexEditPage(
                         } else if (!block.enabled) {
                             "This block is turned off, so it has no tile."
                         } else {
-                            "No tile: too many blocks for this card size."
+                            "Not shown: this card cannot fit any more content."
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -305,6 +318,7 @@ internal fun FlexEditPage(
         }
     }
 
+    if (full) FlexFullDialog { full = false }
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },

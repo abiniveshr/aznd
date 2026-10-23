@@ -50,17 +50,17 @@ const val FLEX_MODULE_MAX = 1.5f
 const val FLEX_BOOST_MAX = 2f
 
 /**
- * Card sizes, in card pixels. [maxBlocks] is how many blocks a size can show before they would be squeezed too
- * small: further blocks are left out (and the editor says so). [FREE] has no fixed height: the card grows or
- * shrinks to fit whatever is on it, so nothing is ever squeezed (its [height] is 0, the real height comes
- * from the layout plan).
+ * Card sizes, in card pixels. How much a size holds is its content budget (see [FlexPainter.load]): every module
+ * costs the room it needs at its least, and a module that would take the card past its budget is not added (the
+ * editor says the card cannot fit any more content). [FREE] has no fixed height: the card grows or shrinks to fit
+ * whatever is on it, up to a tallest card (its [height] is 0, the real height comes from the layout plan).
  */
-enum class FlexAspect(val label: String, val width: Int, val height: Int, val maxBlocks: Int) {
-    SQUARE("Square 1:1", FLEX_CARD_SHORT, 1080, 5),
-    PORTRAIT("Post 4:5", FLEX_CARD_SHORT, 1350, 7),
-    STORY("Story 9:16", FLEX_CARD_SHORT, 1920, 10),
-    WIDE("Wide 16:9", 1920, FLEX_CARD_SHORT, 8),
-    FREE("Free size (fits content)", FLEX_CARD_SHORT, 0, Int.MAX_VALUE)
+enum class FlexAspect(val label: String, val width: Int, val height: Int) {
+    SQUARE("Square 1:1", FLEX_CARD_SHORT, 1080),
+    PORTRAIT("Post 4:5", FLEX_CARD_SHORT, 1350),
+    STORY("Story 9:16", FLEX_CARD_SHORT, 1920),
+    WIDE("Wide 16:9", 1920, FLEX_CARD_SHORT),
+    FREE("Free size (fits content)", FLEX_CARD_SHORT, 0)
 }
 
 /** The photo shapes offered in a photo block's crop menu (those inside the card's [photoLimit]). */
@@ -179,6 +179,22 @@ enum class FlexAlign(val label: String) { START("Left"), CENTER("Centre"), END("
 enum class FlexVAlign(val label: String) { TOP("Top"), CENTER("Middle"), BOTTOM("Bottom") }
 enum class FlexPanel(val label: String) { NONE("None"), FILLED("Filled"), OUTLINE("Outline"), GLASS("Glass") }
 
+/**
+ * How blocks are placed on a card.
+ *  - [SPLIT]: tiles that fill the card; a drop splits the tile it lands on (or a whole row or column), and the card is
+ *    fitted by itself on every change (nearest fit, modules grown into spare room).
+ *  - [FLOW] (the default): blocks in rows in their order, a row each until the person drops one beside another
+ *    (then they share the row, if both keep their least widths, [FlexBoxLimits]). A held block dropped in a gap goes
+ *    there; dropped on a tile, beside it; the others flow round it to their places.
+ *  - [FREE]: every block is a box placed and sized by hand anywhere on the card, overlapping if wanted, the later
+ *    in the list on top (like slides in a presentation); nothing is fitted by itself.
+ */
+enum class FlexLayoutMode(val label: String, val note: String) {
+    FLOW("Flow", "A row for each block, in order. Drop a block in a gap to move it there, or on a tile to put it beside that tile if both fit."),
+    SPLIT("Tiles", "Drop a block on a side of another to split it. The card fits itself after every change."),
+    FREE("Free", "Place and size every block anywhere, like a slide. Blocks can overlap; later ones sit on top.")
+}
+
 /** A colour set. Applying one replaces the background, text, accent and panel colours of a card. */
 data class FlexPalette(
     val id: String,
@@ -244,14 +260,12 @@ data class FlexStyle(
     /** Module size, the person's: every block's content is drawn at this on top of [FLEX_MODULE_SCALE] and its own size. */
     val moduleScale: Float = 1f,
     /**
-     * Best fit's own growth on top of [moduleScale], 1 or more: when a fixed-size card has room to spare, best fit
-     * draws its modules bigger to fill it (only while [growToFill] is on). Not a control; set by best fit.
+     * Best fit's own growth on top of [moduleScale], 1 or more: when a fixed-size tiled card has room to spare, best
+     * fit draws its modules bigger to fill it ([FlexLayoutMode.SPLIT] only). Not a control; set by best fit.
      */
     val fitBoost: Float = 1f,
-    /** Best fit runs by itself: when the card opens and whenever its blocks or their sizes change. Off keeps a hand-made layout. */
-    val autoFit: Boolean = true,
-    /** Best fit may grow the modules of a card with spare room ([fitBoost]). */
-    val growToFill: Boolean = true
+    /** How blocks are placed: flowing rows, split tiles, or free boxes (see [FlexLayoutMode]). */
+    val layoutMode: FlexLayoutMode = FlexLayoutMode.FLOW
 ) {
     /** How big modules are drawn: the person's module size times best fit's growth. */
     val moduleSize: Float get() = moduleScale * fitBoost
@@ -287,8 +301,10 @@ fun flexStyleOf(palette: FlexPalette, aspect: FlexAspect = FlexAspect.PORTRAIT):
  *
  *  - [TITLE]      read first; never shrunk if it can help it, wraps only when it must; at the top edge of the card
  *                 it keeps a little air above it (see [FlexStyle.titleInset]).
- *  - [DRAWABLE]   a picture of some kind (photo, chart, a 3D snapshot later): no text scale; it has a shape (a range
- *                 of aspect ratios) and min / max sizes, and fills its cell edge to edge within them.
+ *  - [DRAWABLE]   a picture of some kind: a photo the person added, a chart, a calendar, a snapshot of the 3D body
+ *                 model. No text scale; it has a shape (a range of aspect ratios), min / max sizes and a least size at
+ *                 which it still reads as a picture ([FlexPainter.VISIBLE_AREA]). It fills its cell edge to edge within
+ *                 them, hugs the cell's sides when it nearly reaches them, and sits in the middle when it does not.
  *  - [STATISTIC]  numbers with units and labels: nothing ever wraps; the block scales as one unit (one scale for
  *                 every number in it) and reflows its columns (3 → 2 → 1) before it shrinks by more than a little.
  *  - [TEXT]       running text: wraps on whole words only (never mid-word, never an ellipsis), and when the cell is
@@ -317,7 +333,9 @@ enum class FlexBlockType(
     CHART("1RM chart", listOf("Line", "Bars"), "Show axis labels", false, FlexBlockClass.DRAWABLE),
     DAY_NOTE("Day note", listOf("Quote", "Plain"), "Show date", false, FlexBlockClass.TEXT),
     PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false, FlexBlockClass.DRAWABLE),
-    TEXT("Text", listOf("Plain", "Quote", "Big"), null, false, FlexBlockClass.TEXT)
+    TEXT("Text", listOf("Plain", "Quote", "Big"), null, false, FlexBlockClass.TEXT),
+    CALENDAR("Calendar", listOf("Month", "Dots"), "Show weekdays", false, FlexBlockClass.DRAWABLE),
+    MODEL("3D model", listOf("Plain", "On a panel"), null, false, FlexBlockClass.DRAWABLE)
 }
 
 /**
@@ -336,7 +354,11 @@ data class FlexBlock(
     val text: String = "",
     /** The block's detail switch, see [FlexBlockType.flagLabel]. */
     val flag: Boolean = true,
-    /** How big the block's content is drawn inside its tile: 1 = natural, 0.5 to 2. Everything in it (text, numbers, images) scales together. */
+    /**
+     * How big the block's content is drawn inside its tile: 1 = natural, 0.5 to 2 (with the module size). Everything in it
+     * (text, numbers, images) scales together. Content takes up its tile: it shrinks when the tile is too small and grows
+     * when the tile has room, up to [FlexFit.FILL_MAX] times this, so this (and the module size) is also how big it may get.
+     */
     val size: Float = 1f,
     /** Where the content sits inside the block's tile, across and down. Every tile has its own. */
     val hAlign: FlexAlign = FlexAlign.START,
@@ -349,8 +371,19 @@ data class FlexBlock(
     val photoZoom: Float = 1f,
     /** PHOTO: where the crop sits, 0 to 1 from left to right and from top to bottom (0.5 = centre). */
     val photoX: Float = 0.5f,
-    val photoY: Float = 0.5f
-)
+    val photoY: Float = 0.5f,
+    /**
+     * Free mode ([FlexLayoutMode.FREE]): the block's box on the card, in card pixels from the card's top left corner.
+     * [freeW] 0 or less: not placed yet (it is put below the others).
+     */
+    val freeX: Float = 0f,
+    val freeY: Float = 0f,
+    val freeW: Float = 0f,
+    val freeH: Float = 0f
+) {
+    /** Free mode: whether the block has a box of its own yet. */
+    val placed: Boolean get() = freeW > 0f && freeH > 0f
+}
 
 /**
  * A card: its look, its blocks and how the blocks are tiled on it. [layout] is the tiling (see FlexLayout.kt);
@@ -407,6 +440,23 @@ data class FlexStat(val label: String, val value: String)
 
 data class FlexChartPoint(val timeMs: Long, val value: Double)
 
+/**
+ * A month for the Calendar block: [days] days, the first a [firstWeekday] (0 = Monday ... 6 = Sunday), the [marked]
+ * ones (days of the month, 1 based) highlighted, [today] ringed (0 = not this month). [label] is the line above it,
+ * e.g. the streak's name.
+ */
+data class FlexCalendar(
+    val title: String,
+    val days: Int,
+    val firstWeekday: Int,
+    val marked: Set<Int>,
+    val today: Int = 0,
+    val label: String = ""
+) {
+    /** How many week rows the month takes. */
+    val weeks: Int get() = (firstWeekday + days + 6) / 7
+}
+
 data class FlexContent(
     /** Small accent line above the title, e.g. "WORKOUT". */
     val kicker: String = "",
@@ -423,7 +473,11 @@ data class FlexContent(
     val chartLabel: String = "",
     val dayNote: String = "",
     /** The share's own photo (workout photo, saved-day photo). */
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    /** The month the Calendar block shows (kept days of a streak, days trained). */
+    val calendar: FlexCalendar? = null,
+    /** A snapshot of the 3D body model, as an image uri (the 3D model block). */
+    val modelUri: String? = null
 ) {
     /** True when a block of [type] has something to show here. */
     fun has(type: FlexBlockType): Boolean = when (type) {
@@ -435,6 +489,8 @@ data class FlexContent(
         FlexBlockType.ROUTINE -> routine.isNotEmpty()
         FlexBlockType.CHART -> chart.isNotEmpty()
         FlexBlockType.DAY_NOTE -> dayNote.isNotBlank()
+        FlexBlockType.CALENDAR -> calendar != null && calendar.days > 0
+        FlexBlockType.MODEL -> modelUri != null
     }
 
     /** The items a person can pick between for [type], as (key, label). Empty when the block is not pickable. */

@@ -11,8 +11,8 @@ import kotlin.math.roundToInt
 /*
  * How a surface (background, cards, bars, buttons, a Flex card ...) is filled.
  *
- * A fill is a BASE (one solid colour, or a multi-colour gradient) with an optional PATTERN laid over it
- * (noise, brushed metal, carbon ...). The solid colour itself is not stored here: it is the element's
+ * A fill is a BASE (one solid colour, or a multi-colour gradient) with optional PATTERNS laid over it
+ * (grain, brushed metal, clouds, topographic lines, marble ..., see PatternPixels.kt). The solid colour itself is not stored here: it is the element's
  * normal colour (a palette colour in the app, a card colour in Flex), so the plain colour pickers keep
  * working. Colours inside a fill are plain ARGB ints so the same classes serve Compose and android.graphics.
  */
@@ -41,7 +41,13 @@ enum class PatternKind(
     CARBON("Carbon", false, 1f, 0.30f),
     DOTS("Dots", true, 1.2f, 0.12f),
     LINES("Lines", true, 1.2f, 0.10f),
-    GRID("Grid", true, 1.2f, 0.10f)
+    GRID("Grid", true, 1.2f, 0.10f),
+    TOPO("Topographic", true, 1f, 0.22f, seeded = true),
+    CELLS("Cells", true, 1f, 0.16f, seeded = true),
+    MARBLE("Marble", true, 1f, 0.30f, seeded = true),
+    HEX("Honeycomb", true, 1.2f, 0.14f),
+    WAVES("Waves", true, 1.2f, 0.14f),
+    HALFTONE("Halftone", true, 1f, 0.16f, seeded = true)
 }
 
 /** A colour at a position (0..1) along a gradient. */

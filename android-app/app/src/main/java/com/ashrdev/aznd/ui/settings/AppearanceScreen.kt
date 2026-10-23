@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +64,9 @@ import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
+import com.ashrdev.aznd.ui.theme.ContrastBase
+import com.ashrdev.aznd.ui.theme.ContrastShade
+import com.ashrdev.aznd.ui.theme.HighContrast
 import com.ashrdev.aznd.ui.theme.MAX_BORDER_DP
 import com.ashrdev.aznd.ui.theme.Palette
 import com.ashrdev.aznd.ui.theme.ThemeColor
@@ -96,6 +100,7 @@ fun AppearanceScreen(
     var fillFor by remember { mutableStateOf<ThemeColor?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
     var confirmPreset by remember { mutableStateOf<ThemePreset?>(null) }
+    var pickContrast by remember { mutableStateOf(false) }
 
     fun editPalette(change: (Palette) -> Palette) {
         ThemeStore.update { s ->
@@ -148,6 +153,19 @@ fun AppearanceScreen(
             onPick = { picked ->
                 editPalette { it.withColor(element, Color(picked)) }
                 pickerFor = null
+            }
+        )
+    }
+
+    val contrast = settings.contrast
+    if (pickContrast && contrast != null) {
+        AdvancedColorPickerDialog(
+            title = "Base colour",
+            initial = contrast.color.toArgb(),
+            onDismiss = { pickContrast = false },
+            onPick = { picked ->
+                ThemeStore.update { HighContrast.apply(it, contrast.copy(color = Color(picked))) }
+                pickContrast = false
             }
         )
     }
@@ -263,6 +281,15 @@ fun AppearanceScreen(
                     }
                 }
 
+                // The high contrast theme's own setting: one base colour, and how its shades are made.
+                if (contrast != null) {
+                    HighContrastCard(
+                        base = contrast,
+                        onPickColor = { pickContrast = true },
+                        onShade = { shade -> ThemeStore.update { HighContrast.apply(it, contrast.copy(shade = shade)) } }
+                    )
+                }
+
                 SectionTitle("Theme mode")
                 SegmentedChoice(
                     options = listOf("System", "Light", "Dark"),
@@ -342,6 +369,68 @@ fun AppearanceScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The high contrast theme's settings: the base colour (tap the swatch to change it) and whether its shades are
+ * made by opacity or by saturation. Everything else in the theme is worked out from these two.
+ */
+@Composable
+private fun HighContrastCard(
+    base: ContrastBase,
+    onPickColor: () -> Unit,
+    onShade: (ContrastShade) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("High contrast", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(onClick = onPickColor)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Base colour")
+                    Text(base.color.toHexString(), style = MaterialTheme.typography.bodySmall)
+                }
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(base.color)
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                )
+            }
+            Text("Shades by", style = MaterialTheme.typography.bodyMedium)
+            SegmentedChoice(
+                options = ContrastShade.entries.map { it.label },
+                selected = base.shade.ordinal,
+                onSelect = { i -> onShade(ContrastShade.entries[i]) }
+            )
+            // The shades the choice makes, so the person sees what each does before leaving the page.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1f, HighContrast.OUTLINE, HighContrast.HIGHLIGHT).forEach { k ->
+                    Box(
+                        modifier = Modifier
+                            .size(width = 40.dp, height = 24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(HighContrast.shade(base, k))
+                    )
+                }
+            }
+            Text(
+                if (base.shade == ContrastShade.ALPHA) "Highlights and outlines are the base colour at less opacity over black."
+                else "Highlights and outlines are the base colour with less saturation.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

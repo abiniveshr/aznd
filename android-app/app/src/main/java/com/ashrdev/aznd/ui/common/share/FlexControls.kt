@@ -336,8 +336,7 @@ fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
     val out = ArrayList<String>()
     if (plan.hidden.isNotEmpty()) {
         val names = spec.blocks.filter { it.id in plan.hidden }.joinToString(", ") { it.type.label }
-        out += "Too many blocks for ${spec.style.aspect.label}: it fits ${plan.limit}. Not shown: $names. " +
-            "Turn some off or switch to Free size."
+        out += "This card cannot fit any more content. Not shown: $names."
     }
     if (plan.clipped) {
         out += "Some content is too big for its tile and is cut off at the tile's edge. Give that tile more room, show fewer items, or use Free size."
@@ -348,6 +347,19 @@ fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
         out += "This card is very tall (${plan.height.toInt()} px). Some apps crop or reject images this long."
     }
     return out
+}
+
+/**
+ * What the editor says when a change would take the card past its content budget (see FlexPainter.refuses): the
+ * change is not made. Nothing else about the budget is ever shown.
+ */
+@Composable
+internal fun FlexFullDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        text = { Text("This card cannot fit any more content") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+    )
 }
 
 @Composable
