@@ -71,13 +71,14 @@ fun BodyScreen(
     onOpenCompositionHistory: (CompositionMetric) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    initialPage: Int = PAGE_STRENGTH
 ) {
     val weights by viewModel.weights.collectAsState()
     val all by viewModel.measurements.collectAsState()
     val range = rememberGraphRangeState().range
     var measurementToDelete by remember { mutableStateOf<BodyMeasurement?>(null) }
-    val pagerState = rememberPagerState(initialPage = PAGE_STRENGTH) { BodyPages.size }
+    val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, BodyPages.size - 1)) { BodyPages.size }
     val subPages = rememberSubPageBar(pagerState, BodyPages)
 
     measurementToDelete?.let { e ->

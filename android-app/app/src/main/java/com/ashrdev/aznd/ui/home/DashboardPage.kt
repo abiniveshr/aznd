@@ -1,233 +1,142 @@
 package com.ashrdev.aznd.ui.home
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.domain.workout.Muscle
-import com.ashrdev.aznd.domain.workout.displayName
 import com.ashrdev.aznd.ui.components.Button
-import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.navigation.Destination
-import com.ashrdev.aznd.ui.streaks.StreakWithCount
-import com.ashrdev.aznd.ui.workout.TopExerciseStat
-import com.ashrdev.aznd.ui.workout.stats.formatE1rm
-import com.ashrdev.aznd.ui.workout.stats.formatTopSet
+import com.ashrdev.aznd.ui.dashboard.DashArranged
+import com.ashrdev.aznd.ui.dashboard.DashCell
+import com.ashrdev.aznd.ui.dashboard.DashMetrics
+import com.ashrdev.aznd.ui.dashboard.DashTile
+import com.ashrdev.aznd.ui.dashboard.DashWidget
+import com.ashrdev.aznd.ui.dashboard.DashboardData
+import com.ashrdev.aznd.ui.dashboard.DashboardLayout
+import com.ashrdev.aznd.ui.dashboard.DashboardTargets
+import com.ashrdev.aznd.ui.dashboard.DashboardText
+import com.ashrdev.aznd.ui.dashboard.rememberDashMeasure
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlin.math.max
+
+private val Side = 16.dp
+private val Top = 12.dp
 
 @Composable
 fun DashboardPage(
-    runningStreaks: List<StreakWithCount>,
-    topExercises: List<TopExerciseStat>,
-    topExercisesLoaded: Boolean,
+    widgets: List<DashWidget>,
+    data: DashboardData,
     onNavigate: (String) -> Unit,
+    onOpenSettings: (Int) -> Unit,
     bottomPadding: Dp,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Streaks", style = MaterialTheme.typography.titleLarge)
-                if (runningStreaks.isEmpty()) {
-                    Text(
-                        "No streaks running right now.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(onClick = { onNavigate(Destination.StreakEditor.route) }) {
-                        Text("Add streak")
-                    }
-                }
-            }
-        }
-        if (runningStreaks.isNotEmpty()) {
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(runningStreaks, key = { it.streak.id }) { item ->
-                        StreakSummaryCard(
-                            item = item,
-                            onClick = { onNavigate(Destination.StreakDetail.createRoute(item.streak.id)) }
-                        )
-                    }
-                }
-            }
-        }
-        item {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Muscle data", style = MaterialTheme.typography.titleLarge)
-                MuscleDataMenu(onPick = { onNavigate(Destination.MuscleStats.createRoute(it)) })
-            }
-        }
-        item {
-            Text(
-                "Top Lifts",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
-        if (topExercisesLoaded && topExercises.isEmpty()) {
-            item {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        "No sets logged yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(onClick = { onNavigate(Destination.Workouts.route) }) {
-                        Text("Go to workouts")
-                    }
-                }
-            }
-        }
-        items(topExercises, key = { it.exerciseId }) { stat ->
-            TopExerciseCard(
-                stat = stat,
-                modifier = Modifier.padding(horizontal = 16.dp),
-                onClick = {
-                    onNavigate(Destination.ExerciseProgress.createRoute(stat.workoutId, stat.exerciseId))
-                }
-            )
-        }
+    if (widgets.isEmpty()) {
+        EmptyDashboard(onOpenSettings, bottomPadding, modifier)
+        return
     }
-}
-
-/** Button that drops down every muscle group; picking one opens its statistics screen. */
-@Composable
-private fun MuscleDataMenu(onPick: (Muscle) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Button(onClick = { expanded = true }) {
-            Text("Choose muscle group")
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+    val measure = rememberDashMeasure()
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val width = (maxWidth - Side * 2).value
+        val viewport = (maxHeight - Top - bottomPadding).value.coerceAtLeast(DashMetrics.GAP * 10)
+        val tiles = remember(widgets, data, measure) { widgets.map { it.id to DashboardText.shape(it, data, measure) } }
+        val signature = remember(widgets, data) { widgets.joinToString("~") { DashboardText.signature(it, data) } }
+        val cacheKey = "$signature@$width@$viewport"
+        val arranged by produceState(DashboardLayout.cached(cacheKey), cacheKey) {
+            value = withContext(Dispatchers.Default) { DashboardLayout.arrangeCached(cacheKey, tiles, width, viewport, DashMetrics.GAP) }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            Muscle.entries.forEach { muscle ->
-                DropdownMenuItem(
-                    text = { Text(muscle.displayName()) },
-                    onClick = {
-                        expanded = false
-                        onPick(muscle)
-                    }
-                )
-            }
-        }
+        arranged?.let { a -> DashboardGrid(a, widgets, data, viewport, bottomPadding, onNavigate, onOpenSettings) }
     }
 }
 
 @Composable
-private fun StreakSummaryCard(
-    item: StreakWithCount,
-    onClick: () -> Unit
+private fun DashboardGrid(
+    a: DashArranged,
+    widgets: List<DashWidget>,
+    data: DashboardData,
+    viewport: Float,
+    bottomPadding: Dp,
+    onNavigate: (String) -> Unit,
+    onOpenSettings: (Int) -> Unit
 ) {
-    Card(
-        highlight = true,
-        modifier = Modifier
-            .width(150.dp)
-            .clickable(onClick = onClick)
+    val content = max(a.height, 0f)
+    val byId = widgets.associateBy { it.id }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState(), enabled = content > viewport + 1f)
+            .padding(start = Side, end = Side, top = Top, bottom = bottomPadding)
     ) {
+        Box(Modifier.fillMaxWidth().height(content.dp)) {
+            for (cell in a.cells) {
+                val widget = byId[cell.id] ?: continue
+                key(cell.id) {
+                    PlacedTile(
+                        widget = widget,
+                        cell = cell,
+                        data = data,
+                        onOpen = { onNavigate(DashboardTargets.route(widget, data)) },
+                        onHold = { onOpenSettings(widget.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlacedTile(widget: DashWidget, cell: DashCell, data: DashboardData, onOpen: () -> Unit, onHold: () -> Unit) {
+    val x by animateDpAsState(cell.x.dp, label = "tileX")
+    val y by animateDpAsState(cell.y.dp, label = "tileY")
+    val w by animateDpAsState(cell.w.dp, label = "tileW")
+    val h by animateDpAsState(cell.h.dp, label = "tileH")
+    DashTile(
+        widget = widget,
+        cell = cell,
+        data = data,
+        onOpen = onOpen,
+        onHold = onHold,
+        modifier = Modifier.offset(x, y).size(w, h)
+    )
+}
+
+@Composable
+private fun EmptyDashboard(onOpenSettings: (Int) -> Unit, bottomPadding: Dp, modifier: Modifier) {
+    Box(modifier.fillMaxSize().padding(bottom = bottomPadding), contentAlignment = Alignment.Center) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Text("Your dashboard is empty", style = MaterialTheme.typography.titleMedium)
             Text(
-                item.streak.name,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                "Add calories, streaks, graphs, shortcuts and more.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
             )
-            Text(
-                "${item.currentStreak}",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Text(
-                if (item.currentStreak == 1) "day" else "days",
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
-
-@Composable
-private fun TopExerciseCard(
-    stat: TopExerciseStat,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    stat.exerciseName,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    formatTopSet(stat.bestPoint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                formatE1rm(stat.bestPoint.e1rm),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Button(onClick = { onOpenSettings(-1) }) { Text("Add widgets") }
         }
     }
 }

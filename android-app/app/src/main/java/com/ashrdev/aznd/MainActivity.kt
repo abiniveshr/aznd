@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,11 @@ import com.ashrdev.aznd.ui.common.share.FlexPreset
 import com.ashrdev.aznd.ui.common.share.FlexScreen
 import com.ashrdev.aznd.ui.common.share.route
 import com.ashrdev.aznd.ui.home.HomeScreen
+import com.ashrdev.aznd.ui.dashboard.DashboardGraphScreen
+import com.ashrdev.aznd.ui.dashboard.DashboardSettingsScreen
+import com.ashrdev.aznd.ui.dashboard.DashboardStore
+import com.ashrdev.aznd.ui.dashboard.DashboardViewModel
+import com.ashrdev.aznd.ui.dashboard.rememberDashboardModes
 import com.ashrdev.aznd.ui.manage.LocalDataTransfer
 import com.ashrdev.aznd.ui.manage.LocalManageData
 import com.ashrdev.aznd.ui.manage.ManageDataLauncher
@@ -102,6 +108,7 @@ class MainActivity : ComponentActivity() {
         val workoutSettings = WorkoutSettingsStore(this)
         val graphRange = GraphRangeStore(this)
         val macroTargets = MacroTargetsStore(this)
+        val dashboardStore = DashboardStore(this)
         val dataTransfer = DataTransfer(DataRegistry.create(this, database, trainingRepository, macroTargets))
         setContent {
             AzndTheme {
@@ -111,6 +118,11 @@ class MainActivity : ComponentActivity() {
                       viewModel(factory = WorkoutViewModelFactory(dao, trainingRepository))
                   val streakViewModel: StreakViewModel =
                       viewModel(factory = StreakViewModelFactory(streakDao))
+                  val dashboardViewModel: DashboardViewModel = viewModel(
+                      factory = DashboardViewModel.factory(
+                          database.foodDao(), database.bodyDao(), trainingRepository
+                      ) { workoutSettings.settings.value.trackRpe }
+                  )
 
                   // Bumped by the Home button so the Home screen jumps to its middle "Home" page.
                   // (Plain Back leaves you on whichever page you came from.)
@@ -178,6 +190,9 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(
                                 workoutViewModel = workoutViewModel,
                                 streakViewModel = streakViewModel,
+                                dashboardViewModel = dashboardViewModel,
+                                dashboardStore = dashboardStore,
+                                macroTargets = macroTargets,
                                 homeSignal = homeSignal,
                                 onNavigate = { route -> navigateTo(route) }
                             )
@@ -188,11 +203,49 @@ class MainActivity : ComponentActivity() {
                                 onHome = goHome,
                                 onOpenSettings = openSettings,
                                 onOpenAppearance = { navigateTo(Destination.Appearance.route) },
+                                onOpenDashboard = { navigateTo(Destination.DashboardSettings.createRoute()) },
                                 workoutSettings = workoutSettings
                             )
                         }
                         composable(Destination.Appearance.route) {
                             AppearanceScreen(
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+
+                        composable(
+                            route = Destination.DashboardSettings.route,
+                            arguments = listOf(navArgument("focus") {
+                                type = NavType.IntType
+                                defaultValue = -1
+                            })
+                        ) { backStackEntry ->
+                            val streaks by streakViewModel.streaksWithCounts.collectAsState()
+                            val workouts by workoutViewModel.workouts.collectAsState()
+                            val sessions by workoutViewModel.allSessions.collectAsState()
+                            DashboardSettingsScreen(
+                                store = dashboardStore,
+                                streaks = streaks,
+                                workouts = workouts,
+                                modes = rememberDashboardModes(dashboardViewModel, sessions),
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                focusId = backStackEntry.arguments?.getInt("focus") ?: -1
+                            )
+                        }
+                        composable(
+                            route = Destination.DashboardGraph.route,
+                            arguments = listOf(navArgument("widgetId") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val widgetId = backStackEntry.arguments?.getInt("widgetId") ?: -1
+                            val sessions by workoutViewModel.allSessions.collectAsState()
+                            DashboardGraphScreen(
+                                widget = dashboardStore.widgets.firstOrNull { it.id == widgetId },
+                                modes = rememberDashboardModes(dashboardViewModel, sessions),
+                                onEdit = { id -> navigateTo(Destination.DashboardSettings.createRoute(id)) },
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings
@@ -498,6 +551,21 @@ class MainActivity : ComponentActivity() {
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.BodyPage.route,
+                            arguments = listOf(navArgument("page") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val bodyVm: BodyViewModel = viewModel(factory = BodyViewModel.factory(database.bodyDao()))
+                            BodyScreen(
+                                viewModel = bodyVm,
+                                onOpenMuscle = { muscle -> navigateTo(Destination.MuscleStats.createRoute(muscle)) },
+                                onOpenCompositionHistory = { metric -> navigateTo(Destination.BodyCompositionHistory.createRoute(metric)) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                initialPage = backStackEntry.arguments?.getInt("page") ?: 1
                             )
                         }
                         composable(Destination.CustomExerciseList.route) {

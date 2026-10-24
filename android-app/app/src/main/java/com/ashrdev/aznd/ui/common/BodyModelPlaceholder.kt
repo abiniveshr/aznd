@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,25 +42,12 @@ fun BodyModelPlaceholder(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Canvas(
+            BodyFigure(
                 modifier = Modifier
                     .height(height)
-                    .aspectRatio(0.5f)
-            ) {
-                val w = size.width
-                val h = size.height
-                val cx = w / 2f
-                // head
-                drawCircle(figure, radius = w * 0.14f, center = Offset(cx, h * 0.08f))
-                // torso
-                drawLine(figure, Offset(cx, h * 0.22f), Offset(cx, h * 0.52f), strokeWidth = w * 0.4f, cap = StrokeCap.Round)
-                // arms
-                drawLine(figure, Offset(w * 0.17f, h * 0.24f), Offset(w * 0.07f, h * 0.55f), strokeWidth = w * 0.11f, cap = StrokeCap.Round)
-                drawLine(figure, Offset(w * 0.83f, h * 0.24f), Offset(w * 0.93f, h * 0.55f), strokeWidth = w * 0.11f, cap = StrokeCap.Round)
-                // legs
-                drawLine(figure, Offset(w * 0.4f, h * 0.58f), Offset(w * 0.38f, h * 0.93f), strokeWidth = w * 0.17f, cap = StrokeCap.Round)
-                drawLine(figure, Offset(w * 0.6f, h * 0.58f), Offset(w * 0.62f, h * 0.93f), strokeWidth = w * 0.17f, cap = StrokeCap.Round)
-            }
+                    .aspectRatio(0.5f),
+                color = figure
+            )
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -75,5 +63,25 @@ fun BodyModelPlaceholder(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun BodyFigure(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)) {
+    val figure = color
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        // head
+        drawCircle(figure, radius = w * 0.14f, center = Offset(cx, h * 0.08f))
+        // torso
+        drawLine(figure, Offset(cx, h * 0.22f), Offset(cx, h * 0.52f), strokeWidth = w * 0.4f, cap = StrokeCap.Round)
+        // arms
+        drawLine(figure, Offset(w * 0.17f, h * 0.24f), Offset(w * 0.07f, h * 0.55f), strokeWidth = w * 0.11f, cap = StrokeCap.Round)
+        drawLine(figure, Offset(w * 0.83f, h * 0.24f), Offset(w * 0.93f, h * 0.55f), strokeWidth = w * 0.11f, cap = StrokeCap.Round)
+        // legs
+        drawLine(figure, Offset(w * 0.4f, h * 0.58f), Offset(w * 0.38f, h * 0.93f), strokeWidth = w * 0.17f, cap = StrokeCap.Round)
+        drawLine(figure, Offset(w * 0.6f, h * 0.58f), Offset(w * 0.62f, h * 0.93f), strokeWidth = w * 0.17f, cap = StrokeCap.Round)
     }
 }

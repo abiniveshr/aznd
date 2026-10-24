@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ fun SettingsScreen(
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAppearance: () -> Unit,
+    onOpenDashboard: () -> Unit,
     workoutSettings: WorkoutSettingsStore
 ) {
     ScreenScaffold(
@@ -51,6 +53,12 @@ fun SettingsScreen(
                 title = "Appearance",
                 subtitle = "Colours, corners, outlines, theme files",
                 onClick = onOpenAppearance
+            )
+            SettingsRow(
+                icon = Icons.Default.Dashboard,
+                title = "Dashboard",
+                subtitle = "Widgets, order, sizes and what each one shows",
+                onClick = onOpenDashboard
             )
             WorkoutSettingsSection(workoutSettings)
         }

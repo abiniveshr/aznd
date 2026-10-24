@@ -41,11 +41,31 @@ import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.produceState
+import com.ashrdev.aznd.data.macro.MacroTargetsStore
+import com.ashrdev.aznd.domain.macro.MacroStats
+import com.ashrdev.aznd.ui.dashboard.DashWidgetType
+import com.ashrdev.aznd.ui.dashboard.DashboardData
+import com.ashrdev.aznd.ui.dashboard.DashboardSeries
+import com.ashrdev.aznd.ui.dashboard.DashboardStore
+import com.ashrdev.aznd.ui.dashboard.DashboardViewModel
+import com.ashrdev.aznd.ui.dashboard.rememberDashboardModes
+
+private const val TOP_LIFTS = 3
+private const val CLOCK_TICK_MS = 60_000L
 
 @Composable
 fun HomeScreen(
     workoutViewModel: WorkoutViewModel,
     streakViewModel: StreakViewModel,
+    dashboardViewModel: DashboardViewModel,
+    dashboardStore: DashboardStore,
+    macroTargets: MacroTargetsStore,
     homeSignal: Int,
     onNavigate: (String) -> Unit
 ) {
@@ -73,16 +93,41 @@ fun HomeScreen(
     val bottomClearance = bottomBarClearance()
 
     val streaks by streakViewModel.streaksWithCounts.collectAsState()
-    val runningStreaks = remember(streaks) {
-        streaks.filter { it.currentStreak > 0 }.sortedByDescending { it.currentStreak }
+    val sessions by workoutViewModel.allSessions.collectAsState()
+    val workouts by workoutViewModel.workouts.collectAsState()
+    val food by dashboardViewModel.food.collectAsState()
+    val weights by dashboardViewModel.weights.collectAsState()
+    val measurements by dashboardViewModel.measurements.collectAsState()
+    val burnt by dashboardViewModel.burntByDay.collectAsState()
+    val widgets = dashboardStore.widgets
+    val liftLimit = remember(widgets) {
+        maxOf(TOP_LIFTS, widgets.filter { it.type == DashWidgetType.TOP_LIFT }.maxOfOrNull { it.rank } ?: 0)
     }
 
     var topExercises by remember { mutableStateOf<List<TopExerciseStat>>(emptyList()) }
-    var topExercisesLoaded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        topExercises = workoutViewModel.getTopExercises(3)
-        topExercisesLoaded = true
+    LaunchedEffect(liftLimit, sessions.size) {
+        topExercises = workoutViewModel.getTopExercises(liftLimit)
+    }
+    LaunchedEffect(sessions.size) { dashboardViewModel.refresh(sessions.size) }
+
+    val nowMs by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(CLOCK_TICK_MS)
+            value = System.currentTimeMillis()
+        }
+    }
+    val modes = rememberDashboardModes(dashboardViewModel, sessions)
+    val dayStart = MacroStats.dayStart(nowMs)
+    val today = remember(food, burnt, weights, measurements, dayStart, macroTargets.goal, macroTargets.advancedOffset, macroTargets.proteinG, macroTargets.carbsG, macroTargets.fatG) {
+        DashboardSeries.today(
+            food, burnt, weights, measurements, macroTargets.goal, macroTargets.advancedOffset,
+            macroTargets.proteinG, macroTargets.carbsG, macroTargets.fatG, nowMs
+        )
+    }
+    val minute = nowMs / CLOCK_TICK_MS
+    val dashboardData = remember(streaks, topExercises, sessions, workouts, today, modes, minute) {
+        DashboardData(streaks, topExercises, sessions, workouts, today, modes, nowMs)
     }
 
     fun goToPage(index: Int) {
@@ -101,6 +146,13 @@ fun HomeScreen(
                 title = {
                     Crossfade(targetState = pagerState.currentPage, label = "pageTitle") { page ->
                         Text(pages[page].title)
+                    }
+                },
+                actions = {
+                    if (pagerState.currentPage == homeIndex) {
+                        IconButton(onClick = { onNavigate(Destination.DashboardSettings.createRoute()) }) {
+                            Icon(Icons.Default.Tune, contentDescription = "Dashboard settings")
+                        }
                     }
                 }
             )
@@ -122,10 +174,10 @@ fun HomeScreen(
                         bottomPadding = bottomClearance
                     )
                     HomePageId.DASHBOARD -> DashboardPage(
-                        runningStreaks = runningStreaks,
-                        topExercises = topExercises,
-                        topExercisesLoaded = topExercisesLoaded,
+                        widgets = widgets,
+                        data = dashboardData,
                         onNavigate = onNavigate,
+                        onOpenSettings = { focus -> onNavigate(Destination.DashboardSettings.createRoute(focus)) },
                         bottomPadding = bottomClearance
                     )
                     HomePageId.APPS -> AppsPage(

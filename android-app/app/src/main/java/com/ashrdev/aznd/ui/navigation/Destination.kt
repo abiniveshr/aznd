@@ -36,8 +36,8 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *  |    |- Body Stats History (pager: Measurements | Strength | Composition; only Composition has content yet)
  *  |    |     '- Composition: Bodyweight or Body fat -- BodyCompositionHistory (pager: Calendar | Graph | Logs)
  *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
- *  '- Dashboard page: streak card -> StreakDetail, top lift -> ExerciseProgress,
- *                     Muscle data (dropdown) -> MuscleStats
+ *  '- Dashboard page: tiled widgets, each opens its screen; tune button or long press -> DashboardSettings,
+ *                     graph widget -> DashboardGraph, 3D model widget -> BodyPage
  *
  * Flex (share card maker): Share in the pull-up bar on Home, and the Share button of SessionDetail,
  * WorkoutDetail, ExerciseProgress and SavedDayDetail, each with its own preset.
@@ -101,6 +101,15 @@ sealed class Destination(val route: String) {
     object Streaks : Destination("streaks")
     object Macro : Destination("macro")
     object Body : Destination("body")
+    object BodyPage : Destination("body_page/{page}") {
+        fun createRoute(page: Int) = "body_page/$page"
+    }
+    object DashboardSettings : Destination("dashboard_settings?focus={focus}") {
+        fun createRoute(focus: Int = -1) = "dashboard_settings?focus=$focus"
+    }
+    object DashboardGraph : Destination("dashboard_graph/{widgetId}") {
+        fun createRoute(widgetId: Int) = "dashboard_graph/$widgetId"
+    }
     object BodyHistory : Destination("body_history")
     object BodyCompositionHistory : Destination("body_history_composition/{metric}") {
         fun createRoute(metric: CompositionMetric) = "body_history_composition/${metric.routeId}"
