@@ -108,10 +108,13 @@ fun StatsGraph(
     bordered: Boolean = true,
     // true: the chart takes all the height it is given instead of a fixed 200dp, so the page needs
     // no vertical scrolling. Give the graph a bounded height (e.g. Modifier.fillMaxSize()).
-    fillHeight: Boolean = false
+    fillHeight: Boolean = false,
+    comparable: Boolean = false
 ) {
     if (modes.isEmpty()) return
     var modeId by rememberSaveable { mutableStateOf(modes.first().id) }
+    var comparing by rememberSaveable { mutableStateOf(false) }
+    val canCompare = comparable && modes.size >= 2
     val mode = modes.firstOrNull { it.id == modeId } ?: modes.first()
     val rangeState = rememberGraphRangeState()
     val range = rangeState.range
@@ -128,70 +131,63 @@ fun StatsGraph(
         ) {
             if (title != null) Text(title, style = MaterialTheme.typography.titleMedium)
 
-            if (modes.size > 1) {
+            if (modes.size > 1 && !(canCompare && comparing)) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(modes, key = { it.id }) { m ->
                         FilterChip(selected = m.id == mode.id, onClick = { modeId = m.id }, label = { Text(m.label) })
                     }
-                }
-            }
-            var rangeMenu by remember { mutableStateOf(false) }
-            Box {
-                OutlinedButton(onClick = { rangeMenu = true }) {
-                    Text(range.label)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-                DropdownMenu(expanded = rangeMenu, onDismissRequest = { rangeMenu = false }) {
-                    GraphRange.entries.forEach { r ->
-                        DropdownMenuItem(
-                            text = { Text(r.label) },
-                            onClick = {
-                                rangeMenu = false
-                                rangeState.select(r)
-                            }
-                        )
+                    if (canCompare) {
+                        item(key = COMPARE_KEY) {
+                            FilterChip(selected = false, onClick = { comparing = true }, label = { Text("Compare") })
+                        }
                     }
                 }
             }
-
-            if (shown.isEmpty()) {
-                Text(
-                    "Nothing logged in this range.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (canCompare && comparing) {
+                FilterChip(selected = true, onClick = { comparing = false }, label = { Text("Compare") })
+                CompareBody(modes, nowMs, fillHeight, initial = listOf(mode.id) + modes.map { it.id }.filter { it != mode.id }.take(1))
             } else {
-                var selected by remember(shown, mode.id) { mutableIntStateOf(shown.lastIndex) }
-                val point = shown[selected.coerceIn(0, shown.lastIndex)]
-                val dateFmt = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
-                Column {
+                GraphRangeButton(rangeState)
+
+                if (shown.isEmpty()) {
                     Text(
-                        "${dateFmt.format(Date(point.timeMs))}  •  " +
-                            (point.valueText ?: "${GraphWindow.formatValue(point.value)} ${mode.unit}"),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        point.detail ?: " ",
-                        style = MaterialTheme.typography.bodySmall,
+                        "Nothing logged in this range.",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-                GraphCanvas(
-                    points = shown,
-                    mode = mode,
-                    selected = selected.coerceIn(0, shown.lastIndex),
-                    onSelect = { selected = it },
-                    modifier = Modifier.fillMaxWidth().then(
-                        if (fillHeight) Modifier.weight(1f) else Modifier.height(200.dp)
+                } else {
+                    var selected by remember(shown, mode.id) { mutableIntStateOf(shown.lastIndex) }
+                    val point = shown[selected.coerceIn(0, shown.lastIndex)]
+                    val dateFmt = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+                    Column {
+                        Text(
+                            "${dateFmt.format(Date(point.timeMs))}  •  " +
+                                (point.valueText ?: "${GraphWindow.formatValue(point.value)} ${mode.unit}"),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            point.detail ?: " ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    GraphCanvas(
+                        points = shown,
+                        mode = mode,
+                        selected = selected.coerceIn(0, shown.lastIndex),
+                        onSelect = { selected = it },
+                        modifier = Modifier.fillMaxWidth().then(
+                            if (fillHeight) Modifier.weight(1f) else Modifier.height(200.dp)
+                        )
                     )
-                )
-                if (range.months != null && coversAll) {
-                    Text(
-                        "Showing all available data.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (range.months != null && coversAll) {
+                        Text(
+                            "Showing all available data.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             if (footnote != null) {
@@ -200,6 +196,30 @@ fun StatsGraph(
         }
     }
     if (bordered) Card(modifier = modifier.fillMaxWidth()) { body() } else body()
+}
+
+private const val COMPARE_KEY = "\u0000compare"
+
+@Composable
+internal fun GraphRangeButton(rangeState: GraphRangeState) {
+    var rangeMenu by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { rangeMenu = true }) {
+            Text(rangeState.range.label)
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(expanded = rangeMenu, onDismissRequest = { rangeMenu = false }) {
+            GraphRange.entries.forEach { r ->
+                DropdownMenuItem(
+                    text = { Text(r.label) },
+                    onClick = {
+                        rangeMenu = false
+                        rangeState.select(r)
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable

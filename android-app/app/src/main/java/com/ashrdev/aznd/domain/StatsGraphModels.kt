@@ -52,7 +52,8 @@ data class GraphMode(
     val points: List<GraphPoint>,
     val startAtZero: Boolean = true,
     val bandMin: Double? = null,
-    val bandMax: Double? = null
+    val bandMax: Double? = null,
+    val combine: GraphCombine? = null
 )
 
 /** Picking the part of a series a [GraphRange] shows. Pure, so any page can reuse it. */
