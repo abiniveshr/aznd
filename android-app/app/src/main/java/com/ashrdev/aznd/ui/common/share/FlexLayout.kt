@@ -38,7 +38,8 @@ class FlexDivider(
     val cx: Float,
     val cy: Float,
     val sizes: List<Float>,
-    val adjacent: Set<Int>
+    val adjacent: Set<Int>,
+    val span: Float = 0f
 )
 
 class FlexGroupRef(val path: List<Int>, val index: Int, val group: FlexGroup)
@@ -944,8 +945,8 @@ internal class FlexTiler(
                     val adjacent = (FlexTree.leaves(child) + FlexTree.leaves(g.children[i + 1])).toSet()
                     val mid = off + gap / 2f
                     dividers.add(
-                        if (g.vertical) FlexDivider(path, i, true, px + pw / 2f, py + mid, sizes.toList(), adjacent)
-                        else FlexDivider(path, i, false, px + mid, py + ph / 2f, sizes.toList(), adjacent)
+                        if (g.vertical) FlexDivider(path, i, true, px + pw / 2f, py + mid, sizes.toList(), adjacent, pw)
+                        else FlexDivider(path, i, false, px + mid, py + ph / 2f, sizes.toList(), adjacent, ph)
                     )
                 }
                 off += gap

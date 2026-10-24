@@ -15,7 +15,27 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.ashrdev.aznd.domain.workout.formatWeight
+import com.ashrdev.aznd.ui.theme.BorderKind
 import com.ashrdev.aznd.ui.theme.FillRender
+import com.ashrdev.aznd.ui.common.tiling.AlignItem
+import com.ashrdev.aznd.ui.common.tiling.AlignSpace
+import com.ashrdev.aznd.ui.common.tiling.DrawableShape
+import com.ashrdev.aznd.ui.common.tiling.DropZone
+import com.ashrdev.aznd.ui.common.tiling.StatShape
+import com.ashrdev.aznd.ui.common.tiling.TileAligner
+import com.ashrdev.aznd.ui.common.tiling.TileArea
+import com.ashrdev.aznd.ui.common.tiling.TileCell
+import com.ashrdev.aznd.ui.common.tiling.TileDivider
+import com.ashrdev.aznd.ui.common.tiling.TileFit
+import com.ashrdev.aznd.ui.common.tiling.TileGroup
+import com.ashrdev.aznd.ui.common.tiling.TileItem
+import com.ashrdev.aznd.ui.common.tiling.TileKind
+import com.ashrdev.aznd.ui.common.tiling.TileLeaf
+import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileSolved
+import com.ashrdev.aznd.ui.common.tiling.TileSolver
+import com.ashrdev.aznd.ui.common.tiling.TileTree
+import com.ashrdev.aznd.ui.common.tiling.TileZoom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,30 +58,28 @@ import kotlin.math.sqrt
  * gave it, which can be bigger.
  */
 class FlexBlockBox(
-    val id: Int,
+    override val id: Int,
     val left: Float,
     val top: Float,
     val width: Float,
     val height: Float,
     val scale: Float = 1f,
     val drawn: Float = height,
-    val cellLeft: Float = left,
-    val cellTop: Float = top,
-    val cellWidth: Float = width,
-    val cellHeight: Float = height,
+    override val cellLeft: Float = left,
+    override val cellTop: Float = top,
+    override val cellWidth: Float = width,
+    override val cellHeight: Float = height,
     /** A statistic: the number of columns its layout took (0 for the other classes). */
     val columns: Int = 0,
     /** A title at the top edge: the air above its content, part of [height] (and not of [drawn]). */
     val inset: Float = 0f,
     /** The tile was stretched to its cell's height (its panel fills the cell); its content takes [contentHeight]. */
     val stretched: Boolean = false
-) {
+) : TileCell {
     /** How tall the tile's content is, its air included: [height] unless the tile was stretched. */
     val contentHeight: Float get() = if (stretched) drawn + inset else height
 
     fun contains(x: Float, y: Float) = x >= left && x <= left + width && y >= top && y <= top + height
-    fun cellContains(x: Float, y: Float) =
-        x >= cellLeft && x <= cellLeft + cellWidth && y >= cellTop && y <= cellTop + cellHeight
 }
 
 /** A block drawn this far (card pixels) from where the layout put it: used to glide blocks to new places. */
@@ -98,17 +116,17 @@ class FlexPlan(
     val height: Float,
     val boxes: List<FlexBlockBox>,
     /** The tiling actually drawn: the saved layout with the blocks that are not on the card left out and new ones added. */
-    val tree: FlexNode?,
+    override val tree: TileNode?,
     /** The borders between neighbouring tiles, for resizing. */
-    val dividers: List<FlexDivider>,
+    val dividers: List<TileDivider>,
     /** How much room each child of each group has along the split, by the group's path in [tree]. */
     val groupSizes: Map<List<Int>, List<Float>>,
     /** The area the tiles fill, in card pixels, and the gap between tiles. */
-    val contentLeft: Float,
-    val contentTop: Float,
-    val contentWidth: Float,
-    val contentHeight: Float,
-    val gap: Float,
+    override val contentLeft: Float,
+    override val contentTop: Float,
+    override val contentWidth: Float,
+    override val contentHeight: Float,
+    override val gap: Float,
     /** The blocks that are on the card (enabled, have something to show, within the size's limit), in order. */
     val shownIds: List<Int>,
     /** Enabled blocks left out because this size only fits [limit] of them. */
@@ -123,18 +141,21 @@ class FlexPlan(
     /** How the blocks were placed. In [FlexLayoutMode.FREE] every box is where it was put, the later on top; [tree] is null. */
     val mode: FlexLayoutMode = FlexLayoutMode.SPLIT,
     val zoom: Float = 1f,
-    val crowded: Boolean = false
-) {
+    val crowded: Boolean = false,
+    val rules: List<TileDivider> = dividers
+) : TileArea {
+    override val cells: List<TileCell> get() = boxes
+
     /** The block under a point: its tile; in free mode its whole box, the topmost one. */
     fun hit(x: Float, y: Float): FlexBlockBox? =
         if (mode == FlexLayoutMode.FREE) boxes.lastOrNull { it.cellContains(x, y) } else boxes.firstOrNull { it.contains(x, y) }
     fun box(id: Int): FlexBlockBox? = boxes.firstOrNull { it.id == id }
     /** The borders the tile of block [id] touches. */
-    fun dividersOf(id: Int): List<FlexDivider> = dividers.filter { id in it.adjacent }
+    fun dividersOf(id: Int): List<TileDivider> = dividers.filter { id in it.adjacent }
 
     /**
      * The resize bars of block [id]'s tile: for each side of its cell that is a border with other tiles, the border
-     * ([FlexDivider], what a drag moves) and the bar along that side, as long as the cell's side (not the whole
+     * ([TileDivider], what a drag moves) and the bar along that side, as long as the cell's side (not the whole
      * border, which can run past it beside other tiles). At most one per side: the border that lies on it.
      */
     fun edgesOf(id: Int): List<FlexEdge> {
@@ -166,11 +187,11 @@ class FlexPlan(
 enum class FlexSide { LEFT, TOP, RIGHT, BOTTOM }
 
 /**
- * A resize bar on side [side] of a selected tile: dragging it moves [divider] (as [FlexTree.resized] does), so the tile
+ * A resize bar on side [side] of a selected tile: dragging it moves [divider] (as [TileTree.resized] does), so the tile
  * and the tiles on the other side of it share the space differently. [x0], [y0] to [x1], [y1]: the bar (card pixels),
  * along the middle of the gap.
  */
-class FlexEdge(val divider: FlexDivider, val side: FlexSide, val x0: Float, val y0: Float, val x1: Float, val y1: Float) {
+class FlexEdge(val divider: TileDivider, val side: FlexSide, val x0: Float, val y0: Float, val x1: Float, val y1: Float) {
     /** How far point [x], [y] is from the bar (0 on it). */
     fun distance(x: Float, y: Float): Float {
         val dx = max(0f, max(min(x0, x1) - x, x - max(x0, x1)))
@@ -217,8 +238,8 @@ class FlexBoxLimits(
  * whatever width it is asked for. The editor preview (a Compose Canvas) and the exported PNG both
  * call [FlexPainter.draw], so what you see is what you share.
  *
- * Layout is a tiling (see FlexLayout.kt): every block gets a tile, and how it takes that tile depends on its class
- * ([FlexBlockClass], fitted by [FlexFit], the same code the auto aligner prices with): titles and text are drawn at
+ * Layout is a tiling (see ui/common/tiling, under [FlexTileRules]): every block gets a tile, and how it takes that tile
+ * depends on its class ([FlexBlockClass], fitted by [FlexFit], the same code the auto aligner prices with): titles and text are drawn at
  * their natural size, or smaller when the tile is too small, wrapping on whole words; statistics are single lines in
  * a grid that reflows before it shrinks; drawables (photos, charts) take the shape that fills their cell. The tile
  * is placed in its cell by the block's own alignment. Every text-like block function takes its box (x, y, width),
@@ -238,9 +259,9 @@ object FlexPainter {
     private const val PATTERN_DENSITY = 2.7f
 
     private class Arranged(
-        val tree: FlexNode?,
+        val tree: TileNode?,
         val boxes: List<FlexBlockBox>,
-        val solved: FlexSolved,
+        val solved: TileSolved,
         val height: Float,
         val availH: Float,
         val cuts: Int,
@@ -257,6 +278,7 @@ object FlexPainter {
         val c = Ctx(Canvas(), st, assets)
         c.dry = true
         val pad = st.padding.toFloat()
+        val padV = st.paddingV.toFloat()
         val footer = footerOf(st)
         val availW = st.aspect.width - 2 * pad
         val gap = st.spacing.toFloat()
@@ -273,17 +295,17 @@ object FlexPainter {
 
         fun arrange(shown: List<FlexBlock>): Arranged {
             val byId = shown.associateBy { it.id }
-            val tree = FlexTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
-            val banner = FlexTree.banner(tree)
+            val tree = TileTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
+            val banner = TileTree.banner(tree)
             val tiler = m.tiler(shown, banner, byContent = free)
             val height: Float = if (free) {
-                val wanted = if (tree != null) tiler.height(tree, availW, FlexZoom.Q_NATURAL) else 0f
-                (wanted + 2 * pad + footer).coerceAtLeast(MIN_FREE_HEIGHT)
+                val wanted = if (tree != null) tiler.height(tree, availW, TileZoom.Q_NATURAL) else 0f
+                (wanted + 2 * padV + footer).coerceAtLeast(MIN_FREE_HEIGHT)
             } else {
                 st.aspect.height.toFloat()
             }
-            val availH = height - 2 * pad - footer
-            val solved = tiler.solve(tree, pad, pad, availW, availH)
+            val availH = height - 2 * padV - footer
+            val solved = tiler.solve(tree, pad, padV, availW, availH)
             var cuts = 0
             var minScale = 1f
             val boxes = ArrayList<FlexBlockBox>()
@@ -293,7 +315,7 @@ object FlexPainter {
                 val cy = r[1]
                 val cw = r[2]
                 val ch = r[3]
-                val level = solved.levels[id] ?: FlexZoom.Q_NATURAL
+                val level = solved.levels[id] ?: TileZoom.Q_NATURAL
                 val air = if (b.type.blockClass == FlexBlockClass.TITLE && id == banner) st.titleInset else 0f
                 val fit = m.fitAt(b, cw, ch, air, tiler.leaf(id, cw, level).scale)
                 if (fit.cut) cuts++
@@ -320,7 +342,7 @@ object FlexPainter {
 
         var arranged = arrange(live)
         while (arranged.clipped && !free && live.size > 1) {
-            val last = FlexTree.leaves(arranged.tree).lastOrNull() ?: break
+            val last = TileTree.leaves(arranged.tree).lastOrNull() ?: break
             val fewer = live.filter { it.id != last }
             val next = arrange(fewer)
             if (next.cuts >= arranged.cuts) break
@@ -334,9 +356,10 @@ object FlexPainter {
             boxes = arranged.boxes,
             tree = arranged.tree,
             dividers = if (free) arranged.solved.dividers.filter { !it.vertical } else arranged.solved.dividers,
+            rules = arranged.solved.dividers,
             groupSizes = arranged.solved.groupSizes,
             contentLeft = pad,
-            contentTop = pad,
+            contentTop = padV,
             contentWidth = availW,
             contentHeight = arranged.availH,
             gap = gap,
@@ -386,7 +409,7 @@ object FlexPainter {
         return now.edgesOf(id).filter { e ->
             val wide = e.side == FlexSide.LEFT || e.side == FlexSide.RIGHT
             listOf(BAR_PROBE, -BAR_PROBE).any { t ->
-                val next = spec.copy(layout = FlexTree.resized(now.tree, e.divider, t))
+                val next = spec.copy(layout = TileTree.resized(now.tree, e.divider, t, FlexTileRules))
                 val q = plan(next, content, assets)
                 val box = q.box(id)
                 box != null && (if (wide) abs(box.cellWidth - b.cellWidth) else abs(box.cellHeight - b.cellHeight)) > 2f && keep.holds(next, q)
@@ -432,23 +455,23 @@ object FlexPainter {
 
     private fun roomOf(st: FlexStyle): Float {
         val height = if (st.aspect == FlexAspect.FREE) TOO_TALL else st.aspect.height.toFloat()
-        return height - 2f * st.padding - footerOf(st)
+        return height - 2f * st.paddingV - footerOf(st)
     }
 
-    private fun budgetLayout(spec: FlexSpec, m: Metrics, shown: List<FlexBlock>): FlexNode? {
+    private fun budgetLayout(spec: FlexSpec, m: Metrics, shown: List<FlexBlock>): TileNode? {
         val st = spec.style
         val safe = budgetTree(m, st, shown)
         if (st.layoutMode == FlexLayoutMode.FREE) return safe
-        val now = FlexTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
+        val now = TileTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
         return if (m.leastOf(shown, safe) < m.leastOf(shown, now)) safe else now
     }
 
-    private fun admitOn(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, tree: FlexNode?, strict: Boolean = false): List<FlexBlock> {
+    private fun admitOn(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, tree: TileNode?, strict: Boolean = false): List<FlexBlock> {
         if (shown.isEmpty()) return shown
         val room = roomOf(st) * (if (strict) 1f - BUDGET_SLACK else 1f) + 0.5f
         val full = tree ?: budgetTree(m, st, shown)
         fun fits(keep: Collection<Int>): Boolean {
-            val t = FlexTree.prune(full, keep.toSet()) ?: return true
+            val t = TileTree.prune(full, keep.toSet()) ?: return true
             return m.leastOf(shown.filter { it.id in keep }, t, strict) <= room
         }
         if (fits(shown.map { it.id })) return shown
@@ -457,21 +480,21 @@ object FlexPainter {
         return held
     }
 
-    private fun admit(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, layout: FlexNode?): List<FlexBlock> =
-        admitOn(m, st, shown, FlexTree.effective(layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE))
+    private fun admit(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, layout: TileNode?): List<FlexBlock> =
+        admitOn(m, st, shown, TileTree.effective(layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE))
 
-    private fun admitAny(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, layout: FlexNode?): List<FlexBlock> {
+    private fun admitAny(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, layout: TileNode?): List<FlexBlock> {
         val now = admit(m, st, shown, layout)
         if (now.size == shown.size) return now
         val safe = admitOn(m, st, shown, budgetTree(m, st, shown))
         return if (safe.size > now.size) safe else now
     }
 
-    private fun budgetTree(m: Metrics, st: FlexStyle, shown: List<FlexBlock>): FlexNode? {
-        fun stack(l: List<FlexBlock>): FlexNode? = when (l.size) {
+    private fun budgetTree(m: Metrics, st: FlexStyle, shown: List<FlexBlock>): TileNode? {
+        fun stack(l: List<FlexBlock>): TileNode? = when (l.size) {
             0 -> null
-            1 -> FlexLeaf(l[0].id)
-            else -> FlexGroup(true, l.map { FlexLeaf(it.id) }, List(l.size) { 0f })
+            1 -> TileLeaf(l[0].id)
+            else -> TileGroup(true, l.map { TileLeaf(it.id) }, List(l.size) { 0f })
         }
         if (st.aspect != FlexAspect.WIDE || shown.size < 3) return stack(shown)
         val banner = shown.first().takeIf { it.type.blockClass == FlexBlockClass.TITLE }
@@ -480,8 +503,8 @@ object FlexPainter {
         val costs = rest.map { m.cost(it, colW) }
         val half = (1 until rest.size).minByOrNull { k -> max(costs.take(k).sum(), costs.drop(k).sum()) } ?: 1
         val cols = listOfNotNull(stack(rest.take(half)), stack(rest.drop(half)))
-        val body: FlexNode = if (cols.size == 1) cols[0] else FlexGroup(false, cols, List(cols.size) { 0f })
-        return if (banner == null) body else FlexGroup(true, listOf(FlexLeaf(banner.id), body), listOf(0f, 0f))
+        val body: TileNode = if (cols.size == 1) cols[0] else TileGroup(false, cols, List(cols.size) { 0f })
+        return if (banner == null) body else TileGroup(true, listOf(TileLeaf(banner.id), body), listOf(0f, 0f))
     }
 
     fun refuses(before: FlexSpec?, next: FlexSpec, content: FlexContent, assets: FlexAssets): Boolean {
@@ -500,11 +523,11 @@ object FlexPainter {
         val pad = st.padding.toFloat()
         val availW = st.aspect.width - 2 * pad
         val b = spec.blocks.firstOrNull { it.id == id } ?: return null
-        return Metrics(c, content, availW).limits(b, maxBoxH(st, pad, footerOf(st)))
+        return Metrics(c, content, availW).limits(b, maxBoxH(st, st.paddingV.toFloat(), footerOf(st)))
     }
 
-    private fun maxBoxH(st: FlexStyle, pad: Float, footer: Float): Float =
-        if (st.aspect == FlexAspect.FREE) Float.MAX_VALUE else st.aspect.height - 2 * pad - footer
+    private fun maxBoxH(st: FlexStyle, padV: Float, footer: Float): Float =
+        if (st.aspect == FlexAspect.FREE) Float.MAX_VALUE else st.aspect.height - 2 * padV - footer
 
     /**
      * Free mode ([FlexLayoutMode.FREE]): every block is drawn in its own box ([FlexBlock.freeX] ...), in list order, so a
@@ -519,15 +542,16 @@ object FlexPainter {
         val c = Ctx(Canvas(), st, assets)
         c.dry = true
         val pad = st.padding.toFloat()
+        val padV = st.paddingV.toFloat()
         val footer = footerOf(st)
         val availW = st.aspect.width - 2 * pad
         val gap = st.spacing.toFloat()
         val m = Metrics(c, content, availW)
         val shown = spec.blocks.filter { it.enabled && content.has(it.type) }.filter { m.heightOf(it, availW) > 0f }
-        val maxH = maxBoxH(st, pad, footer)
-        val rects = freeRects(shown, m, pad, availW, gap, maxH)
-        val bottom = rects.values.maxOfOrNull { it[1] + it[3] } ?: pad
-        val height = if (st.aspect == FlexAspect.FREE) max(bottom + pad + footer, MIN_FREE_HEIGHT) else st.aspect.height.toFloat()
+        val maxH = maxBoxH(st, padV, footer)
+        val rects = freeRects(shown, m, pad, padV, availW, gap, maxH)
+        val bottom = rects.values.maxOfOrNull { it[1] + it[3] } ?: padV
+        val height = if (st.aspect == FlexAspect.FREE) max(bottom + padV + footer, MIN_FREE_HEIGHT) else st.aspect.height.toFloat()
         var clipped = false
         var minScale = 1f
         val boxes = ArrayList<FlexBlockBox>()
@@ -551,9 +575,9 @@ object FlexPainter {
             dividers = emptyList(),
             groupSizes = emptyMap(),
             contentLeft = pad,
-            contentTop = pad,
+            contentTop = padV,
             contentWidth = availW,
-            contentHeight = height - 2 * pad - footer,
+            contentHeight = height - 2 * padV - footer,
             gap = gap,
             shownIds = shown.map { it.id },
             hidden = emptyList(),
@@ -569,9 +593,9 @@ object FlexPainter {
      * The free boxes of [shown]: their own, held to the block's size limits (a box made when its content was smaller
      * grows to fit it), and for the ones without, one each below the lowest box (x, y, w, h).
      */
-    private fun freeRects(shown: List<FlexBlock>, m: Metrics, pad: Float, availW: Float, gap: Float, maxH: Float): Map<Int, FloatArray> {
+    private fun freeRects(shown: List<FlexBlock>, m: Metrics, pad: Float, padV: Float, availW: Float, gap: Float, maxH: Float): Map<Int, FloatArray> {
         val out = LinkedHashMap<Int, FloatArray>()
-        var below = pad
+        var below = padV
         for (b in shown) {
             if (!b.placed) continue
             val (w, h) = m.limits(b, maxH).clamp(b.freeW, b.freeH)
@@ -695,7 +719,7 @@ object FlexPainter {
             if (cls == FlexBlockClass.DRAWABLE) return 1f
             val need = needOf(b)
             val fits = if (need > 0f) availW / need else LIMIT_SCALE
-            return min(LIMIT_SCALE, fits).coerceAtLeast(FlexFit.minScale(cls))
+            return min(LIMIT_SCALE, fits).coerceAtLeast(FlexFit.minScale(cls.kind))
         }
 
         fun short(b: FlexBlock, box: FlexBlockBox): Boolean =
@@ -710,29 +734,29 @@ object FlexPainter {
 
         fun item(b: FlexBlock, banner: Int?): TileItem = when (b.type.blockClass) {
             FlexBlockClass.DRAWABLE -> TileItem(
-                b.id, FlexBlockClass.DRAWABLE, 0f, 1f, 1f,
+                b.id, TileKind.DRAWABLE, 0f, 1f, 1f,
                 pic = shape(b), least = { w -> leastH(b, w) }, picArea = visibleArea(b)
             )
             FlexBlockClass.STATISTIC -> {
                 val sh = stat(b)
-                TileItem(b.id, FlexBlockClass.STATISTIC, sh?.need ?: 0f, FlexFit.STAT_MIN_SCALE, FlexZoom.MAX, stat = sh, stretchy = stretches(c.st, b), leastScale = leastScale(b))
+                TileItem(b.id, TileKind.STATISTIC, sh?.need ?: 0f, FlexTileRules.statMinScale, FlexTileRules.zoom.max, stat = sh, stretchy = stretches(c.st, b), leastScale = leastScale(b))
             }
             FlexBlockClass.TITLE -> TileItem(
-                b.id, FlexBlockClass.TITLE, needOf(b), FlexFit.MIN_SCALE, FlexZoom.TITLE_MAX,
+                b.id, TileKind.TITLE, needOf(b), FlexTileRules.textMinScale, FlexTileRules.TITLE_ZOOM_MAX,
                 text = { w, s -> tileHeight(b, w, s) }, air = if (b.id == banner) c.st.titleInset else 0f, hug = hugOf(b), leastScale = leastScale(b)
             )
             FlexBlockClass.TEXT -> TileItem(
-                b.id, FlexBlockClass.TEXT, needOf(b), FlexFit.MIN_SCALE, FlexZoom.MAX,
+                b.id, TileKind.TEXT, needOf(b), FlexTileRules.textMinScale, FlexTileRules.zoom.max,
                 text = { w, s -> tileHeight(b, w, s) }, stretchy = stretches(c.st, b), leastScale = leastScale(b)
             )
         }
 
-        fun tiler(shown: List<FlexBlock>, banner: Int?, byContent: Boolean = false, strict: Boolean = false): FlexTiler =
-            FlexTiler(shown.associate { it.id to item(it, banner) }, c.st.spacing.toFloat(), byContent, strict)
+        fun tiler(shown: List<FlexBlock>, banner: Int?, byContent: Boolean = false, strict: Boolean = false): TileSolver =
+            TileSolver(shown.associate { it.id to item(it, banner) }, c.st.spacing.toFloat(), FlexTileRules, byContent, strict)
 
-        fun leastOf(shown: List<FlexBlock>, tree: FlexNode?, strict: Boolean = true): Float {
+        fun leastOf(shown: List<FlexBlock>, tree: TileNode?, strict: Boolean = true): Float {
             if (tree == null) return 0f
-            return tiler(shown, FlexTree.banner(tree), strict = strict).height(tree, availW, FlexZoom.Q_BUDGET)
+            return tiler(shown, TileTree.banner(tree), strict = strict).height(tree, availW, TileZoom.Q_BUDGET)
         }
 
         fun fitAt(b: FlexBlock, cw: Float, ch: Float, air: Float, top: Float): TileFit {
@@ -741,7 +765,7 @@ object FlexPainter {
                 FlexBlockClass.DRAWABLE -> FlexFit.drawable(shape(b), cw, ch)
                 FlexBlockClass.STATISTIC -> {
                     val shape = stat(b) ?: return TileFit(cw, 0f, 1f, false)
-                    val f = statFit(shape, cw, ch, top, FlexFit.STAT_MIN_SCALE)
+                    val f = FlexFit.statAt(shape, cw, ch, top, FlexTileRules.statMinScale)
                     TileFit(cw, min(f.height, ch), f.scale, f.narrow || f.height > ch + 1f, f.columns)
                 }
                 FlexBlockClass.TITLE -> snap(b, cw, ch, FlexFit.title(cw, ch, needOf(b), air, { w -> heightOf(b, w) }, hugAt, top))
@@ -751,7 +775,7 @@ object FlexPainter {
 
         private fun snap(b: FlexBlock, cw: Float, ch: Float, f: TileFit): TileFit {
             if (f.cut) return f
-            val least = FlexFit.minScale(b.type.blockClass)
+            val least = FlexFit.minScale(b.type.blockClass.kind)
             var s = f.scale
             for (i in 0 until 4) {
                 val o = laidOut(b, cw / s).overflow
@@ -783,7 +807,7 @@ object FlexPainter {
 
         val availH: Float = run {
             val st = c.st
-            (if (st.aspect.height > 0) st.aspect.height else FlexAspect.PORTRAIT.height) - 2f * st.padding - footerOf(st)
+            (if (st.aspect.height > 0) st.aspect.height else FlexAspect.PORTRAIT.height) - 2f * st.paddingV - footerOf(st)
         }
 
         fun leastH(b: FlexBlock, w: Float): Float {
@@ -857,24 +881,24 @@ object FlexPainter {
     private const val MEASURE_CACHE = 200_000
 
     /** A block as the auto aligner sees it: its class, its least and its hugging width, and how its height goes with its width. */
-    private fun autoItem(c: Ctx, m: Metrics, b: FlexBlock, availW: Float): AutoItem = when (b.type.blockClass) {
-        FlexBlockClass.DRAWABLE -> AutoItem(b.id, FlexBlockClass.DRAWABLE, 0f, availW, drawable = m.shape(b))
+    private fun autoItem(c: Ctx, m: Metrics, b: FlexBlock, availW: Float): AlignItem = when (b.type.blockClass) {
+        FlexBlockClass.DRAWABLE -> AlignItem(b.id, TileKind.DRAWABLE, 0f, availW, drawable = m.shape(b))
         FlexBlockClass.STATISTIC -> {
-            val shape = m.stat(b) ?: StatShape(intArrayOf(1), floatArrayOf(1f), floatArrayOf(0f), 1)
-            AutoItem(b.id, FlexBlockClass.STATISTIC, shape.need, min(shape.hug, availW), stat = shape)
+            val shape = m.stat(b) ?: StatShape(intArrayOf(1), floatArrayOf(1f), floatArrayOf(0f), 1, FlexTileRules.reflowKeep)
+            AlignItem(b.id, TileKind.STATISTIC, shape.need, min(shape.hug, availW), stat = shape)
         }
         FlexBlockClass.TITLE, FlexBlockClass.TEXT -> {
-            val minScale = FlexFit.minScale(b.type.blockClass)
-            val widths = AutoItem.sampleWidths(availW / minScale)
+            val minScale = FlexFit.minScale(b.type.blockClass.kind)
+            val widths = AlignItem.sampleWidths(availW / minScale)
             val heights = FloatArray(widths.size) { m.heightOf(b, widths[it]) }
             val inset = if (b.type.blockClass == FlexBlockClass.TITLE) c.st.titleInset else 0f
             val full = m.heightOf(b, availW)
-            AutoItem(b.id, b.type.blockClass, m.needOf(b), m.hugWidth(b, availW, 1f, full), heights, inset = inset, exactW = availW, exactH = full)
+            AlignItem(b.id, b.type.blockClass.kind, m.needOf(b), m.hugWidth(b, availW, 1f, full), heights, inset = inset, exactW = availW, exactH = full)
         }
     }
 
-    private fun withLayout(spec: FlexSpec, drawable: List<FlexBlock>, live: List<FlexBlock>, tree: FlexNode): FlexSpec {
-        val tiles = FlexTree.leaves(tree).mapNotNull { id -> live.firstOrNull { it.id == id } }
+    private fun withLayout(spec: FlexSpec, drawable: List<FlexBlock>, live: List<FlexBlock>, tree: TileNode): FlexSpec {
+        val tiles = TileTree.leaves(tree).mapNotNull { id -> live.firstOrNull { it.id == id } }
         val rest = drawable.filter { d -> tiles.none { it.id == d.id } }
         val order = tiles + rest
         val blocks = spec.blocks.toMutableList()
@@ -883,9 +907,9 @@ object FlexPainter {
         return spec.copy(blocks = blocks, layout = tree)
     }
 
-    fun withTree(spec: FlexSpec, tree: FlexNode?): FlexSpec {
+    fun withTree(spec: FlexSpec, tree: TileNode?): FlexSpec {
         if (tree == null) return spec.copy(layout = null)
-        val tiles = FlexTree.leaves(tree).distinct()
+        val tiles = TileTree.leaves(tree).distinct()
         val byId = spec.blocks.associateBy { it.id }
         val ordered = tiles.mapNotNull { byId[it] }
         val blocks = spec.blocks.toMutableList()
@@ -945,7 +969,7 @@ object FlexPainter {
             val b = byId[box.id] ?: return@filter false
             m.short(b, box)
         }.map { it.id }
-        fun broken(q: FlexPlan): List<Int> = q.hidden.filter { it in held } + small(q)
+        fun broken(q: FlexPlan): List<Int> = q.hidden.filter { it in held } + small(q) + (if (q.clipped) listOf(CLIPPED) else emptyList())
         val bad = broken(p)
         if (bad.isEmpty()) return null
         var best: FlexSpec? = null
@@ -962,17 +986,17 @@ object FlexPainter {
         var tree = p.tree
         for (id in bad) {
             val root = tree ?: break
-            if (id !in FlexTree.leaves(root)) continue
-            val top = (root as? FlexGroup)?.takeIf { it.vertical }?.children?.firstOrNull { id in FlexTree.leaves(it) }
-            if (top == null || top is FlexLeaf) continue
-            val anchor = FlexTree.leaves(top).toSet()
-            tree = FlexTree.moveBeside(root, id, anchor, DropZone.BOTTOM) ?: tree
+            if (id !in TileTree.leaves(root)) continue
+            val top = (root as? TileGroup)?.takeIf { it.vertical }?.children?.firstOrNull { id in TileTree.leaves(it) }
+            if (top == null || top is TileLeaf) continue
+            val anchor = TileTree.leaves(top).toSet()
+            tree = TileTree.moveBeside(root, id, anchor, DropZone.BOTTOM) ?: tree
         }
         if (tree != p.tree && better(withTree(spec, tree))) return best
         val probe = Search(spec, content, assets, emptyList())
-        val seen = FlexTree.leaves(p.tree).filter { it in probe.byId }
+        val seen = TileTree.leaves(p.tree).filter { it in probe.byId }
         val reading = seen + probe.drawable.map { it.id }.filter { it !in seen }
-        val quick = Search(spec, content, assets, reading, fixedOrder = true, titleFirst = false, effort = QUICK_EFFORT)
+        val quick = Search(spec, content, assets, reading, fixedOrder = true, titleFirst = false, effort = TileAligner.QUICK_EFFORT)
         quick.run(drop = false)
         for (found in quick.tried.sortedBy { it.score }) if (better(found.spec)) return best
         val live = held.mapNotNull { probe.byId[it] }
@@ -980,6 +1004,8 @@ object FlexPainter {
         if (best == null && better(autoAlign(spec, content, assets).spec)) return best
         return best
     }
+
+    private const val CLIPPED = -1
 
     private const val ORDER_SWAP = 0.2
 
@@ -1010,7 +1036,7 @@ object FlexPainter {
         val reading: List<Int>,
         val fixedOrder: Boolean = false,
         val titleFirst: Boolean = true,
-        val effort: Int = FULL_EFFORT
+        val effort: Int = TileAligner.FULL_EFFORT
     ) {
         val st = spec.style
         val c = Ctx(Canvas(), st, assets).also { it.dry = true }
@@ -1024,8 +1050,8 @@ object FlexPainter {
         /** The blocks that can be on the card. */
         val drawable = spec.blocks.filter { it.enabled && content.has(it.type) }.filter { m.heightOf(it, availW) > 0f }
         val byId = drawable.associateBy { it.id }
-        val items: Map<Int, AutoItem> by lazy { HashMap<Int, AutoItem>().also { map -> for (b in drawable) map[b.id] = autoItem(c, m, b, availW) } }
-        private val stackSpace = AutoSpace(availW, 1f, gap)
+        val items: Map<Int, AlignItem> by lazy { HashMap<Int, AlignItem>().also { map -> for (b in drawable) map[b.id] = autoItem(c, m, b, availW) } }
+        private val stackSpace = AlignSpace(availW, 1f, gap)
         val isTitle: (FlexBlock) -> Boolean = { it.type.blockClass == FlexBlockClass.TITLE }
 
         /**
@@ -1043,42 +1069,42 @@ object FlexPainter {
 
         /** The blocks in reading order, the title first. */
         val ordered: List<FlexBlock> = reading.mapNotNull { byId[it] }.let { r -> if (titleFirst) r.filter(isTitle) + r.filterNot(isTitle) else r }
-        private val stacked = FlexAutoAligner.stackedHeight(ordered.map { items.getValue(it.id) }, stackSpace).coerceAtLeast(1f)
+        private val stacked = TileAligner.stackedHeight(ordered.map { items.getValue(it.id) }, stackSpace, FlexTileRules).coerceAtLeast(1f)
 
         /** What a laid out card costs: the same prices the search uses, on the real tiles. */
         fun score(p: FlexPlan): Double {
-            val space = AutoSpace(p.contentWidth, p.contentHeight, gap)
+            val space = AlignSpace(p.contentWidth, p.contentHeight, gap)
             var total = 0.0
             val boxes = p.boxes.associateBy { it.id }
-            val banner = FlexTree.banner(p.tree)
+            val banner = TileTree.banner(p.tree)
             for (box in p.boxes) {
                 val item = items[box.id] ?: continue
                 val fit = TileFit(box.width, box.contentHeight, box.scale, false, box.columns, box.inset)
-                total += AutoCost.tile(item, space, box.cellWidth, box.cellHeight, fit, box.cellTop <= p.contentTop + 1f, box.id == banner)
+                total += FlexTileRules.tileCost(item, space, box.cellWidth, box.cellHeight, fit, box.cellTop <= p.contentTop + 1f, box.id == banner)
             }
             // The structure: splits, how far they are from the middle, how unequal the modules of a row are, and rows whose columns do not line up.
             // Where a part visibly ends: its last tile's bottom (a stretched panel ends at its cell's bottom).
-            fun bottom(node: FlexNode): Float = when (node) {
-                is FlexLeaf -> boxes[node.id]?.let { it.top + it.height } ?: 0f
-                is FlexGroup -> if (node.vertical) bottom(node.children.last()) else node.children.maxOf { bottom(it) }
+            fun bottom(node: TileNode): Float = when (node) {
+                is TileLeaf -> boxes[node.id]?.let { it.top + it.height } ?: 0f
+                is TileGroup -> if (node.vertical) bottom(node.children.last()) else node.children.maxOf { bottom(it) }
             }
-            fun walk(node: FlexNode, path: List<Int>): Float {
-                if (node is FlexLeaf) return boxes[node.id]?.contentHeight ?: 0f
-                val g = node as FlexGroup
+            fun walk(node: TileNode, path: List<Int>): Float {
+                if (node is TileLeaf) return boxes[node.id]?.contentHeight ?: 0f
+                val g = node as TileGroup
                 val used = FloatArray(g.children.size) { walk(g.children[it], path + it) }
                 val sizes = p.groupSizes[path]?.toFloatArray() ?: FloatArray(used.size) { 1f }
-                total += AutoCost.group(g.vertical, sizes, used)
+                total += FlexTileRules.groupCost(g.vertical, sizes, used)
                 if (!g.vertical) {
                     val ends = g.children.map { bottom(it) }
-                    val ids = FlexTree.leaves(g)
+                    val ids = TileTree.leaves(g)
                     val rowTop = ids.minOf { boxes[it]?.cellTop ?: Float.MAX_VALUE }
                     val rowH = (ends.max() - rowTop).coerceAtLeast(1f)
-                    total += AutoCost.EDGES * (ends.max() - ends.min()) / rowH
+                    total += FlexTileRules.EDGES * (ends.max() - ends.min()) / rowH
                 }
                 if (g.vertical) {
                     var before: FloatArray? = null
                     g.children.forEachIndexed { i, kid ->
-                        if (kid is FlexGroup && !kid.vertical) {
+                        if (kid is TileGroup && !kid.vertical) {
                             val row = p.groupSizes[path + i]?.toFloatArray()
                             if (row != null && row.sum() > 0f) {
                                 val shares = FloatArray(row.size) { row[it] / row.sum() }
@@ -1086,7 +1112,7 @@ object FlexPainter {
                                 if (prev != null && prev.size == shares.size) {
                                     var off = 0f
                                     for (k in shares.indices) off += abs(shares[k] - prev[k])
-                                    total += AutoCost.RAGGED * off / 2f
+                                    total += FlexTileRules.RAGGED * off / 2f
                                 }
                                 before = shares
                             }
@@ -1099,14 +1125,14 @@ object FlexPainter {
             // Room no cell was given (under a stack whose parts could not use it) is as wasted as room inside a cell.
             if (!free) {
                 val bottom = p.boxes.maxOfOrNull { it.cellTop + it.cellHeight } ?: p.contentTop
-                total += AutoCost.LEFT_OVER * (p.contentTop + p.contentHeight - bottom).coerceAtLeast(0f) / p.contentHeight.coerceAtLeast(1f)
+                total += FlexTileRules.LEFT_OVER * (p.contentTop + p.contentHeight - bottom).coerceAtLeast(0f) / p.contentHeight.coerceAtLeast(1f)
             }
-            if (p.clipped) total += AutoCost.CUT
-            total += AutoCost.HIDDEN * p.hidden.size
+            if (p.clipped) total += FlexTileRules.CUT
+            total += FlexTileRules.HIDDEN * p.hidden.size
             total += BELOW_LEAST * belowLeast(p)
-            total += ORDER_SWAP * inversions(FlexTree.leaves(p.tree), reading)
+            total += ORDER_SWAP * inversions(TileTree.leaves(p.tree), reading)
             if (free) total += 1.4 * (p.contentHeight / stacked)
-            else total -= ZOOM_GAIN * ln(p.zoom.coerceIn(0.4f, FlexZoom.MAX).toDouble())
+            else total -= ZOOM_GAIN * ln(p.zoom.coerceIn(0.4f, FlexTileRules.zoom.max).toDouble())
             return total
         }
 
@@ -1161,32 +1187,32 @@ object FlexPainter {
          * few card heights), all side by side; the best few by its own price and the reading order's own pay come back,
          * each also with its rows' columns lined up and with every row cut in the middle.
          */
-        private fun trees(live: List<FlexBlock>, explore: Boolean): List<FlexNode> {
+        private fun trees(live: List<FlexBlock>, explore: Boolean): List<TileNode> {
             val heights = if (free) {
-                val base = FlexAutoAligner.stackedHeight(live.map { items.getValue(it.id) }, stackSpace)
-                val least = max(300f, MIN_FREE_HEIGHT - 2 * pad - footer)
+                val base = TileAligner.stackedHeight(live.map { items.getValue(it.id) }, stackSpace, FlexTileRules)
+                val least = max(300f, MIN_FREE_HEIGHT - 2 * st.paddingV - footer)
                 listOf(1f, 0.82f, 0.68f, 0.56f).map { max(least, it * base) }.distinct()
             } else {
-                listOf(st.aspect.height - 2 * pad - footer)
+                listOf(st.aspect.height - 2f * st.paddingV - footer)
             }
             val ids = live.map { it.id }
             val jobs = ArrayList<Pair<List<FlexBlock>, Float>>()
             for (order in if (explore) orders(live) else listOf(live)) for (h in heights) jobs += order to h
-            class Hit(val tree: FlexNode, val price: Double, val reading: Boolean)
+            class Hit(val tree: TileNode, val price: Double, val reading: Boolean)
             val found = jobs.parallelStream()
                 .map { (order, h) ->
                     val list = order.map { items.getValue(it.id) }
                     val swaps = inversions(order.map { it.id }, ids)
                     val tall = if (free) 1.4 * h / stacked else 0.0
-                    FlexAutoAligner(list, AutoSpace(availW, h, gap), effort).solve()
+                    TileAligner(list, AlignSpace(availW, h, gap), FlexTileRules, effort).solve()
                         .map { Hit(it.tree, it.cost + ORDER_SWAP * swaps + tall, swaps == 0) }
                 }
                 .collect(Collectors.toList())
                 .flatten()
             val keep = (found.filter { it.reading } + found.sortedBy { it.price }.take(TOP_ORDERS)).distinctBy { it.tree }
-            val out = ArrayList<FlexNode>()
+            val out = ArrayList<TileNode>()
             for (hit in keep) {
-                FlexTree.relaxed(hit.tree)?.let { tree -> if (tree !in out) out += tree }
+                TileTree.relaxed(hit.tree)?.let { tree -> if (tree !in out) out += tree }
             }
             return out
         }
@@ -1213,7 +1239,7 @@ object FlexPainter {
                 var round: Found? = null
                 // Other orders are tried with every block; once blocks have to be left off, only the reading order.
                 val candidates = (trees(live, explore = first) + listOfNotNull(budgetTree(m, st, live)))
-                    .mapNotNull { FlexTree.relaxed(it) }.distinct()
+                    .mapNotNull { TileTree.relaxed(it) }.distinct()
                 for (tree in candidates) {
                     val candidate = withLayout(spec, drawable, live, tree)
                     val p = plan(candidate, content, assets)
@@ -1227,7 +1253,7 @@ object FlexPainter {
                 if (!drop || free || live.size == 1 || found.plan.shownIds.size >= live.size) break
                 // The least important block goes: the last of the lowest priority (text, then statistics, then drawables), never the title.
                 val gone = live.indices.filter { !isTitle(live[it]) }
-                    .minWithOrNull(compareBy<Int> { live[it].type.blockClass.priority }.thenByDescending { it })
+                    .minWithOrNull(compareBy<Int> { FlexTileRules.priority(live[it].type.blockClass.kind) }.thenByDescending { it })
                     ?: live.lastIndex
                 live = live.filterIndexed { i, _ -> i != gone }
             }
@@ -1242,7 +1268,7 @@ object FlexPainter {
 
     internal fun scoreOf(spec: FlexSpec, content: FlexContent, assets: FlexAssets): Double {
         val p = plan(spec, content, assets)
-        val reading = FlexTree.leaves(p.tree).let { t -> t + spec.blocks.map { it.id }.filter { it !in t } }
+        val reading = TileTree.leaves(p.tree).let { t -> t + spec.blocks.map { it.id }.filter { it !in t } }
         return Search(spec, content, assets, reading).score(p)
     }
 
@@ -1251,7 +1277,7 @@ object FlexPainter {
         val before = plan(spec, content, assets)
         val probe = Search(spec, content, assets, emptyList())
         if (probe.drawable.isEmpty()) return FlexAutoResult(spec, false, "Nothing to align")
-        val seen = FlexTree.leaves(before.tree).filter { it in probe.byId }
+        val seen = TileTree.leaves(before.tree).filter { it in probe.byId }
         val reading = seen + probe.drawable.map { it.id }.filter { it !in seen }
         val search = Search(spec, content, assets, reading)
         var chosen = search.run(drop = true) ?: return FlexAutoResult(spec, false, "Too many blocks to align")
@@ -1394,7 +1420,7 @@ object FlexPainter {
         val ctx = Ctx(canvas, st, assets)
         drawBackground(ctx, w, h)
         drawContent(ctx, spec, content, plan, poses, w, h)
-        drawBorder(ctx, w, h)
+        drawBorder(ctx, w, h, plan)
 
         if (rounded) {
             val r = st.cardRadius.toFloat()
@@ -1581,7 +1607,7 @@ object FlexPainter {
                         FillRender.drawRoundRect(canvas, st.panelFill, st.panelColor, r, rad, PATTERN_DENSITY, st.panelAlpha)
                     }
                 }
-                FlexPanel.OUTLINE -> if (st.panelBorderWidth <= 0) {
+                FlexPanel.OUTLINE -> if (st.panelBorderWidth <= 0 && st.panelBorderKind == BorderKind.OUTLINE) {
                     stroke.color = st.panelColor
                     stroke.alpha = 150
                     stroke.strokeWidth = 3f
@@ -1591,14 +1617,16 @@ object FlexPainter {
                     fill.color = Color.WHITE
                     fill.alpha = 36
                     canvas.drawRoundRect(r, rad, rad, fill)
-                    stroke.color = Color.WHITE
-                    stroke.alpha = 70
-                    stroke.strokeWidth = 2f
-                    canvas.drawRoundRect(r, rad, rad, stroke)
+                    if (st.panelBorderKind == BorderKind.OUTLINE) {
+                        stroke.color = Color.WHITE
+                        stroke.alpha = 70
+                        stroke.strokeWidth = 2f
+                        canvas.drawRoundRect(r, rad, rad, stroke)
+                    }
                 }
                 FlexPanel.NONE -> Unit
             }
-            if (st.panelBorderWidth > 0) {
+            if (st.panelBorderWidth > 0 && st.panelBorderKind == BorderKind.OUTLINE) {
                 val half = st.panelBorderWidth / 2f
                 stroke.color = st.panelBorderColor
                 stroke.alpha = 255
@@ -1684,9 +1712,56 @@ object FlexPainter {
         }
     }
 
-    private fun drawBorder(c: Ctx, w: Float, h: Float) {
+    private fun drawRule(c: Ctx, x: Float, y: Float, length: Float, thickness: Float, color: Int, vertical: Boolean) {
+        if (length <= 0f || thickness <= 0f) return
+        val pts = c.st.lineTaper.outline(x, y, length, thickness, vertical)
+        val path = Path()
+        path.moveTo(pts[0], pts[1])
+        var i = 2
+        while (i < pts.size) {
+            path.lineTo(pts[i], pts[i + 1])
+            i += 2
+        }
+        path.close()
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = color
+        c.canvas.drawPath(path, paint)
+    }
+
+    private const val SEPARATOR_DEFAULT = 3f
+
+    private fun drawSeparators(c: Ctx, plan: FlexPlan) {
+        val st = c.st
+        if (st.panelBorderKind != BorderKind.LINE) return
+        val t = if (st.panelBorderWidth > 0) st.panelBorderWidth.toFloat() else SEPARATOR_DEFAULT
+        val color = st.panelBorderColor
+        if (plan.mode == FlexLayoutMode.FREE) {
+            val lowest = plan.boxes.maxOfOrNull { it.cellTop + it.cellHeight } ?: return
+            for (b in plan.boxes) {
+                val bottom = b.cellTop + b.cellHeight
+                if (bottom >= lowest - 0.5f) continue
+                drawRule(c, b.cellLeft, bottom + plan.gap / 2f - t / 2f, b.cellWidth, t, color, false)
+            }
+            return
+        }
+        for (d in plan.rules) {
+            if (d.span <= 0f) continue
+            if (d.vertical) drawRule(c, d.cx - d.span / 2f, d.cy - t / 2f, d.span, t, color, false)
+            else drawRule(c, d.cx - t / 2f, d.cy - d.span / 2f, d.span, t, color, true)
+        }
+    }
+
+    private fun drawBorder(c: Ctx, w: Float, h: Float, plan: FlexPlan) {
         val st = c.st
         if (st.borderWidth <= 0) return
+        if (st.borderKind == BorderKind.LINE) {
+            val t = st.borderWidth.toFloat()
+            val padV = st.paddingV.toFloat()
+            val bottom = plan.contentTop + plan.contentHeight
+            drawRule(c, plan.contentLeft, padV / 2f - t / 2f, plan.contentWidth, t, st.borderColor, false)
+            drawRule(c, plan.contentLeft, bottom + padV / 2f - t / 2f, plan.contentWidth, t, st.borderColor, false)
+            return
+        }
         val half = st.borderWidth / 2f
         c.stroke.color = st.borderColor
         c.stroke.alpha = 255
@@ -1700,6 +1775,7 @@ object FlexPainter {
         val byId = spec.blocks.associateBy { it.id }
         val heldId = poses?.heldId
         c.dry = false
+        drawSeparators(c, plan)
         for (box in plan.boxes) {
             val b = byId[box.id] ?: continue
             // Gliding to a new place: drawn that far from it.
@@ -1723,7 +1799,7 @@ object FlexPainter {
         if (st.watermark && st.watermarkText.isNotBlank()) {
             val pad = st.padding.toFloat()
             val p = c.ink(26f, true, st.textColor, 0.5f, 0.1f)
-            val baseline = h - max(pad * 0.55f, 40f)
+            val baseline = h - max(st.paddingV * 0.55f, 40f)
             p.textAlign = when (st.watermarkAlign) {
                 FlexAlign.START -> Paint.Align.LEFT
                 FlexAlign.CENTER -> Paint.Align.CENTER
@@ -2073,7 +2149,7 @@ object FlexPainter {
         val sizes = cols.map { statSize(c, sb, it) }
         // A flow has no designed column count to keep: it is a sentence that breaks where it must.
         val designed = if (sb.separator != null) 1 else cols[0]
-        return StatShape(cols, FloatArray(cols.size) { sizes[it][0] * k }, FloatArray(cols.size) { sizes[it][1] * k }, designed)
+        return StatShape(cols, FloatArray(cols.size) { sizes[it][0] * k }, FloatArray(cols.size) { sizes[it][1] * k }, designed, FlexTileRules.reflowKeep)
     }
 
     /**

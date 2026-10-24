@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.common
 
+import com.ashrdev.aznd.ui.theme.taperEdge
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -161,7 +162,16 @@ fun BottomBarShell(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (style.bottomBarBorder > 0.dp) Modifier.topOutline(shape, style.outline, style.bottomBarBorder) else Modifier),
+            .then(
+                when {
+                    style.bottomBarBorder <= 0.dp -> Modifier
+                    style.bottomBarBorderLine -> Modifier.taperEdge(
+                        style.borderTaper, style.outline, style.bottomBarBorder, top = true,
+                        inset = (style.cardCorner * 1.33f).dp
+                    )
+                    else -> Modifier.topOutline(shape, style.outline, style.bottomBarBorder)
+                }
+            ),
         shape = shape,
         // Flat colour underneath (it also casts the shadow); the gradient / pattern fill is painted over it.
         color = style.bottomBar,

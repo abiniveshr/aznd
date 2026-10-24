@@ -36,9 +36,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import com.ashrdev.aznd.ui.theme.AzndStyle
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.azndFill
+import com.ashrdev.aznd.ui.theme.drawTaperLine
+import com.ashrdev.aznd.ui.theme.taperEdge
+import androidx.compose.ui.draw.drawBehind
 
 // Drop-in replacements for the Material3 components of the same name. Every screen imports these
 // (not androidx.compose.material3.Card etc.) so the Appearance settings apply everywhere: border widths,
@@ -46,6 +50,11 @@ import com.ashrdev.aznd.ui.theme.azndFill
 
 /** A border of [width] in [color], or none when the width is 0. */
 private fun borderOf(width: Dp, color: Color): BorderStroke? = if (width > 0.dp) BorderStroke(width, color) else null
+
+private fun AzndStyle.edge(width: Dp, line: Boolean): BorderStroke? = if (line) null else borderOf(width, outline)
+
+private fun AzndStyle.underline(width: Dp, line: Boolean, inset: Dp): Modifier =
+    if (line && width > 0.dp) Modifier.taperEdge(borderTaper, outline, width, top = false, inset = inset) else Modifier
 
 /**
  * A card. With no [colors] it takes the theme's Cards fill (or, with [highlight], the Highlight cards fill).
@@ -60,14 +69,15 @@ fun Card(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val style = LocalAzndStyle.current
-    val border = borderOf(style.cardBorder, style.outline)
+    val border = style.edge(style.cardBorder, style.cardBorderLine)
+    val line = style.underline(style.cardBorder, style.cardBorderLine, style.cardCorner.dp)
     val fill = style.fill(if (highlight) ThemeColor.HIGHLIGHT else ThemeColor.CARD)
     val scheme = MaterialTheme.colorScheme
     if (colors == null && !fill.isPlain) {
         // The card itself is see-through; the fill is painted behind it.
         val shape = CardDefaults.shape
         androidx.compose.material3.Card(
-            modifier = modifier.azndFill(fill, shape),
+            modifier = modifier.azndFill(fill, shape).then(line),
             shape = shape,
             colors = CardDefaults.cardColors(
                 containerColor = Color.Transparent,
@@ -78,7 +88,7 @@ fun Card(
         )
     } else {
         androidx.compose.material3.Card(
-            modifier = modifier,
+            modifier = modifier.then(line),
             colors = colors ?: if (highlight) {
                 CardDefaults.cardColors(containerColor = scheme.primaryContainer)
             } else {
@@ -102,11 +112,12 @@ fun Button(
     val custom = enabled && !fill.isPlain
     androidx.compose.material3.Button(
         onClick = onClick,
-        modifier = if (custom) modifier.azndFill(fill, style.buttonShape) else modifier,
+        modifier = (if (custom) modifier.azndFill(fill, style.buttonShape) else modifier)
+            .then(style.underline(style.filledButtonBorder, style.filledButtonBorderLine, style.buttonCorner.dp)),
         enabled = enabled,
         shape = style.buttonShape,
         colors = if (custom) ButtonDefaults.buttonColors(containerColor = Color.Transparent) else ButtonDefaults.buttonColors(),
-        border = borderOf(style.filledButtonBorder, style.outline),
+        border = style.edge(style.filledButtonBorder, style.filledButtonBorderLine),
         content = content
     )
 }
@@ -123,11 +134,12 @@ fun FilledTonalButton(
     val custom = enabled && !fill.isPlain
     androidx.compose.material3.FilledTonalButton(
         onClick = onClick,
-        modifier = if (custom) modifier.azndFill(fill, style.buttonShape) else modifier,
+        modifier = (if (custom) modifier.azndFill(fill, style.buttonShape) else modifier)
+            .then(style.underline(style.filledButtonBorder, style.filledButtonBorderLine, style.buttonCorner.dp)),
         enabled = enabled,
         shape = style.buttonShape,
         colors = if (custom) ButtonDefaults.filledTonalButtonColors(containerColor = Color.Transparent) else ButtonDefaults.filledTonalButtonColors(),
-        border = borderOf(style.filledButtonBorder, style.outline),
+        border = style.edge(style.filledButtonBorder, style.filledButtonBorderLine),
         content = content
     )
 }
@@ -142,10 +154,10 @@ fun OutlinedButton(
     val style = LocalAzndStyle.current
     androidx.compose.material3.OutlinedButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.then(style.underline(style.outlinedButtonBorder, style.outlinedButtonBorderLine, style.buttonCorner.dp)),
         enabled = enabled,
         shape = style.buttonShape,
-        border = borderOf(style.outlinedButtonBorder, style.outline),
+        border = style.edge(style.outlinedButtonBorder, style.outlinedButtonBorderLine),
         content = content
     )
 }
@@ -170,19 +182,20 @@ fun OutlinedTextField(
     val cardFill = style.fill(ThemeColor.CARD)
     val shape = OutlinedTextFieldDefaults.shape
 
-    val needsCustom = if (width <= 0.dp) !cardFill.isPlain else width != 1.dp
+    val underline = style.fieldBorderLine && width > 0.dp
+    val needsCustom = underline || if (width <= 0.dp) !cardFill.isPlain else width != 1.dp
     if (needsCustom) {
         CustomOutlinedField(
             value = value,
             onValueChange = onValueChange,
-            modifier = modifier,
+            modifier = modifier.then(style.underline(width, underline, (style.cardCorner * 0.33f).dp)),
             label = label,
             singleLine = singleLine,
             keyboardOptions = keyboardOptions,
             textStyle = textStyle,
             fill = if (width <= 0.dp) cardFill else null,
             shape = shape,
-            borderWidth = width
+            borderWidth = if (underline) 0.dp else width
         )
         return
     }
@@ -308,12 +321,21 @@ fun TopAppBar(
             )
         )
         if (style.topBarBorder > 0.dp) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(style.topBarBorder)
-                    .background(style.outline)
-            )
+            if (style.topBarBorderLine) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(style.topBarBorder)
+                        .drawBehind { drawTaperLine(style.borderTaper, style.outline, 0f, 0f, size.width, size.height) }
+                )
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(style.topBarBorder)
+                        .background(style.outline)
+                )
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ package com.ashrdev.aznd.ui.common.share
 
 import androidx.compose.ui.graphics.toArgb
 import com.ashrdev.aznd.ui.theme.AzndStyle
+import com.ashrdev.aznd.ui.theme.BorderKind
 import com.ashrdev.aznd.ui.theme.FillBase
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import kotlin.math.roundToInt
@@ -27,6 +28,11 @@ fun FlexStyle.withAppTheme(app: AzndStyle): FlexStyle {
     val stops = gradient.cleanStops()
     val outline = app.outline.toArgb()
     val outer = maxOf(app.cardBorder, app.topBarBorder, app.bottomBarBorder)
+    val outerLine = when (outer) {
+        app.cardBorder -> app.cardBorderLine
+        app.topBarBorder -> app.topBarBorderLine
+        else -> app.bottomBarBorderLine
+    }
     return copy(
         bgMode = if (isGradient) FlexBgMode.GRADIENT else FlexBgMode.SOLID,
         bgA = if (isGradient) stops.first().color else bg.base.toArgb(),
@@ -44,6 +50,9 @@ fun FlexStyle.withAppTheme(app: AzndStyle): FlexStyle {
         panelBorderWidth = (app.cardBorder.value * PX_PER_DP).roundToInt(),
         panelBorderColor = outline,
         borderWidth = (outer.value * PX_PER_DP * 2f).roundToInt(),
-        borderColor = outline
+        borderColor = outline,
+        panelBorderKind = if (app.cardBorderLine) BorderKind.LINE else BorderKind.OUTLINE,
+        borderKind = if (outerLine) BorderKind.LINE else BorderKind.OUTLINE,
+        lineTaper = app.borderTaper
     )
 }

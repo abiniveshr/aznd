@@ -44,6 +44,7 @@ import com.ashrdev.aznd.ui.common.dragReorderOnLongPress
 import com.ashrdev.aznd.ui.common.rememberReorderState
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.common.tiling.TileTree
 
 /**
  * The card's blocks as a compact list under the card on the Flex page (this used to be the Content page).
@@ -149,7 +150,7 @@ private const val REFUSED_NOTE_MS = 2500L
 private fun reordered(sp: FlexSpec, from: Int, to: Int): FlexSpec {
     if (from !in sp.blocks.indices || to !in sp.blocks.indices) return sp
     val moved = sp.blocks.toMutableList().also { it.add(to, it.removeAt(from)) }
-    return sp.copy(blocks = moved, layout = sp.layout?.let { FlexTree.relabel(it, moved.map { b -> b.id }) })
+    return sp.copy(blocks = moved, layout = sp.layout?.let { TileTree.relabel(it, moved.map { b -> b.id }) })
 }
 
 @Composable

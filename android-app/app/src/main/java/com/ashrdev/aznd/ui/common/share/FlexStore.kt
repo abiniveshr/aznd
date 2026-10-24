@@ -1,11 +1,17 @@
 package com.ashrdev.aznd.ui.common.share
 
+import com.ashrdev.aznd.ui.theme.borderKindOf
+import com.ashrdev.aznd.ui.theme.taperLineFromJson
 import android.content.Context
 import com.ashrdev.aznd.ui.theme.fillStyleFromJson
 import com.ashrdev.aznd.ui.theme.gradientFromJson
 import com.ashrdev.aznd.ui.theme.patternsFromJson
 import com.ashrdev.aznd.ui.theme.toJson
 import com.ashrdev.aznd.ui.theme.toJsonArray
+import com.ashrdev.aznd.ui.common.tiling.TileGroup
+import com.ashrdev.aznd.ui.common.tiling.TileLeaf
+import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileTree
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -58,6 +64,7 @@ private fun specToJson(spec: FlexSpec): JSONObject {
         .put("font", s.font.name)
         .put("textScale", s.textScale.toDouble())
         .put("padding", s.padding)
+        .put("paddingV", s.paddingV)
         .put("spacing", s.spacing)
         .put("panel", s.panel.name)
         .put("panelColor", s.panelColor)
@@ -66,9 +73,12 @@ private fun specToJson(spec: FlexSpec): JSONObject {
         .put("panelFill", s.panelFill.toJson())
         .put("panelBorderWidth", s.panelBorderWidth)
         .put("panelBorderColor", s.panelBorderColor)
+        .put("panelBorderKind", s.panelBorderKind.name)
         .put("cardRadius", s.cardRadius)
         .put("borderWidth", s.borderWidth)
         .put("borderColor", s.borderColor)
+        .put("borderKind", s.borderKind.name)
+        .put("lineTaper", s.lineTaper.toJson())
         .put("watermark", s.watermark)
         .put("watermarkText", s.watermarkText)
         .put("watermarkAlign", s.watermarkAlign.name)
@@ -104,20 +114,20 @@ private fun specToJson(spec: FlexSpec): JSONObject {
     return out
 }
 
-private fun nodeToJson(n: FlexNode): JSONObject = when (n) {
-    is FlexLeaf -> JSONObject().put("id", n.id)
-    is FlexGroup -> JSONObject()
+private fun nodeToJson(n: TileNode): JSONObject = when (n) {
+    is TileLeaf -> JSONObject().put("id", n.id)
+    is TileGroup -> JSONObject()
         .put("vertical", n.vertical)
         .put("weights", JSONArray().also { a -> n.weights.forEach { a.put(it.toDouble()) } })
         .put("children", JSONArray().also { a -> n.children.forEach { a.put(nodeToJson(it)) } })
 }
 
-private fun nodeFromJson(o: JSONObject, depth: Int = 0): FlexNode? {
+private fun nodeFromJson(o: JSONObject, depth: Int = 0): TileNode? {
     if (depth > 12) return null
     if (o.has("children")) {
         val arr = o.getJSONArray("children")
         val weights = o.optJSONArray("weights")
-        val kids = ArrayList<FlexNode>()
+        val kids = ArrayList<TileNode>()
         val ws = ArrayList<Float>()
         for (i in 0 until arr.length()) {
             nodeFromJson(arr.getJSONObject(i), depth + 1)?.let {
@@ -127,16 +137,16 @@ private fun nodeFromJson(o: JSONObject, depth: Int = 0): FlexNode? {
         }
         if (kids.isEmpty()) return null
         if (kids.size == 1) return kids[0]
-        return FlexGroup(o.optBoolean("vertical", true), kids, ws)
+        return TileGroup(o.optBoolean("vertical", true), kids, ws)
     }
-    return if (o.has("id")) FlexLeaf(o.getInt("id")) else null
+    return if (o.has("id")) TileLeaf(o.getInt("id")) else null
 }
 
 /**
  * Cards saved before tiling placed blocks in rows ("place" beside or below the one before, and a "width" share).
  * Turns such a card's rows into a tiling; null when every block simply sat under the previous one.
  */
-private fun legacyLayout(arr: JSONArray, blocks: List<FlexBlock>): FlexNode? {
+private fun legacyLayout(arr: JSONArray, blocks: List<FlexBlock>): TileNode? {
     val rows = ArrayList<MutableList<Pair<Int, Float>>>()
     val enabled = blocks.filter { it.enabled }.map { it.id }.toSet()
     for (i in 0 until arr.length()) {
@@ -151,20 +161,20 @@ private fun legacyLayout(arr: JSONArray, blocks: List<FlexBlock>): FlexNode? {
         }
     }
     if (rows.none { it.size > 1 }) return null
-    val tiles: List<FlexNode> = rows.map { row ->
-        if (row.size == 1) FlexLeaf(row[0].first)
-        else FlexGroup(false, row.map { FlexLeaf(it.first) }, row.map { it.second })
+    val tiles: List<TileNode> = rows.map { row ->
+        if (row.size == 1) TileLeaf(row[0].first)
+        else TileGroup(false, row.map { TileLeaf(it.first) }, row.map { it.second })
     }
-    return if (tiles.size == 1) tiles[0] else FlexGroup(true, tiles, tiles.map { 0f })
+    return if (tiles.size == 1) tiles[0] else TileGroup(true, tiles, tiles.map { 0f })
 }
 
 private const val STORE_VERSION = 2
 
-private fun distinctLeaves(n: FlexNode?, seen: MutableSet<Int> = HashSet()): FlexNode? = when (n) {
+private fun distinctLeaves(n: TileNode?, seen: MutableSet<Int> = HashSet()): TileNode? = when (n) {
     null -> null
-    is FlexLeaf -> if (seen.add(n.id)) n else null
-    is FlexGroup -> {
-        val kids = ArrayList<FlexNode>()
+    is TileLeaf -> if (seen.add(n.id)) n else null
+    is TileGroup -> {
+        val kids = ArrayList<TileNode>()
         val ws = ArrayList<Float>()
         n.children.forEachIndexed { i, c ->
             distinctLeaves(c, seen)?.let {
@@ -175,7 +185,7 @@ private fun distinctLeaves(n: FlexNode?, seen: MutableSet<Int> = HashSet()): Fle
         when (kids.size) {
             0 -> null
             1 -> kids[0]
-            else -> FlexGroup(n.vertical, kids, ws)
+            else -> TileGroup(n.vertical, kids, ws)
         }
     }
 }
@@ -200,6 +210,7 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         font = enumOr(s.optString("font"), d.font),
         textScale = s.optDouble("textScale", d.textScale.toDouble()).toFloat(),
         padding = s.optInt("padding", d.padding),
+        paddingV = s.optInt("paddingV", s.optInt("padding", d.paddingV)),
         spacing = s.optInt("spacing", d.spacing),
         panel = enumOr(s.optString("panel"), d.panel),
         panelColor = s.optInt("panelColor", d.panelColor),
@@ -208,9 +219,12 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         panelFill = fillStyleFromJson(s.optJSONObject("panelFill")),
         panelBorderWidth = s.optInt("panelBorderWidth", d.panelBorderWidth),
         panelBorderColor = s.optInt("panelBorderColor", d.panelBorderColor),
+        panelBorderKind = borderKindOf(s.optString("panelBorderKind"), d.panelBorderKind),
         cardRadius = s.optInt("cardRadius", d.cardRadius),
         borderWidth = s.optInt("borderWidth", d.borderWidth),
         borderColor = s.optInt("borderColor", d.borderColor),
+        borderKind = borderKindOf(s.optString("borderKind"), d.borderKind),
+        lineTaper = taperLineFromJson(s.optJSONObject("lineTaper")),
         watermark = s.optBoolean("watermark", d.watermark),
         watermarkText = s.optString("watermarkText", d.watermarkText),
         watermarkAlign = enumOr(s.optString("watermarkAlign"), d.watermarkAlign),
@@ -252,5 +266,5 @@ private fun specFromJson(o: JSONObject): FlexSpec {
         )
     }
     val layout = distinctLeaves(o.optJSONObject("layout")?.let { nodeFromJson(it) } ?: legacyLayout(arr, blocks))
-    return FlexSpec(style, blocks, if (legacy) FlexTree.relaxed(layout) else layout)
+    return FlexSpec(style, blocks, if (legacy) TileTree.relaxed(layout) else layout)
 }

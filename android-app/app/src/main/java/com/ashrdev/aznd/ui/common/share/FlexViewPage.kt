@@ -31,9 +31,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FlipToBack
 import androidx.compose.material.icons.filled.FlipToFront
-import androidx.compose.material.icons.filled.Rotate90DegreesCw
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +60,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
+import com.ashrdev.aznd.ui.common.tiling.DropKind
+import com.ashrdev.aznd.ui.common.tiling.DropSpot
+import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileSnap
+import com.ashrdev.aznd.ui.common.tiling.TileSnapped
+import com.ashrdev.aznd.ui.common.tiling.TileTree
+import com.ashrdev.aznd.ui.common.tiling.dropSpot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -80,7 +84,6 @@ internal fun FlexViewPage(
     assets: FlexAssets,
     plan: FlexPlan,
     bottom: Dp,
-    onLayout: (FlexNode?) -> Unit,
     onCard: (FlexSpec) -> Unit,
     selectedId: Int?,
     onSelect: (Int?) -> Unit,
@@ -92,8 +95,7 @@ internal fun FlexViewPage(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onAutoAlign: () -> Unit,
-    onAnotherLayout: () -> Unit,
-    onResizeLayout: (FlexNode?) -> Unit,
+    onResizeLayout: (TileNode?) -> Unit,
     onFreeBox: (id: Int, x: Float, y: Float, w: Float, h: Float, continuous: Boolean) -> Unit,
     onLayer: (id: Int, front: Boolean) -> Unit,
     onMode: (FlexLayoutMode) -> Unit,
@@ -111,7 +113,7 @@ internal fun FlexViewPage(
     var settling by remember { mutableStateOf<Job?>(null) }
     val lift = remember { Animatable(0f) }
     var heldBox by remember { mutableStateOf<FlexBlockBox?>(null) }
-    var freeAt by remember { mutableStateOf<FlexSnapped?>(null) }
+    var freeAt by remember { mutableStateOf<TileSnapped?>(null) }
 
     val planNow by rememberUpdatedState(plan)
     val specNow by rememberUpdatedState(spec)
@@ -222,7 +224,7 @@ internal fun FlexViewPage(
         finger = at
         grab = at - Offset(hit.left, hit.top)
         clearAim()
-        freeAt = if (modeNow == FlexLayoutMode.FREE) FlexSnapped(hit.cellLeft, hit.cellTop, hit.cellWidth, hit.cellHeight, emptyList(), emptyList()) else null
+        freeAt = if (modeNow == FlexLayoutMode.FREE) TileSnapped(hit.cellLeft, hit.cellTop, hit.cellWidth, hit.cellHeight, emptyList(), emptyList()) else null
         scope.launch { lift.animateTo(if (modeNow == FlexLayoutMode.FREE) 0.3f else 1f, spring(stiffness = Spring.StiffnessMedium)) }
     }
 
@@ -230,7 +232,7 @@ internal fun FlexViewPage(
         finger = at
         when (modeNow) {
             FlexLayoutMode.SPLIT -> {
-                val next = dropSpot(planNow, id, at.x, at.y)
+                val next = dropSpot(planNow, id, at.x, at.y, FlexTileRules)
                 val was = pointing
                 if (if (next == null) was == null else next.sameAs(was)) return
                 pointing = next
@@ -247,7 +249,7 @@ internal fun FlexViewPage(
             }
             FlexLayoutMode.FREE -> {
                 val box = heldBox ?: return
-                freeAt = FlexSnap.move(planNow, id, at.x - grab.x, at.y - grab.y, box.cellWidth, box.cellHeight)
+                freeAt = TileSnap.move(planNow, id, at.x - grab.x, at.y - grab.y, box.cellWidth, box.cellHeight, FlexTileRules)
             }
         }
     }
@@ -256,7 +258,7 @@ internal fun FlexViewPage(
         val id = dragging ?: return
         val base = specNow
         val preview = ghost?.takeIf { it.base == base && spot != null }
-        val under = if (modeNow == FlexLayoutMode.SPLIT && apply) dropSpot(planNow, id, finger.x, finger.y) else null
+        val under = if (modeNow == FlexLayoutMode.SPLIT && apply) dropSpot(planNow, id, finger.x, finger.y, FlexTileRules) else null
         val aimed = when {
             under == null -> null
             preview != null && preview.fits -> preview.spot
@@ -331,7 +333,7 @@ internal fun FlexViewPage(
                     val keep = FlexPainter.keeper(start, contentNow, assetsNow)
                     val probes = HashMap<Int, Boolean>()
                     fun fits(t: Int): Boolean = probes.getOrPut(t) {
-                        runCatching { keep.holds(start.copy(layout = FlexTree.resized(tree, border, t.toFloat()))) }.getOrDefault(false)
+                        runCatching { keep.holds(start.copy(layout = TileTree.resized(tree, border, t.toFloat(), FlexTileRules))) }.getOrDefault(false)
                     }
                     var travelled = 0f
                     var placedAt = 0
@@ -353,7 +355,7 @@ internal fun FlexViewPage(
                             }
                             if (to != placedAt) {
                                 placedAt = to
-                                resizeNow(FlexTree.resized(tree, border, to.toFloat()))
+                                resizeNow(TileTree.resized(tree, border, to.toFloat(), FlexTileRules))
                             }
                         }
                     } finally {
@@ -378,9 +380,9 @@ internal fun FlexViewPage(
                                 val step = (change.position - change.previousPosition) / k
                                 w += step.x
                                 h += step.y
-                                val s2 = FlexSnap.resize(planNow, id, box.cellLeft, box.cellTop, w, h, FlexPainter.FREE_MIN)
+                                val s2 = TileSnap.resize(planNow, id, box.cellLeft, box.cellTop, w, h, FlexPainter.FREE_MIN, FlexTileRules)
                                 val (cw, ch) = limits?.clamp(s2.w, s2.h) ?: (s2.w to s2.h)
-                                freeAt = FlexSnapped(s2.x, s2.y, cw, ch, if (cw == s2.w) s2.guidesX else emptyList(), if (ch == s2.h) s2.guidesY else emptyList())
+                                freeAt = TileSnapped(s2.x, s2.y, cw, ch, if (cw == s2.w) s2.guidesX else emptyList(), if (ch == s2.h) s2.guidesY else emptyList())
                                 freeBoxNow(id, s2.x, s2.y, cw, ch, true)
                             }
                         } finally {
@@ -422,120 +424,117 @@ internal fun FlexViewPage(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                FlexPreview(
-                    spec = showing?.card ?: spec,
-                    content = content,
-                    assets = assets,
-                    plan = drawnNow,
-                    boxHeight = maxHeight,
-                    modifier = Modifier.fillMaxWidth(),
-                    canvasModifier = gestures,
-                    veiled = veiled,
-                    instantShape = resizing,
-                    poses = {
-                        val t = glideAt()
-                        val offsets = if (t >= 1f) emptyMap() else glideFrom.mapValues { (_, d) -> FlexPose(d.x * (1f - t), d.y * (1f - t)) }
-                        val id = dragging
-                        val free = freeAt
-                        val hx = if (mode == FlexLayoutMode.FREE && free != null) free.x else finger.x - grab.x
-                        val hy = if (mode == FlexLayoutMode.FREE && free != null) free.y else finger.y - grab.y
-                        when {
-                            id != null -> FlexPoses(
-                                offsets, id, hx, hy, lift.value,
-                                heldBox = heldBox,
-                                landing = if (showing != null) LANDING_ALPHA else 0f
-                            )
-                            offsets.isNotEmpty() -> FlexPoses(offsets)
-                            else -> null
-                        }
-                    },
-                    overlay = { k ->
-                        val radius = CornerRadius(10.dp.toPx())
-                        val held = dragging?.let { id -> plan.box(id) }
-                        val landing = showing?.plan?.box(dragging ?: -1)
-                        freeAt?.let { f ->
-                            val guide = Color(0xFFFF4FA3)
-                            for (gx in f.guidesX) drawLine(guide, Offset(gx * k, 0f), Offset(gx * k, size.height), strokeWidth = 1.5.dp.toPx())
-                            for (gy in f.guidesY) drawLine(guide, Offset(0f, gy * k), Offset(size.width, gy * k), strokeWidth = 1.5.dp.toPx())
-                        }
-                        if (held != null && mode == FlexLayoutMode.SPLIT) {
-                            val aimed = pointing
+                val cardHeight = maxHeight
+                FlexPinchBox(enabled = !listOpen, modifier = Modifier.fillMaxSize()) {
+                    FlexPreview(
+                        spec = showing?.card ?: spec,
+                        content = content,
+                        assets = assets,
+                        plan = drawnNow,
+                        boxHeight = cardHeight,
+                        modifier = Modifier.fillMaxWidth(),
+                        canvasModifier = gestures,
+                        veiled = veiled,
+                        instantShape = resizing,
+                        poses = {
+                            val t = glideAt()
+                            val offsets = if (t >= 1f) emptyMap() else glideFrom.mapValues { (_, d) -> FlexPose(d.x * (1f - t), d.y * (1f - t)) }
+                            val id = dragging
+                            val free = freeAt
+                            val hx = if (mode == FlexLayoutMode.FREE && free != null) free.x else finger.x - grab.x
+                            val hy = if (mode == FlexLayoutMode.FREE && free != null) free.y else finger.y - grab.y
                             when {
-                                landing != null -> outlineArea(
-                                    floatArrayOf(landing.cellLeft, landing.cellTop, landing.cellWidth, landing.cellHeight), k, primary, 0.14f, radius
+                                id != null -> FlexPoses(
+                                    offsets, id, hx, hy, lift.value,
+                                    heldBox = heldBox,
+                                    landing = if (showing != null) LANDING_ALPHA else 0f
                                 )
-                                else -> {
-                                    drawRoundRect(
-                                        primary.copy(alpha = 0.7f),
-                                        topLeft = Offset(held.left * k, held.top * k),
-                                        size = Size(held.width * k, held.height * k),
-                                        cornerRadius = radius,
-                                        style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
+                                offsets.isNotEmpty() -> FlexPoses(offsets)
+                                else -> null
+                            }
+                        },
+                        overlay = { k ->
+                            val radius = CornerRadius(10.dp.toPx())
+                            val held = dragging?.let { id -> plan.box(id) }
+                            val landing = showing?.plan?.box(dragging ?: -1)
+                            freeAt?.let { f ->
+                                val guide = Color(0xFFFF4FA3)
+                                for (gx in f.guidesX) drawLine(guide, Offset(gx * k, 0f), Offset(gx * k, size.height), strokeWidth = 1.5.dp.toPx())
+                                for (gy in f.guidesY) drawLine(guide, Offset(0f, gy * k), Offset(size.width, gy * k), strokeWidth = 1.5.dp.toPx())
+                            }
+                            if (held != null && mode == FlexLayoutMode.SPLIT) {
+                                val aimed = pointing
+                                when {
+                                    landing != null -> outlineArea(
+                                        floatArrayOf(landing.cellLeft, landing.cellTop, landing.cellWidth, landing.cellHeight), k, primary, 0.14f, radius
                                     )
-                                    if (aimed != null) dropIndicator(aimed, k, if (refusedHere) NO_ROOM_RED else primary, radius)
+                                    else -> {
+                                        drawRoundRect(
+                                            primary.copy(alpha = 0.7f),
+                                            topLeft = Offset(held.left * k, held.top * k),
+                                            size = Size(held.width * k, held.height * k),
+                                            cornerRadius = radius,
+                                            style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
+                                        )
+                                        if (aimed != null) dropIndicator(aimed, k, if (refusedHere) NO_ROOM_RED else primary, radius)
+                                    }
+                                }
+                            }
+                            val sel = if (held == null) picked?.let { plan.box(it) } else null
+                            if (sel != null) {
+                                drawRoundRect(
+                                    primary,
+                                    topLeft = Offset(sel.left * k, sel.top * k),
+                                    size = Size(sel.width * k, sel.height * k),
+                                    cornerRadius = radius,
+                                    style = Stroke(width = 2.dp.toPx())
+                                )
+                                if (mode != FlexLayoutMode.FREE) {
+                                    val thin = 4.dp.toPx()
+                                    val grip = Size(7.dp.toPx(), 30.dp.toPx())
+                                    val inset = 10.dp.toPx()
+                                    for (e in plan.edgesOf(sel.id).filter { it.side in barSides }) {
+                                        val across = e.side == FlexSide.TOP || e.side == FlexSide.BOTTOM
+                                        val a = Offset(e.x0 * k, e.y0 * k)
+                                        val b = Offset(e.x1 * k, e.y1 * k)
+                                        val s0 = if (across) a.copy(x = min(a.x + inset, (a.x + b.x) / 2f)) else a.copy(y = min(a.y + inset, (a.y + b.y) / 2f))
+                                        val s1 = if (across) b.copy(x = max(b.x - inset, (a.x + b.x) / 2f)) else b.copy(y = max(b.y - inset, (a.y + b.y) / 2f))
+                                        drawLine(primary.copy(alpha = 0.55f), s0, s1, strokeWidth = thin, cap = StrokeCap.Round)
+                                        val g = if (across) Size(grip.height, grip.width) else grip
+                                        val mid = Offset((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+                                        val at = Offset(mid.x - g.width / 2f, mid.y - g.height / 2f)
+                                        val corner = CornerRadius(min(g.width, g.height) / 2f)
+                                        drawRoundRect(primary, topLeft = at, size = g, cornerRadius = corner)
+                                        drawRoundRect(Color.White, topLeft = at, size = g, cornerRadius = corner, style = Stroke(width = 1.5.dp.toPx()))
+                                    }
+                                } else {
+                                    val corner = Offset((sel.left + sel.width) * k - HANDLE_INSET.toPx(), (sel.top + sel.height) * k - HANDLE_INSET.toPx())
+                                    drawCircle(primary, radius = 11.dp.toPx(), center = corner)
+                                    drawCircle(Color.White, radius = 4.dp.toPx(), center = corner)
                                 }
                             }
                         }
-                        val sel = if (held == null) picked?.let { plan.box(it) } else null
-                        if (sel != null) {
-                            drawRoundRect(
-                                primary,
-                                topLeft = Offset(sel.left * k, sel.top * k),
-                                size = Size(sel.width * k, sel.height * k),
-                                cornerRadius = radius,
-                                style = Stroke(width = 2.dp.toPx())
-                            )
-                            if (mode != FlexLayoutMode.FREE) {
-                                val thin = 4.dp.toPx()
-                                val grip = Size(7.dp.toPx(), 30.dp.toPx())
-                                val inset = 10.dp.toPx()
-                                for (e in plan.edgesOf(sel.id).filter { it.side in barSides }) {
-                                    val across = e.side == FlexSide.TOP || e.side == FlexSide.BOTTOM
-                                    val a = Offset(e.x0 * k, e.y0 * k)
-                                    val b = Offset(e.x1 * k, e.y1 * k)
-                                    val s0 = if (across) a.copy(x = min(a.x + inset, (a.x + b.x) / 2f)) else a.copy(y = min(a.y + inset, (a.y + b.y) / 2f))
-                                    val s1 = if (across) b.copy(x = max(b.x - inset, (a.x + b.x) / 2f)) else b.copy(y = max(b.y - inset, (a.y + b.y) / 2f))
-                                    drawLine(primary.copy(alpha = 0.55f), s0, s1, strokeWidth = thin, cap = StrokeCap.Round)
-                                    val g = if (across) Size(grip.height, grip.width) else grip
-                                    val mid = Offset((a.x + b.x) / 2f, (a.y + b.y) / 2f)
-                                    val at = Offset(mid.x - g.width / 2f, mid.y - g.height / 2f)
-                                    val corner = CornerRadius(min(g.width, g.height) / 2f)
-                                    drawRoundRect(primary, topLeft = at, size = g, cornerRadius = corner)
-                                    drawRoundRect(Color.White, topLeft = at, size = g, cornerRadius = corner, style = Stroke(width = 1.5.dp.toPx()))
-                                }
-                            } else {
-                                val corner = Offset((sel.left + sel.width) * k - HANDLE_INSET.toPx(), (sel.top + sel.height) * k - HANDLE_INSET.toPx())
-                                drawCircle(primary, radius = 11.dp.toPx(), center = corner)
-                                drawCircle(Color.White, radius = 4.dp.toPx(), center = corner)
-                            }
-                        }
-                    }
-                )
-                if (dragging == null) {
-                    val history = listOf(
-                        FlexMenuAction(Icons.AutoMirrored.Filled.Undo, "Undo", canUndo) { onUndo() },
-                        FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", canRedo) { onRedo() }
-                    )
-                    val tools = when (mode) {
-                        FlexLayoutMode.SPLIT -> {
-                            val even = FlexTree.relaxed(plan.tree)
-                            listOf(
-                                FlexMenuAction(Icons.Default.AutoFixHigh, if (aligning) "Fitting…" else "Best fit", !aligning) { onAutoAlign() },
-                                FlexMenuAction(Icons.Default.Shuffle, "Another layout", !aligning && plan.boxes.size > 1) { onAnotherLayout() },
-                                FlexMenuAction(Icons.AutoMirrored.Filled.ViewQuilt, "Even out tiles", !aligning && even != plan.tree) { onLayout(even) }
-                            )
-                        }
-                        FlexLayoutMode.FREE -> listOf(
-                            FlexMenuAction(Icons.AutoMirrored.Filled.ViewQuilt, "Tile it", true) { onMode(FlexLayoutMode.SPLIT) }
-                        )
-                    }
-                    FlexFloatingMenu(
-                        actions = history + tools,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 4.dp, end = 4.dp)
                     )
                 }
+                val history = listOf(
+                    FlexMenuAction(Icons.AutoMirrored.Filled.Undo, "Undo", canUndo) { onUndo() },
+                    FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", canRedo) { onRedo() }
+                )
+                val tools = when (mode) {
+                    FlexLayoutMode.SPLIT -> listOf(
+                        FlexMenuAction(Icons.Default.AutoFixHigh, if (aligning) "Fitting…" else "Best fit", !aligning) { onAutoAlign() }
+                    )
+                    FlexLayoutMode.FREE -> listOf(
+                        FlexMenuAction(Icons.AutoMirrored.Filled.ViewQuilt, "Tile it", true) { onMode(FlexLayoutMode.SPLIT) }
+                    )
+                }
+                FlexFloatingMenu(
+                    actions = history + tools,
+                    hidden = dragging != null,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .padding(4.dp)
+                )
             }
 
             val block = spec.blocks.firstOrNull { it.id == picked }
@@ -558,14 +557,6 @@ internal fun FlexViewPage(
                             }
                             IconButton(onClick = { onLayer(block.id, true) }, enabled = position < plan.boxes.size) {
                                 Icon(Icons.Default.FlipToFront, contentDescription = "Bring to front")
-                            }
-                        }
-                        if (mode == FlexLayoutMode.SPLIT && FlexTree.refOf(plan.tree, block.id) != null) {
-                            IconButton(onClick = { FlexTree.turned(plan.tree, block.id)?.let { onLayout(it) } }, enabled = !veiled) {
-                                Icon(Icons.Default.Rotate90DegreesCw, contentDescription = "Turn the split")
-                            }
-                            IconButton(onClick = { FlexTree.flipped(plan.tree, block.id)?.let { onLayout(it) } }, enabled = !veiled) {
-                                Icon(Icons.Default.SwapHoriz, contentDescription = "Flip the split")
                             }
                         }
                         Button(onClick = { onEdit(block.id) }) {

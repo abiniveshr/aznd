@@ -148,6 +148,13 @@ data class ThemeSettings(
     val fieldBorder: Float = 1f,
     val outlinedButtonBorder: Float = 1f,
     val filledButtonBorder: Float = 0f,
+    val cardBorderLine: Boolean = false,
+    val topBarBorderLine: Boolean = false,
+    val bottomBarBorderLine: Boolean = false,
+    val fieldBorderLine: Boolean = false,
+    val outlinedButtonBorderLine: Boolean = false,
+    val filledButtonBorderLine: Boolean = false,
+    val borderTaper: TaperLine = TaperLine(),
     val light: Palette = DefaultLightPalette,
     val dark: Palette = DefaultDarkPalette,
     /** Set only for the high contrast theme: the base colour its palette is made from (see [HighContrast]). */
@@ -213,6 +220,13 @@ fun ThemeSettings.toJson(): String = JSONObject().apply {
     put("fieldBorder", fieldBorder.toDouble())
     put("outlinedButtonBorder", outlinedButtonBorder.toDouble())
     put("filledButtonBorder", filledButtonBorder.toDouble())
+    put("cardBorderLine", cardBorderLine)
+    put("topBarBorderLine", topBarBorderLine)
+    put("bottomBarBorderLine", bottomBarBorderLine)
+    put("fieldBorderLine", fieldBorderLine)
+    put("outlinedButtonBorderLine", outlinedButtonBorderLine)
+    put("filledButtonBorderLine", filledButtonBorderLine)
+    put("borderTaper", borderTaper.toJson())
     put("light", light.toJson())
     put("dark", dark.toJson())
     contrast?.let { put("contrast", JSONObject().put("color", it.color.toHexString()).put("shade", it.shade.name)) }
@@ -245,6 +259,13 @@ fun themeFromJson(text: String): ThemeSettings {
         fieldBorder = o.border("fieldBorder", "fieldOutline", d.fieldBorder),
         outlinedButtonBorder = o.border("outlinedButtonBorder", "outlinedButtonOutline", d.outlinedButtonBorder),
         filledButtonBorder = o.border("filledButtonBorder", "filledButtonOutline", d.filledButtonBorder),
+        cardBorderLine = o.optBoolean("cardBorderLine", d.cardBorderLine),
+        topBarBorderLine = o.optBoolean("topBarBorderLine", d.topBarBorderLine),
+        bottomBarBorderLine = o.optBoolean("bottomBarBorderLine", d.bottomBarBorderLine),
+        fieldBorderLine = o.optBoolean("fieldBorderLine", d.fieldBorderLine),
+        outlinedButtonBorderLine = o.optBoolean("outlinedButtonBorderLine", d.outlinedButtonBorderLine),
+        filledButtonBorderLine = o.optBoolean("filledButtonBorderLine", d.filledButtonBorderLine),
+        borderTaper = taperLineFromJson(o.optJSONObject("borderTaper")),
         light = paletteFrom(o.optJSONObject("light"), d.light),
         dark = paletteFrom(o.optJSONObject("dark"), d.dark),
         contrast = o.optJSONObject("contrast")?.let { c ->

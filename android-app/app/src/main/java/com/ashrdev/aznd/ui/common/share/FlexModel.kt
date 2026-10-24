@@ -10,6 +10,10 @@ import com.ashrdev.aznd.ui.theme.FillStyle
 import com.ashrdev.aznd.ui.theme.GradientKind
 import com.ashrdev.aznd.ui.theme.GradientSpec
 import com.ashrdev.aznd.ui.theme.PatternSpec
+import com.ashrdev.aznd.ui.theme.BorderKind
+import com.ashrdev.aznd.ui.theme.TaperLine
+import com.ashrdev.aznd.ui.common.tiling.TileKind
+import com.ashrdev.aznd.ui.common.tiling.TileNode
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.ln
@@ -22,7 +26,8 @@ import kotlin.math.min
  *  - FlexModel.kt      what a card is made of: [FlexStyle] (look), [FlexBlock]s (content), [FlexContent] (data)
  *  - FlexPresets.kt    one preset per share source (home, workout, routine, ...): default blocks + look,
  *                      and the loaders that turn app data into [FlexContent]
- *  - FlexLayout.kt     the tile layout (a tree of splits, like a tiling window manager) and the editing of it
+ *  - FlexTileRules.kt  Flex's ruleset for the common tiling engine (ui/common/tiling: the tile layout, a tree of
+ *                      splits like a tiling window manager, its editing, solving and auto align)
  *  - FlexPainter.kt    draws a card with android.graphics, so the same code makes the preview and the PNG
  *  - FlexExport.kt     PNG file, share sheet, save to gallery
  *  - FlexStore.kt      remembers each preset's customisation
@@ -94,11 +99,12 @@ class FlexPhotoLimit(val maxWidth: Float, val maxHeight: Float, val range: Close
 
 fun FlexStyle.photoLimit(): FlexPhotoLimit {
     val pad = padding.toFloat()
+    val padV = paddingV.toFloat()
     val footer = if (watermark && watermarkText.isNotBlank()) FLEX_FOOTER else 0f
     val w = (aspect.width - 2 * pad).coerceAtLeast(100f)
     // Free size has no height of its own: judge it as a 4:5 post.
     val cardH = if (aspect.height > 0) aspect.height else FlexAspect.PORTRAIT.height
-    val h = (cardH - 2 * pad - footer).coerceAtLeast(100f)
+    val h = (cardH - 2 * padV - footer).coerceAtLeast(100f)
     val top = w / (h / 2f)
     val side = (w / 2f) / h
     val useTop = abs(ln(top)) <= abs(ln(side)) + 0.0001f
@@ -227,6 +233,7 @@ data class FlexStyle(
     val font: FlexFont = FlexFont.SANS,
     val textScale: Float = 1f,
     val padding: Int = 72,
+    val paddingV: Int = 72,
     val spacing: Int = 28,
     val panel: FlexPanel = FlexPanel.FILLED,
     val panelColor: Int = FlexPalettes.Midnight.panel,
@@ -237,9 +244,12 @@ data class FlexStyle(
     /** Border around every panel in card pixels; 0 keeps each panel type's own look (none, 3 px outline, 2 px glass edge). */
     val panelBorderWidth: Int = 0,
     val panelBorderColor: Int = FlexPalettes.Midnight.accent,
+    val panelBorderKind: BorderKind = BorderKind.OUTLINE,
     val cardRadius: Int = 0,
     val borderWidth: Int = 0,
     val borderColor: Int = FlexPalettes.Midnight.accent,
+    val borderKind: BorderKind = BorderKind.OUTLINE,
+    val lineTaper: TaperLine = TaperLine(),
     val watermark: Boolean = true,
     val watermarkText: String = "aznd",
     /** Where the watermark sits along the bottom of the card. */
@@ -252,7 +262,7 @@ data class FlexStyle(
      * The air a title keeps above it when it is the first tile at the top edge: about half the card padding,
      * at least 24 px. It counts in the title's tile height, and gives way before the title would shrink below 0.92.
      */
-    val titleInset: Float get() = max(24f, padding / 2f)
+    val titleInset: Float get() = max(24f, paddingV / 2f)
 
     fun withPalette(p: FlexPalette): FlexStyle = copy(
         bgA = p.bgA, bgB = p.bgB, textColor = p.text, accent = p.accent,
@@ -274,8 +284,8 @@ fun flexStyleOf(palette: FlexPalette, aspect: FlexAspect = FlexAspect.PORTRAIT):
     FlexStyle(aspect = aspect).withPalette(palette)
 
 /**
- * How a block takes its tile: the rules it is measured, scaled, fitted and priced by. The painter's plan and
- * the auto aligner both go through [FlexFit] with one function per class, so the two never disagree.
+ * How a block takes its tile: the rules it is measured, scaled, fitted and priced by ([kind], under [FlexTileRules]).
+ * The painter's plan and the auto aligner both go through [FlexFit] with one function per kind, so the two never disagree.
  *
  *  - [TITLE]      read first; never shrunk if it can help it, wraps only when it must; at the top edge of the card
  *                 it keeps a little air above it (see [FlexStyle.titleInset]).
@@ -288,7 +298,12 @@ fun flexStyleOf(palette: FlexPalette, aspect: FlexAspect = FlexAspect.PORTRAIT):
  *  - [TEXT]       running text: wraps on whole words only (never mid-word, never an ellipsis), and when the cell is
  *                 narrower than its longest word it scales down until that word fits.
  */
-enum class FlexBlockClass { TITLE, DRAWABLE, STATISTIC, TEXT }
+enum class FlexBlockClass(val kind: TileKind) {
+    TITLE(TileKind.TITLE),
+    DRAWABLE(TileKind.DRAWABLE),
+    STATISTIC(TileKind.STATISTIC),
+    TEXT(TileKind.TEXT)
+}
 
 /** What a block shows. Each type reads its own part of [FlexContent]; [blockClass] says how its tile behaves. */
 enum class FlexBlockType(
@@ -357,10 +372,10 @@ data class FlexBlock(
 }
 
 /**
- * A card: its look, its blocks and how the blocks are tiled on it. [layout] is the tiling (see FlexLayout.kt);
+ * A card: its look, its blocks and how the blocks are tiled on it. [layout] is the tiling (see ui/common/tiling/TileTree.kt);
  * null means automatic (the blocks one under the other, in list order).
  */
-data class FlexSpec(val style: FlexStyle, val blocks: List<FlexBlock>, val layout: FlexNode? = null) {
+data class FlexSpec(val style: FlexStyle, val blocks: List<FlexBlock>, val layout: TileNode? = null) {
     fun nextBlockId(): Int = (blocks.maxOfOrNull { it.id } ?: 0) + 1
 }
 

@@ -2,6 +2,8 @@
 
 package com.ashrdev.aznd.ui.common.share
 
+import com.ashrdev.aznd.ui.common.TaperLineControls
+import com.ashrdev.aznd.ui.theme.BorderKind
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -144,7 +146,7 @@ private fun fitKeyOf(spec: FlexSpec): Any {
     val st = spec.style
     val blocks = spec.blocks.sortedBy { it.id }.map { fitBlockOf(it) }
     return listOf(
-        blocks, st.aspect, st.moduleScale, st.textScale, st.font, st.padding, st.spacing, st.panel,
+        blocks, st.aspect, st.moduleScale, st.textScale, st.font, st.padding, st.paddingV, st.spacing, st.panel,
         st.watermark && st.watermarkText.isNotBlank()
     )
 }
@@ -261,7 +263,6 @@ fun FlexScreen(
     var aligning by remember { mutableStateOf(false) }
     var fitAgain by remember { mutableStateOf(false) }
     val veil = remember(preset) { FlexVeil() }
-    var layouts by remember(preset) { mutableStateOf<List<FlexSpec>>(emptyList()) }
 
     fun rescue(join: Boolean) {
         val sp = spec ?: return
@@ -322,7 +323,6 @@ fun FlexScreen(
             if (result == null) {
                 if (!quiet) Toast.makeText(context, "Couldn't align the card", Toast.LENGTH_SHORT).show()
             } else if (spec == sp || spec == result.spec) {
-                layouts = listOf(result.spec) + result.alternatives
                 if (!quiet) Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                 then?.invoke(result)
             }
@@ -331,15 +331,6 @@ fun FlexScreen(
                 rescue(join = true)
             }
         }
-    }
-
-    fun layoutTo(tree: FlexNode?) {
-        val sp = spec ?: return
-        val ct = content ?: return
-        val next = FlexPainter.withTree(sp, tree)
-        if (next == sp) return
-        if (runCatching { FlexPainter.holdsAsMuch(sp, next, ct, assets) }.getOrDefault(false)) commit(next)
-        else Toast.makeText(context, FLEX_NO_ROOM, Toast.LENGTH_SHORT).show()
     }
 
     fun setMode(mode: FlexLayoutMode) {
@@ -362,26 +353,6 @@ fun FlexScreen(
                 selectedBlock = null
                 if (mode == FlexLayoutMode.SPLIT) {
                     if (next.layout == null) bestFit(quiet = true, join = true) else rescue(join = true)
-                }
-            }
-        }
-    }
-
-    fun anotherLayout() {
-        val now = spec ?: return
-        val at = layouts.indexOf(now)
-        if (at >= 0 && layouts.size > 1) {
-            val next = layouts[(at + 1) % layouts.size]
-            scope.launch { veil.Run(this).finish { if (spec == now) commit(next, force = true) } }
-            return
-        }
-        bestFit(quiet = true) { result ->
-            if (!result.changed) {
-                if (result.alternatives.isEmpty()) Toast.makeText(context, "No other layout fits these blocks as well", Toast.LENGTH_SHORT).show()
-                else {
-                    val next = result.alternatives[0]
-                    val base = spec
-                    scope.launch { veil.Run(this).finish { if (spec == base) commit(next, force = true) } }
                 }
             }
         }
@@ -432,12 +403,12 @@ fun FlexScreen(
         // A block's own edit page: it works on a copy and hands it back on Done.
         key(editBlock) {
             FlexEditPage(
-                blockId = editBlock,
+                startId = editBlock,
                 initial = editSpec,
                 content = editContent,
-                onDone = { edited ->
+                onDone = { edited, last ->
                     commit(edited)
-                    if (edited.blocks.none { it.id == editBlock }) selectedBlock = null
+                    selectedBlock = last.takeIf { id -> edited.blocks.any { it.id == id } }
                     editingId = null
                 },
                 onFinish = { editingId = null },
@@ -472,13 +443,12 @@ fun FlexScreen(
             } else {
                 val bottom = padding.calculateBottomPadding()
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val previewHeight = maxHeight * 0.38f
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
                         when (page) {
-                            0 -> EditorPage(sp, ct, assets, pl, previewHeight, veil.up) {
+                            0 -> EditorPage(sp, ct, assets, pl, veil.up, bottom) {
                                 LookTab(
                                     spec = sp,
                                     hasDefaultPhoto = ct.photoUri != null,
@@ -500,7 +470,6 @@ fun FlexScreen(
                                 assets = assets,
                                 plan = pl,
                                 bottom = bottom,
-                                onLayout = { tree -> layoutTo(tree) },
                                 onCard = { card -> commit(card) },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
@@ -515,7 +484,6 @@ fun FlexScreen(
                                 onUndo = { undo() },
                                 onRedo = { redo() },
                                 onAutoAlign = { bestFit() },
-                                onAnotherLayout = { anotherLayout() },
                                 onResizeLayout = { tree -> update(continuous = true) { it.copy(layout = tree) } },
                                 onFreeBox = { id, x, y, w, h, continuous ->
                                     update(continuous = continuous) { sp ->
@@ -550,26 +518,62 @@ private fun EditorPage(
     content: FlexContent,
     assets: FlexAssets,
     plan: FlexPlan,
-    previewHeight: Dp,
     veiled: Boolean,
+    bottom: Dp,
     controls: @Composable () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        FlexPreview(
-            spec = spec,
-            content = content,
-            assets = assets,
-            plan = plan,
-            boxHeight = previewHeight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            veiled = veiled
-        )
-        FlexWarning(spec, plan, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-        Box(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()) { controls() }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val pageHeight = maxHeight
+        var open by rememberSaveable { mutableStateOf(true) }
+        Column(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                val cardHeight = maxHeight
+                FlexPinchBox(enabled = !open, oneFinger = true, modifier = Modifier.fillMaxSize()) {
+                    FlexPreview(
+                        spec = spec,
+                        content = content,
+                        assets = assets,
+                        plan = plan,
+                        boxHeight = cardHeight,
+                        modifier = Modifier.fillMaxWidth(),
+                        veiled = veiled
+                    )
+                }
+            }
+            FlexWarning(spec, plan, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { open = !open }
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Look",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    if (open) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                    contentDescription = if (open) "Hide look controls" else "Show look controls"
+                )
+            }
+            AnimatedVisibility(visible = open) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(pageHeight * 0.58f)
+                ) { controls() }
+            }
+            AnimatedVisibility(visible = !open) {
+                Spacer(modifier = Modifier.height(bottom))
+            }
+        }
     }
 }
 
@@ -887,9 +891,12 @@ private fun LookTab(
             }
         }
         item {
-            FlexFoldSection("Spacing", "Margins ${st.padding} · gap ${st.spacing}") {
-                LabeledSlider("Margins", "${st.padding}", st.padding.toFloat(), 24f..160f) { v ->
+            FlexFoldSection("Spacing", "Margins ${st.padding} × ${st.paddingV} · gap ${st.spacing}") {
+                LabeledSlider("Side margins", "${st.padding}", st.padding.toFloat(), 24f..160f) { v ->
                     style { it.copy(padding = v.roundToInt()) }
+                }
+                LabeledSlider("Top and bottom margins", "${st.paddingV}", st.paddingV.toFloat(), 24f..160f) { v ->
+                    style { it.copy(paddingV = v.roundToInt()) }
                 }
                 LabeledSlider("Gap between tiles", "${st.spacing}", st.spacing.toFloat(), 8f..72f) { v ->
                     style { it.copy(spacing = v.roundToInt()) }
@@ -914,13 +921,29 @@ private fun LookTab(
                     }
                 }
                 if (st.panel != FlexPanel.NONE) {
+                    Text("Panel border", style = MaterialTheme.typography.labelMedium)
+                    ChipChoice(BorderKind.entries, st.panelBorderKind, { it.label }) { picked -> style { it.copy(panelBorderKind = picked) } }
+                } else {
+                    SwitchRow("Separator lines between tiles", st.panelBorderKind == BorderKind.LINE) { on ->
+                        style { it.copy(panelBorderKind = if (on) BorderKind.LINE else BorderKind.OUTLINE) }
+                    }
+                }
+                if (st.panel != FlexPanel.NONE || st.panelBorderKind == BorderKind.LINE) {
+                    val line = st.panelBorderKind == BorderKind.LINE
                     LabeledSlider(
-                        "Border",
+                        if (line) "Line thickness" else "Border",
                         if (st.panelBorderWidth == 0) "default" else "${st.panelBorderWidth}",
                         st.panelBorderWidth.toFloat(), 0f..24f
                     ) { v -> style { it.copy(panelBorderWidth = v.roundToInt()) } }
-                    if (st.panelBorderWidth > 0) {
-                        ColorRow("Panel border colour", st.panelBorderColor) { c -> style { it.copy(panelBorderColor = c) } }
+                    if (st.panelBorderWidth > 0 || line) {
+                        ColorRow(if (line) "Line colour" else "Panel border colour", st.panelBorderColor) { c -> style { it.copy(panelBorderColor = c) } }
+                    }
+                    if (line) {
+                        Text(
+                            "A line runs along every gap between tiles, shaped by Line shape below.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
                 if (st.panel != FlexPanel.NONE) {
@@ -935,11 +958,21 @@ private fun LookTab(
                 LabeledSlider("Corner radius", "${st.cardRadius}", st.cardRadius.toFloat(), 0f..160f) { v ->
                     style { it.copy(cardRadius = v.roundToInt()) }
                 }
-                LabeledSlider("Border", if (st.borderWidth == 0) "off" else "${st.borderWidth}", st.borderWidth.toFloat(), 0f..48f) { v ->
+                Text("Card border", style = MaterialTheme.typography.labelMedium)
+                ChipChoice(BorderKind.entries, st.borderKind, { it.label }) { picked -> style { it.copy(borderKind = picked) } }
+                val cardLine = st.borderKind == BorderKind.LINE
+                LabeledSlider(if (cardLine) "Line thickness" else "Border", if (st.borderWidth == 0) "off" else "${st.borderWidth}", st.borderWidth.toFloat(), 0f..48f) { v ->
                     style { it.copy(borderWidth = v.roundToInt()) }
                 }
                 if (st.borderWidth > 0) {
-                    ColorRow("Border colour", st.borderColor) { c -> style { it.copy(borderColor = c) } }
+                    ColorRow(if (cardLine) "Line colour" else "Border colour", st.borderColor) { c -> style { it.copy(borderColor = c) } }
+                    if (cardLine) {
+                        Text(
+                            "A line across the top and the bottom margin, shaped by Line shape below.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 SwitchRow("Watermark", st.watermark) { on -> style { it.copy(watermark = on) } }
                 if (st.watermark) {
@@ -952,6 +985,13 @@ private fun LookTab(
                     )
                     Text("Watermark position", style = MaterialTheme.typography.labelMedium)
                     ChipChoice(FlexAlign.entries, st.watermarkAlign, { it.label }) { picked -> style { it.copy(watermarkAlign = picked) } }
+                }
+            }
+        }
+        if (st.panelBorderKind == BorderKind.LINE || (st.borderKind == BorderKind.LINE && st.borderWidth > 0)) {
+            item {
+                FlexFoldSection("Line shape", "${st.lineTaper.shape.label} · ${st.lineTaper.region.label}") {
+                    TaperLineControls(st.lineTaper, MaterialTheme.colorScheme.onSurface) { t -> style { it.copy(lineTaper = t) } }
                 }
             }
         }

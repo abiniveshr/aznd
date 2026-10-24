@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -59,6 +60,7 @@ import com.ashrdev.aznd.ui.common.AdvancedColorPickerDialog
 import com.ashrdev.aznd.ui.common.FillCopySource
 import com.ashrdev.aznd.ui.common.FillEditorDialog
 import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.TaperLineControls
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
@@ -321,18 +323,40 @@ fun AppearanceScreen(
 
                 AppearanceSection("Borders") {
                     Text(
-                        "Width of each border, drawn in the Outlines colour. 0 turns it off.",
+                        "Width of each border, drawn in the Outlines colour. 0 turns it off. Line only draws one separator line instead of the outline: under cards, fields, buttons and the top bar, above the bottom bar.",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    BorderSlider("Cards", settings.cardBorder) { v -> ThemeStore.update { it.copy(cardBorder = v) } }
-                    BorderSlider("Top bar", settings.topBarBorder) { v -> ThemeStore.update { it.copy(topBarBorder = v) } }
-                    BorderSlider("Bottom bar", settings.bottomBarBorder) { v -> ThemeStore.update { it.copy(bottomBarBorder = v) } }
-                    BorderSlider("Text fields", settings.fieldBorder) { v -> ThemeStore.update { it.copy(fieldBorder = v) } }
-                    BorderSlider("Outlined buttons", settings.outlinedButtonBorder) { v ->
-                        ThemeStore.update { it.copy(outlinedButtonBorder = v) }
-                    }
-                    BorderSlider("Filled buttons", settings.filledButtonBorder) { v ->
-                        ThemeStore.update { it.copy(filledButtonBorder = v) }
+                    BorderSlider(
+                        "Cards", settings.cardBorder, settings.cardBorderLine,
+                        { on -> ThemeStore.update { it.copy(cardBorderLine = on) } }
+                    ) { v -> ThemeStore.update { it.copy(cardBorder = v) } }
+                    BorderSlider(
+                        "Top bar", settings.topBarBorder, settings.topBarBorderLine,
+                        { on -> ThemeStore.update { it.copy(topBarBorderLine = on) } }
+                    ) { v -> ThemeStore.update { it.copy(topBarBorder = v) } }
+                    BorderSlider(
+                        "Bottom bar", settings.bottomBarBorder, settings.bottomBarBorderLine,
+                        { on -> ThemeStore.update { it.copy(bottomBarBorderLine = on) } }
+                    ) { v -> ThemeStore.update { it.copy(bottomBarBorder = v) } }
+                    BorderSlider(
+                        "Text fields", settings.fieldBorder, settings.fieldBorderLine,
+                        { on -> ThemeStore.update { it.copy(fieldBorderLine = on) } }
+                    ) { v -> ThemeStore.update { it.copy(fieldBorder = v) } }
+                    BorderSlider(
+                        "Outlined buttons", settings.outlinedButtonBorder, settings.outlinedButtonBorderLine,
+                        { on -> ThemeStore.update { it.copy(outlinedButtonBorderLine = on) } }
+                    ) { v -> ThemeStore.update { it.copy(outlinedButtonBorder = v) } }
+                    BorderSlider(
+                        "Filled buttons", settings.filledButtonBorder, settings.filledButtonBorderLine,
+                        { on -> ThemeStore.update { it.copy(filledButtonBorderLine = on) } }
+                    ) { v -> ThemeStore.update { it.copy(filledButtonBorder = v) } }
+                    val anyLine = settings.cardBorderLine || settings.topBarBorderLine || settings.bottomBarBorderLine ||
+                        settings.fieldBorderLine || settings.outlinedButtonBorderLine || settings.filledButtonBorderLine
+                    if (anyLine) {
+                        Text("Line shape", style = MaterialTheme.typography.titleSmall)
+                        TaperLineControls(settings.borderTaper, MaterialTheme.colorScheme.outline) { t ->
+                            ThemeStore.update { it.copy(borderTaper = t) }
+                        }
                     }
                 }
 
@@ -516,14 +540,17 @@ private fun SliderRow(label: String, value: Int, range: IntRange, onChange: (Int
 }
 
 /** A border width in half-dp steps, 0 to [MAX_BORDER_DP]. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BorderSlider(label: String, value: Float, onChange: (Float) -> Unit) {
+private fun BorderSlider(label: String, value: Float, line: Boolean, onLine: (Boolean) -> Unit, onChange: (Float) -> Unit) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label)
+            Text(label, modifier = Modifier.weight(1f))
+            FilterChip(selected = line, onClick = { onLine(!line) }, label = { Text("Line only") })
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 if (value <= 0f) "Off" else String.format(Locale.US, "%.1f dp", value),
                 style = MaterialTheme.typography.bodySmall

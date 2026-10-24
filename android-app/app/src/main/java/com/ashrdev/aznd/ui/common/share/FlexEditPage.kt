@@ -14,16 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,12 +51,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
+import com.ashrdev.aznd.ui.common.tiling.TileTree
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -93,25 +101,26 @@ internal class FlexEditHistory(private val initial: FlexSpec) {
 
 /**
  * Edit page of one block. Top: the card with everything dimmed except this block's tile, so its position and
- * size are what you see. Below: its position (swap places), size and alignment,
+ * size are what you see. Below: its size and alignment,
  * then everything else the block can do (look, items, text, photo). Top bar: Discard (leave without keeping this
- * visit's changes, like closing a screen) and Finish (keep the changes and go back). A floating drop-down over the
- * card holds Undo and Redo.
+ * visit's changes, like closing a screen) and Finish (keep the changes and go back).
  */
 @Composable
 internal fun FlexEditPage(
-    blockId: Int,
+    startId: Int,
     initial: FlexSpec,
     content: FlexContent,
-    onDone: (FlexSpec) -> Unit,
+    onDone: (edited: FlexSpec, last: Int) -> Unit,
     onFinish: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    var blockId by rememberSaveable { mutableStateOf(startId) }
     val history = remember { FlexEditHistory(initial) }
     val spec = history.current
     val assets = rememberFlexAssets(spec, content)
     val plan = remember(spec, content, assets) { FlexPainter.plan(spec, content, assets) }
+    val planNow by rememberUpdatedState(plan)
     val block = spec.blocks.firstOrNull { it.id == blockId }
     val primary = MaterialTheme.colorScheme.primary
 
@@ -148,12 +157,25 @@ internal fun FlexEditPage(
     }
 
     val context = LocalContext.current
-    fun swapWith(other: Int) {
-        val tree = plan.tree ?: return
-        val before = history.current
-        val next = FlexPainter.withTree(before, FlexTree.swap(tree, blockId, other))
-        if (runCatching { FlexPainter.holdsAsMuch(before, next, content, assets) }.getOrDefault(false)) history.change { next }
-        else Toast.makeText(context, FLEX_NO_ROOM, Toast.LENGTH_SHORT).show()
+    val scope = rememberCoroutineScope()
+    val veil = remember { FlexVeil() }
+    var aligning by remember { mutableStateOf(false) }
+    fun bestFit() {
+        if (aligning) return
+        val sp = history.current
+        val snapshot = assets
+        aligning = true
+        scope.launch {
+            val run = veil.Run(this)
+            val result = try {
+                withContext(Dispatchers.Default) { runCatching { FlexPainter.autoAlign(sp, content, snapshot) }.getOrNull() }
+            } finally {
+                aligning = false
+            }
+            run.finish(if (result != null && result.changed && history.current == sp) ({ if (history.current == sp) history.change { result.spec } }) else null)
+            if (result == null) Toast.makeText(context, "Couldn't align the card", Toast.LENGTH_SHORT).show()
+            else if (history.current == sp || history.current == result.spec) Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun onChange(changed: FlexBlock, continuous: Boolean = false) {
@@ -172,7 +194,7 @@ internal fun FlexEditPage(
             IconButton(onClick = { requestFinish() }) {
                 Icon(Icons.Default.Close, contentDescription = "Discard")
             }
-            IconButton(onClick = { onDone(history.current) }) {
+            IconButton(onClick = { onDone(history.current, blockId) }) {
                 Icon(Icons.Default.Check, contentDescription = "Finish")
             }
         }
@@ -185,48 +207,69 @@ internal fun FlexEditPage(
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val previewHeight = maxHeight * 0.34f
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // The card, dimmed everywhere but over this block: what is left is its position and size.
-                    FlexPreview(
-                        spec = spec,
-                        content = content,
-                        assets = assets,
-                        plan = plan,
-                        boxHeight = previewHeight,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        overlay = { k ->
-                            val box = plan.box(blockId)
-                            val radius = CornerRadius(10.dp.toPx())
-                            val scrim = Path().apply {
-                                fillType = PathFillType.EvenOdd
-                                addRect(Rect(0f, 0f, size.width, size.height))
-                                if (box != null) {
-                                    addRoundRect(
-                                        RoundRect(
-                                            Rect(box.left * k, box.top * k, (box.left + box.width) * k, (box.top + box.height) * k),
-                                            radius
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        FlexPreview(
+                            spec = spec,
+                            content = content,
+                            assets = assets,
+                            plan = plan,
+                            boxHeight = previewHeight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            veiled = veil.up,
+                            canvasModifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures { p ->
+                                    val now = planNow
+                                    val k = now.width / size.width.toFloat()
+                                    now.hit(p.x * k, p.y * k)?.id?.let { blockId = it }
+                                }
+                            },
+                            overlay = { k ->
+                                val box = plan.box(blockId)
+                                val radius = CornerRadius(10.dp.toPx())
+                                val scrim = Path().apply {
+                                    fillType = PathFillType.EvenOdd
+                                    addRect(Rect(0f, 0f, size.width, size.height))
+                                    if (box != null) {
+                                        addRoundRect(
+                                            RoundRect(
+                                                Rect(box.left * k, box.top * k, (box.left + box.width) * k, (box.top + box.height) * k),
+                                                radius
+                                            )
                                         )
+                                    }
+                                }
+                                drawPath(scrim, Color.Black.copy(alpha = 0.8f))
+                                if (box != null) {
+                                    drawRoundRect(
+                                        primary,
+                                        Offset(box.left * k, box.top * k),
+                                        Size(box.width * k, box.height * k),
+                                        radius,
+                                        style = Stroke(width = 2.5.dp.toPx())
                                     )
                                 }
                             }
-                            drawPath(scrim, Color.Black.copy(alpha = 0.8f))
-                            if (box != null) {
-                                drawRoundRect(
-                                    primary,
-                                    Offset(box.left * k, box.top * k),
-                                    Size(box.width * k, box.height * k),
-                                    radius,
-                                    style = Stroke(width = 2.5.dp.toPx())
-                                )
-                            }
-                        }
-                    )
+                        )
+                        FlexFloatingMenu(
+                            actions = listOfNotNull(
+                                FlexMenuAction(Icons.AutoMirrored.Filled.Undo, "Undo", history.canUndo) { history.undo() },
+                                FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", history.canRedo) { history.redo() },
+                                if (spec.style.layoutMode == FlexLayoutMode.SPLIT) {
+                                    FlexMenuAction(Icons.Default.AutoFixHigh, if (aligning) "Fitting…" else "Best fit", !aligning) { bestFit() }
+                                } else null
+                            ),
+                            modifier = Modifier
+                                .matchParentSize()
+                                .padding(horizontal = 20.dp, vertical = 12.dp)
+                        )
+                    }
 
                     val tile = plan.box(blockId)
                     Text(
                         text = if (tile != null) {
-                            "Tile ${FlexTree.leaves(plan.tree).indexOf(blockId) + 1} of ${plan.boxes.size} · " +
+                            "Tile ${TileTree.leaves(plan.tree).indexOf(blockId) + 1} of ${plan.boxes.size} · " +
                                 "${(tile.width / plan.contentWidth * 100).roundToInt()}% of the width, " +
                                 "${(tile.height / plan.contentHeight * 100).roundToInt()}% of the height" +
                                 if (tile.scale < 0.999f) " · content shrunk to ${(tile.scale * 100).roundToInt()}%" else ""
@@ -250,24 +293,7 @@ internal fun FlexEditPage(
                             .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        FlexSection("Position") {
-                            val order = FlexTree.leaves(plan.tree)
-                            val at = order.indexOf(blockId)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Swap places with the next tile", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                IconButton(
-                                    enabled = at > 0,
-                                    onClick = { swapWith(order[at - 1]) }
-                                ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Swap with the tile before") }
-                                IconButton(
-                                    enabled = at >= 0 && at < order.size - 1,
-                                    onClick = { swapWith(order[at + 1]) }
-                                ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Swap with the tile after") }
-                            }
-                        }
-
                         FlexSection("Size and alignment") {
-                            Text("The tile is only as big as its content. These say where it sits in the space it is given, and how its content lines up.", style = MaterialTheme.typography.labelMedium)
                             Text("Across", style = MaterialTheme.typography.labelMedium)
                             ChipChoice(
                                 options = FlexAlign.entries,
@@ -307,16 +333,6 @@ internal fun FlexEditPage(
                         }
                     }
                 }
-                // Undo and Redo float over the card.
-                FlexFloatingMenu(
-                    actions = listOf(
-                        FlexMenuAction(Icons.AutoMirrored.Filled.Undo, "Undo", history.canUndo) { history.undo() },
-                        FlexMenuAction(Icons.AutoMirrored.Filled.Redo, "Redo", history.canRedo) { history.redo() }
-                    ),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 12.dp, end = 20.dp)
-                )
             }
         }
     }
@@ -344,7 +360,7 @@ internal fun FlexEditPage(
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = false
-                    onDone(history.current.let { sp -> sp.copy(blocks = sp.blocks.filter { it.id != blockId }) })
+                    onDone(history.current.let { sp -> sp.copy(blocks = sp.blocks.filter { it.id != blockId }) }, blockId)
                 }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Keep") } }

@@ -45,6 +45,7 @@ internal fun BlockPreview(
             spec.style.copy(
                 aspect = FlexAspect.FREE,
                 padding = 36,
+                paddingV = 36,
                 watermark = false,
                 cardRadius = minOf(spec.style.cardRadius, 36),
                 borderWidth = 0
