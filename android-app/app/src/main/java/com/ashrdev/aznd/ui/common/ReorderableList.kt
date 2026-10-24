@@ -62,6 +62,7 @@ class ReorderState internal constructor(
     private val scope: CoroutineScope
 ) {
     internal var onMove: (from: Int, to: Int) -> Unit = { _, _ -> }
+    internal var canMove: ((from: Int, to: Int) -> Boolean)? = null
     /** Lazy-list index of the first reorderable item (items before it are not part of the order). */
     internal var firstIndex: Int = 0
     internal var count: Int = 0
@@ -152,15 +153,19 @@ class ReorderState internal constructor(
         val range = firstIndex until firstIndex + count
         val others = listState.layoutInfo.visibleItemsInfo.filter { it.key != key && it.index in range }
         val bottom = dragTop + info.size
-        val target = others
+        val passed = others
             .filter { it.index > info.index && bottom > it.offset + it.size / 2f }
-            .minByOrNull { it.index }
-            ?: others
-                .filter { it.index < info.index && dragTop < it.offset + it.size / 2f }
-                .maxByOrNull { it.index }
-            ?: return
+            .sortedBy { it.index }
+            .ifEmpty {
+                others
+                    .filter { it.index < info.index && dragTop < it.offset + it.size / 2f }
+                    .sortedByDescending { it.index }
+            }
+        val from = info.index - firstIndex
+        val allowed = canMove
+        val target = passed.firstOrNull { allowed == null || allowed(from, it.index - firstIndex) } ?: return
         staleIndex = info.index
-        onMove(info.index - firstIndex, target.index - firstIndex)
+        onMove(from, target.index - firstIndex)
     }
 
     private companion object {
@@ -178,6 +183,7 @@ fun rememberReorderState(
     listState: LazyListState,
     firstItemIndex: Int,
     itemCount: Int,
+    canMove: ((from: Int, to: Int) -> Boolean)? = null,
     onMove: (from: Int, to: Int) -> Unit
 ): ReorderState {
     val scope = rememberCoroutineScope()
@@ -185,6 +191,7 @@ fun rememberReorderState(
     val state = remember(listState) { ReorderState(listState, scope) }
     SideEffect {
         state.onMove = onMove
+        state.canMove = canMove
         state.firstIndex = firstItemIndex
         state.count = itemCount
         state.edgePx = edge

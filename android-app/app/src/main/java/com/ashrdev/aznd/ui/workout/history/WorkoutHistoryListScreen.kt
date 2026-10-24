@@ -58,7 +58,7 @@ private val HistoryPages = listOf(
  * History > Workout History, three swipeable pages:
  *   Presets | Calendar | All
  *  - Presets (swipe right): pick a workout to open its own history. Unchanged for now.
- *  - Calendar (centre, opens here): big calendar with workout days highlighted, tap a day for a
+ *  - Calendar (centre, opens here): big calendar with workout days highlighted, double tap a day for a
  *    popup of its sessions; totals, averages, most-done workout / exercise, and a graph of
  *    workouts per 7 days. See [HistoryOverviewPage].
  *  - All (swipe left): every session, filterable by muscle group, date range and pictures. See

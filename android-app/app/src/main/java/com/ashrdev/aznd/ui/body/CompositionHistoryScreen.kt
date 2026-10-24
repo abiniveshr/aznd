@@ -32,7 +32,7 @@ import com.ashrdev.aznd.domain.body.MeasurementSite
 import com.ashrdev.aznd.ui.calendar.BottomAnchoredPage
 import com.ashrdev.aznd.ui.calendar.DayDecoration
 import com.ashrdev.aznd.ui.calendar.DayFill
-import com.ashrdev.aznd.ui.calendar.MonthCalendar
+import com.ashrdev.aznd.ui.calendar.ZoomCalendar
 import com.ashrdev.aznd.ui.calendar.SelectedDayHeader
 import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.calendar.monthKeyOf
@@ -171,7 +171,7 @@ private fun CalendarPage(metric: CompositionMetric, entries: List<MetricEntry>?,
             }
         },
         bottom = {
-            MonthCalendar(
+            ZoomCalendar(
                 decorate = { dayKey ->
                     if (dayKey in byDay) DayDecoration(fill = DayFill.Highlight) else DayDecoration.None
                 },

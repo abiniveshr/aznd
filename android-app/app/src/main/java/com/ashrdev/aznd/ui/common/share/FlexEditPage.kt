@@ -2,6 +2,7 @@
 
 package com.ashrdev.aznd.ui.common.share
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -145,6 +147,15 @@ internal fun FlexEditPage(
         }
     }
 
+    val context = LocalContext.current
+    fun swapWith(other: Int) {
+        val tree = plan.tree ?: return
+        val before = history.current
+        val next = FlexPainter.withTree(before, FlexTree.swap(tree, blockId, other))
+        if (runCatching { FlexPainter.holdsAsMuch(before, next, content, assets) }.getOrDefault(false)) history.change { next }
+        else Toast.makeText(context, FLEX_NO_ROOM, Toast.LENGTH_SHORT).show()
+    }
+
     fun onChange(changed: FlexBlock, continuous: Boolean = false) {
         change(continuous) { sp ->
             sp.copy(blocks = sp.blocks.map { if (it.id == blockId) changed else it })
@@ -246,19 +257,11 @@ internal fun FlexEditPage(
                                 Text("Swap places with the next tile", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                                 IconButton(
                                     enabled = at > 0,
-                                    onClick = {
-                                        plan.tree?.let { tree ->
-                                            history.change { sp -> sp.copy(layout = FlexTree.swap(tree, blockId, order[at - 1])) }
-                                        }
-                                    }
+                                    onClick = { swapWith(order[at - 1]) }
                                 ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Swap with the tile before") }
                                 IconButton(
                                     enabled = at >= 0 && at < order.size - 1,
-                                    onClick = {
-                                        plan.tree?.let { tree ->
-                                            history.change { sp -> sp.copy(layout = FlexTree.swap(tree, blockId, order[at + 1])) }
-                                        }
-                                    }
+                                    onClick = { swapWith(order[at + 1]) }
                                 ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Swap with the tile after") }
                             }
                         }
@@ -412,16 +415,15 @@ private fun BlockOptions(
             // A photo takes at most half the card, so the shapes on offer are those that suit that half.
             val limit = spec.style.photoLimit()
             val options = FlexPhotoRatio.entries.filter { it.allowedOn(limit) }
-            val current = options.firstOrNull { it != FlexPhotoRatio.ORIGINAL && abs(it.ratio - block.photoRatio) < 0.01f }
-                ?: FlexPhotoRatio.ORIGINAL
-            val real = options.filter { it != FlexPhotoRatio.ORIGINAL }
+            val current = options.firstOrNull { abs(it.ratio - block.photoRatio) < 0.01f } ?: FlexPhotoRatio.AUTO
+            val real = options.filter { it.ratio > 0f }
             val lowest = real.minByOrNull { it.ratio }?.label
             val highest = real.maxByOrNull { it.ratio }?.label
             DropdownField(
                 label = "Crop shape (at most half the card" + if (lowest != null && highest != null) ", $lowest to $highest)" else ")",
                 options = options,
                 selected = current,
-                optionLabel = { if (it == FlexPhotoRatio.ORIGINAL) "Original, within what fits" else it.label }
+                optionLabel = { it.label }
             ) { onChange(block.copy(photoRatio = it.ratio), false) }
             LabeledSlider("Zoom", "${(block.photoZoom * 10).roundToInt() / 10f}×", block.photoZoom, 1f..3f) {
                 onChange(block.copy(photoZoom = it), true)

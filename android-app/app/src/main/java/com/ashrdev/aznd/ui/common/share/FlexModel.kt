@@ -46,9 +46,6 @@ const val FLEX_MODULE_SCALE = 0.8f
 const val FLEX_MODULE_MIN = 0.6f
 const val FLEX_MODULE_MAX = 1.5f
 
-/** The most best fit grows a card's modules by when there is room to spare ([FlexStyle.fitBoost]). */
-const val FLEX_BOOST_MAX = 2f
-
 /**
  * Card sizes, in card pixels. How much a size holds is its content budget (see [FlexPainter.load]): every module
  * costs the room it needs at its least, and a module that would take the card past its budget is not added (the
@@ -65,7 +62,8 @@ enum class FlexAspect(val label: String, val width: Int, val height: Int) {
 
 /** The photo shapes offered in a photo block's crop menu (those inside the card's [photoLimit]). */
 enum class FlexPhotoRatio(val label: String, val ratio: Float) {
-    ORIGINAL("Original", 0f),
+    AUTO("Fill its tile", 0f),
+    ORIGINAL("Original shape", -1f),
     R1_1("1:1", 1f),
     R4_3("4:3", 4f / 3f),
     R3_4("3:4", 3f / 4f),
@@ -78,7 +76,7 @@ enum class FlexPhotoRatio(val label: String, val ratio: Float) {
     R21_9("21:9", 21f / 9f);
 
     fun allowedOn(limit: FlexPhotoLimit): Boolean {
-        if (this == ORIGINAL) return true
+        if (this == AUTO || this == ORIGINAL) return true
         return ratio >= limit.range.start - 0.005f && ratio <= limit.range.endInclusive + 0.005f
     }
 }
@@ -179,19 +177,8 @@ enum class FlexAlign(val label: String) { START("Left"), CENTER("Centre"), END("
 enum class FlexVAlign(val label: String) { TOP("Top"), CENTER("Middle"), BOTTOM("Bottom") }
 enum class FlexPanel(val label: String) { NONE("None"), FILLED("Filled"), OUTLINE("Outline"), GLASS("Glass") }
 
-/**
- * How blocks are placed on a card.
- *  - [SPLIT]: tiles that fill the card; a drop splits the tile it lands on (or a whole row or column), and the card is
- *    fitted by itself on every change (nearest fit, modules grown into spare room).
- *  - [FLOW] (the default): blocks in rows in their order, a row each until the person drops one beside another
- *    (then they share the row, if both keep their least widths, [FlexBoxLimits]). A held block dropped in a gap goes
- *    there; dropped on a tile, beside it; the others flow round it to their places.
- *  - [FREE]: every block is a box placed and sized by hand anywhere on the card, overlapping if wanted, the later
- *    in the list on top (like slides in a presentation); nothing is fitted by itself.
- */
 enum class FlexLayoutMode(val label: String, val note: String) {
-    FLOW("Flow", "A row for each block, in order. Drop a block in a gap to move it there, or on a tile to put it beside that tile if both fit."),
-    SPLIT("Tiles", "Drop a block on a side of another to split it. The card fits itself after every change."),
+    SPLIT("Tiles", "Drop a block between rows for a row of its own, or on a side of a tile to share its space. Every module is drawn at one size that fills the card; drag a tile's bar to size it yourself."),
     FREE("Free", "Place and size every block anywhere, like a slide. Blocks can overlap; later ones sit on top.")
 }
 
@@ -259,17 +246,8 @@ data class FlexStyle(
     val watermarkAlign: FlexAlign = FlexAlign.START,
     /** Module size, the person's: every block's content is drawn at this on top of [FLEX_MODULE_SCALE] and its own size. */
     val moduleScale: Float = 1f,
-    /**
-     * Best fit's own growth on top of [moduleScale], 1 or more: when a fixed-size tiled card has room to spare, best
-     * fit draws its modules bigger to fill it ([FlexLayoutMode.SPLIT] only). Not a control; set by best fit.
-     */
-    val fitBoost: Float = 1f,
-    /** How blocks are placed: flowing rows, split tiles, or free boxes (see [FlexLayoutMode]). */
-    val layoutMode: FlexLayoutMode = FlexLayoutMode.FLOW
+    val layoutMode: FlexLayoutMode = FlexLayoutMode.SPLIT
 ) {
-    /** How big modules are drawn: the person's module size times best fit's growth. */
-    val moduleSize: Float get() = moduleScale * fitBoost
-
     /**
      * The air a title keeps above it when it is the first tile at the top edge: about half the card padding,
      * at least 24 px. It counts in the title's tile height, and gives way before the title would shrink below 0.92.
@@ -354,18 +332,11 @@ data class FlexBlock(
     val text: String = "",
     /** The block's detail switch, see [FlexBlockType.flagLabel]. */
     val flag: Boolean = true,
-    /**
-     * How big the block's content is drawn inside its tile: 1 = natural, 0.5 to 2 (with the module size). Everything in it
-     * (text, numbers, images) scales together. Content takes up its tile: it shrinks when the tile is too small and grows
-     * when the tile has room, up to [FlexFit.FILL_MAX] times this, so this (and the module size) is also how big it may get.
-     */
+    /** How big the block's content is drawn next to the others: 1 = natural, 0.5 to 2 (with the module size). */
     val size: Float = 1f,
     /** Where the content sits inside the block's tile, across and down. Every tile has its own. */
     val hAlign: FlexAlign = FlexAlign.START,
     val vAlign: FlexVAlign = FlexVAlign.TOP,
-    /** Text-like blocks: the tile takes the whole width of its cell instead of only what its content needs. Auto align sets it, so modules line up edge to edge. */
-    val fillWidth: Boolean = false,
-    /** PHOTO: the crop shape (width / height); 0 = the photo's own shape. Limited by [FlexStyle.photoLimit]. */
     val photoRatio: Float = 0f,
     /** PHOTO: zoom into the picture, 1 to 3. */
     val photoZoom: Float = 1f,

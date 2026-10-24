@@ -40,8 +40,7 @@ import com.ashrdev.aznd.domain.GraphStyle
 import com.ashrdev.aznd.domain.GraphWindow
 import com.ashrdev.aznd.ui.calendar.DayDecoration
 import com.ashrdev.aznd.ui.calendar.DayFill
-import com.ashrdev.aznd.ui.calendar.CalendarMode
-import com.ashrdev.aznd.ui.calendar.MonthCalendar
+import com.ashrdev.aznd.ui.calendar.ZoomCalendar
 import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.calendar.formatDayLong
 import com.ashrdev.aznd.ui.calendar.monthKeyOf
@@ -62,16 +61,15 @@ private val StatsHeight = TileHeight * 2 + TileGap
 // Gap between the calendar and the tiles.
 private val SectionGap = 16.dp
 
-// Header row + weekday letters above the month grid.
-private val CalendarChrome = 64.dp
+private val CalendarHeaderHeight = 48.dp
 
 /**
- * Centre page: a calendar with every workout day highlighted (tap a day for a popup with its
- * sessions) and four stat tiles. Tap "Sessions per week" for a popup graph of workouts per 7 days.
+ * Centre page: a calendar with every workout day highlighted (touch a day for a tooltip, double
+ * tap it for a popup with its sessions) and four stat tiles. Tap "Sessions per week" for a popup
+ * graph of workouts per 7 days.
  *
- * In month view the calendar and tiles always fit the screen without scrolling: cells are square
- * when there's room and get shorter only as far as needed. Year view is sized to take the same
- * height as the month grid (its cells are that tall, so the year scrolls sideways).
+ * The calendar's grid is capped to the space the tiles leave, and keeps that height at every zoom
+ * level, so the tiles never move.
  */
 @Composable
 internal fun HistoryOverviewPage(
@@ -81,24 +79,17 @@ internal fun HistoryOverviewPage(
 ) {
     // No day starts selected: the popup, not the page, is where a day's sessions are shown.
     val calendarState = rememberCalendarState(initialSelectedDay = null)
-    val sessionsByDay = remember(sessions) { sessions.groupBy { dayKeyOf(it.session.startedAt) } }
+    val sessionsByDay = remember(sessions) {
+        sessions.sortedBy { it.session.startedAt }.groupBy { dayKeyOf(it.session.startedAt) }
+    }
     val validMonths = remember(sessionsByDay) { sessionsByDay.keys.map { monthKeyOf(it) }.distinct() }
     val stats = remember(sessions) { computeHistoryStats(sessions) }
     var popupDay by rememberSaveable { mutableStateOf<String?>(null) }
     var graphOpen by rememberSaveable { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        // Square cells where they fit; otherwise just short enough that calendar + tiles fill the
-        // page exactly. (Cells never get taller than square, so the calendar never grows past it.)
-        val cellWidth = (maxWidth - SidePadding * 2) / 7
-        val calendarBudget = maxHeight - 8.dp - bottomPadding - StatsHeight - SectionGap
-        val gridHeight = calendarBudget - CalendarChrome
-        val cellAspect = if (gridHeight <= 0.dp) 2f else (cellWidth / (gridHeight / 6)).coerceIn(1f, 2f)
-
-        // Year view: 7 rows must take the height of the month grid's 6 rows, so year cells are
-        // 6/7 of a month cell's height.
-        val monthCellHeight = cellWidth / cellAspect
-        val yearCell = maxOf(monthCellHeight * 6 / 7, 12.dp)
+        val gridBudget = (maxHeight - 8.dp - bottomPadding - StatsHeight - SectionGap - CalendarHeaderHeight)
+            .coerceAtLeast(160.dp)
 
         Column(
             modifier = Modifier
@@ -107,19 +98,17 @@ internal fun HistoryOverviewPage(
                 .padding(start = SidePadding, end = SidePadding, top = 8.dp, bottom = bottomPadding),
             verticalArrangement = Arrangement.spacedBy(SectionGap)
         ) {
-            MonthCalendar(
+            ZoomCalendar(
                 decorate = { dayKey ->
                     if (dayKey in sessionsByDay) DayDecoration(fill = DayFill.Highlight) else DayDecoration.None
                 },
                 validMonths = validMonths,
                 state = calendarState,
-                // The page swipe is for reaching the list, so the chevrons change month instead.
+                // The page swipe is for reaching the list, so the chevrons page the calendar instead.
                 swipeNavigation = false,
-                // Only month view is squeezed to fit; year view keeps its own larger cells.
-                cellAspectRatio = if (calendarState.mode == CalendarMode.MONTH) cellAspect else 1f,
-                fixedRows = true,
-                yearCellSize = yearCell,
-                onDayClick = { popupDay = it }
+                maxGridHeight = gridBudget,
+                dayTooltip = { dayKey -> daySummary(sessionsByDay[dayKey].orEmpty()) },
+                onDayDoubleClick = { popupDay = it }
             )
             StatsGrid(stats, onOpenWeeklyGraph = { graphOpen = true })
         }
@@ -140,6 +129,12 @@ internal fun HistoryOverviewPage(
             onDismiss = { popupDay = null }
         )
     }
+}
+
+private fun daySummary(sessions: List<SessionWithSets>): String {
+    val firstName = sessions.firstOrNull()?.session?.workoutName ?: return "No session on this day"
+    val more = sessions.size - 1
+    return if (more > 0) "$firstName +$more" else firstName
 }
 
 @Composable

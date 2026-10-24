@@ -2,6 +2,7 @@
 
 package com.ashrdev.aznd.ui.common.share
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ReorderableItem
 import com.ashrdev.aznd.ui.common.dragReorderHandle
@@ -53,31 +55,37 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
 internal fun BlockListPanel(
     spec: FlexSpec,
     content: FlexContent,
+    assets: FlexAssets,
     plan: FlexPlan,
     selectedId: Int?,
     onSelect: (Int?) -> Unit,
     onEdit: (Int) -> Unit,
     update: ((FlexSpec) -> FlexSpec) -> Unit,
+    reorder: ((FlexSpec) -> FlexSpec) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val checked = remember(spec, content, assets) { HashMap<Long, Boolean>() }
+    val toldAt = remember { LongArray(1) }
 
     val listState = rememberLazyListState()
-    val reorder = rememberReorderState(
+    val listOrder = rememberReorderState(
         listState = listState,
         firstItemIndex = 0,
-        itemCount = spec.blocks.size
-    ) { from, to ->
-        update { sp ->
-            if (from !in sp.blocks.indices || to !in sp.blocks.indices) {
-                sp
-            } else {
-                val moved = sp.blocks.toMutableList().also { it.add(to, it.removeAt(from)) }
-                // The tiles stay where they are; the blocks change places in them.
-                sp.copy(blocks = moved, layout = sp.layout?.let { FlexTree.relabel(it, moved.map { b -> b.id }) })
+        itemCount = spec.blocks.size,
+        canMove = { from, to ->
+            spec.style.layoutMode != FlexLayoutMode.SPLIT || checked.getOrPut(from * 4096L + to) {
+                val ok = runCatching { FlexPainter.holdsAsMuch(spec, reordered(spec, from, to), content, assets) }.getOrDefault(false)
+                val now = System.currentTimeMillis()
+                if (!ok && now - toldAt[0] > REFUSED_NOTE_MS) {
+                    toldAt[0] = now
+                    Toast.makeText(context, FLEX_NO_ROOM, Toast.LENGTH_SHORT).show()
+                }
+                ok
             }
         }
-    }
+    ) { from, to -> reorder { sp -> reordered(sp, from, to) } }
 
     LazyColumn(
         state = listState,
@@ -86,7 +94,7 @@ internal fun BlockListPanel(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(spec.blocks, key = { it.id }) { block ->
-            ReorderableItem(reorder, block.id) {
+            ReorderableItem(listOrder, block.id) {
                 BlockRow(
                     block = block,
                     content = content,
@@ -97,8 +105,8 @@ internal fun BlockListPanel(
                     onEnabled = { on ->
                         update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == block.id) it.copy(enabled = on) else it }) }
                     },
-                    dragModifier = Modifier.dragReorderOnLongPress(reorder, block.id),
-                    handleModifier = Modifier.dragReorderHandle(reorder, block.id)
+                    dragModifier = Modifier.dragReorderOnLongPress(listOrder, block.id),
+                    handleModifier = Modifier.dragReorderHandle(listOrder, block.id)
                 )
             }
         }
@@ -134,6 +142,14 @@ internal fun BlockListPanel(
             }
         }
     }
+}
+
+private const val REFUSED_NOTE_MS = 2500L
+
+private fun reordered(sp: FlexSpec, from: Int, to: Int): FlexSpec {
+    if (from !in sp.blocks.indices || to !in sp.blocks.indices) return sp
+    val moved = sp.blocks.toMutableList().also { it.add(to, it.removeAt(from)) }
+    return sp.copy(blocks = moved, layout = sp.layout?.let { FlexTree.relabel(it, moved.map { b -> b.id }) })
 }
 
 @Composable

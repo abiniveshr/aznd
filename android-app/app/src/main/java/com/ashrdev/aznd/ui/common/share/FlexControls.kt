@@ -331,6 +331,8 @@ fun MultiSelectDropdown(
 // Crowding warning
 // ---------------------------------------------------------------------------------------------
 
+internal const val FLEX_NO_ROOM = "That arrangement doesn't fit this card"
+
 /** What is wrong with how full the card is, in plain words. Empty when it is fine. */
 fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
     val out = ArrayList<String>()
@@ -340,7 +342,7 @@ fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
     }
     if (plan.clipped) {
         out += "Some content is too big for its tile and is cut off at the tile's edge. Give that tile more room, show fewer items, or use Free size."
-    } else if (plan.minScale < FlexPainter.CROWDED_SCALE) {
+    } else if (plan.crowded) {
         out += "Crowded: some content was shrunk to ${(plan.minScale * 100).toInt()}% to fit its tile. Give it more room, show fewer items or use a taller size."
     }
     if (plan.tooTall) {

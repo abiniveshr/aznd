@@ -81,16 +81,6 @@ data class DayDecoration(
     }
 }
 
-/** What a custom `cellContent` receives for each day. */
-@Immutable
-data class DayCellInfo(
-    val dayKey: String,
-    val dayOfMonth: Int,
-    val decoration: DayDecoration,
-    val isToday: Boolean,
-    val isSelected: Boolean
-)
-
 /** Colour a day from a 0..1 score, for the future Dashboard heat-map. */
 fun scoreFill(score: Float, low: Color, high: Color): DayFill =
     DayFill.Custom(lerp(low, high, score.coerceIn(0f, 1f)))
@@ -137,23 +127,17 @@ internal fun DayFill.defaultTextColor(): Color {
     }
 }
 
-/** Month grid, or the whole year as a GitHub-style contribution grid. */
-enum class CalendarMode { MONTH, YEAR }
+enum class CalendarZoom { YEAR, QUADRANT, MONTH }
 
-/**
- * Which month is showing, which day is selected, and whether the calendar shows a month or the
- * whole year. In year mode the year of [visibleMonth] is the year shown. Survives navigating
- * away and back.
- */
 @Stable
 class CalendarState(
     initialMonth: MonthKey,
     initialSelectedDay: String?,
-    initialMode: CalendarMode = CalendarMode.MONTH
+    initialZoom: CalendarZoom = CalendarZoom.YEAR
 ) {
     var visibleMonth by mutableStateOf(initialMonth)
     var selectedDay by mutableStateOf(initialSelectedDay)
-    var mode by mutableStateOf(initialMode)
+    var zoom by mutableStateOf(initialZoom)
 
     companion object {
         val Saver: Saver<CalendarState, Any> = listSaver<CalendarState, Any>(
@@ -162,7 +146,7 @@ class CalendarState(
                     it.visibleMonth.year,
                     it.visibleMonth.month,
                     it.selectedDay ?: "",
-                    it.mode.name
+                    it.zoom.name
                 )
             },
             restore = {
@@ -170,8 +154,8 @@ class CalendarState(
                     MonthKey(it[0] as Int, it[1] as Int),
                     (it[2] as String).ifEmpty { null },
                     (it.getOrNull(3) as? String)
-                        ?.let { name -> CalendarMode.values().firstOrNull { m -> m.name == name } }
-                        ?: CalendarMode.MONTH
+                        ?.let { name -> CalendarZoom.values().firstOrNull { z -> z.name == name } }
+                        ?: CalendarZoom.YEAR
                 )
             }
         )
@@ -182,7 +166,7 @@ class CalendarState(
 fun rememberCalendarState(
     initialMonth: MonthKey = currentMonth(),
     initialSelectedDay: String? = todayDayKey(),
-    initialMode: CalendarMode = CalendarMode.MONTH
+    initialZoom: CalendarZoom = CalendarZoom.YEAR
 ): CalendarState = rememberSaveable(saver = CalendarState.Saver) {
-    CalendarState(initialMonth, initialSelectedDay, initialMode)
+    CalendarState(initialMonth, initialSelectedDay, initialZoom)
 }

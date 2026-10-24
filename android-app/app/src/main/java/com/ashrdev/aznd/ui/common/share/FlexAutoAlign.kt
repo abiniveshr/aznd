@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
  *  - Restrictions: no tile is made smaller than its floor (a word is never broken, content is never shrunk
  *    below its class's least scale, a tile is never smaller than [MIN_TILE]); drawables keep within their
  *    shape and size caps (photos within the card's half limit).
- *  - Full width: every text-like tile spans the whole width of its cell (see [FlexBlock.fillWidth]), and a card
+ *  - Full width: every text-like tile spans the whole width of its cell, and a card
  *    is stacked, one module under the other and edge to edge, unless splitting pays for itself. A split (side by
  *    side) costs [AutoCost.SPLIT]; it is kept centred ([AutoCost.OFF_CENTRE]) unless a part needs more room, and its parts
  *    are kept equally tall ([AutoCost.UNEVEN]), so the modules in a row shrink together. Statistics are the best
@@ -480,17 +480,16 @@ internal object AutoCost {
         // Content grown into its cell is not rewarded or charged for its scale (only shrinking is), and its wrapping
         // is judged at its own size.
         val s = min(1.0, fit.scale.toDouble())
-        val ws = min(1f, fit.scale)
         var c = if (fit.cut) CUT else 0.0
         when (item.kind) {
             FlexBlockClass.TEXT -> {
                 c += 5.0 * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
                 c += 1.2 * waste
-                // Not a thin sliver, and not text broken into many more lines than it needs.
                 c += 4.0 * max(0.0, 0.30 - cw.toDouble() / space.width)
-                val full = item.height(space.width).toDouble().coerceAtLeast(1.0)
-                val wrapped = item.height(cw / ws) * ws / full
-                c += 0.25 * min(max(0.0, wrapped - 1.6), 4.0)
+                val at = fit.scale.coerceAtLeast(0.3f)
+                val full = item.height(space.width / at).toDouble().coerceAtLeast(1.0)
+                val wrapped = item.height(cw / at) / full
+                c += 0.8 * min(max(0.0, wrapped - 1.3), 5.0)
             }
             FlexBlockClass.STATISTIC -> {
                 // Shrunk as one unit: the same price as text, but nothing wraps, so fewer columns is the price instead.
@@ -501,11 +500,11 @@ internal object AutoCost {
                 if (fit.columns in 1 until designed) c += REFLOW * (designed - fit.columns)
             }
             FlexBlockClass.TITLE -> {
-                // A title is not shrunk, not broken into lines if it can help it, and sits at the top.
-                c += 14.0 * (1.0 - s) + 20.0 * max(0.0, 0.92 - s)
-                val full = item.height(space.width).toDouble().coerceAtLeast(1.0)
-                val wrapped = item.height(cw / ws) * ws / full
-                c += 1.2 * min(max(0.0, wrapped - 1.0), 3.0)
+                c += 6.0 * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
+                val at = fit.scale.coerceAtLeast(0.3f)
+                val full = item.height(space.width / at).toDouble().coerceAtLeast(1.0)
+                val wrapped = item.height(cw / at) / full
+                c += 4.0 * min(max(0.0, wrapped - 1.0), 3.0)
                 c += 2.0 * waste
                 if (!top) c += 0.5
                 else if (air && item.inset > 0f) c += NO_AIR * (1.0 - fit.inset / item.inset).coerceIn(0.0, 1.0)
@@ -529,13 +528,17 @@ internal class AutoCandidate(val tree: FlexNode, val cost: Double)
 /** [used]: how tall the tiling is (a tile's own height; stacked, the sum; side by side, the tallest). */
 private class AutoSub(val cost: Double, val node: FlexNode?, val floorW: Float, val used: Float = 0f)
 
-internal class FlexAutoAligner(private val items: List<AutoItem>, private val space: AutoSpace) {
+internal const val FULL_EFFORT = 300_000
+
+internal const val QUICK_EFFORT = 40_000
+
+internal class FlexAutoAligner(private val items: List<AutoItem>, private val space: AutoSpace, effort: Int = FULL_EFFORT) {
 
     private val n = items.size
     private val gap = space.gap
     private val memo = HashMap<Long, AutoSub>()
     private val none = AutoSub(Double.POSITIVE_INFINITY, null, 0f)
-    private var budget = 300_000
+    private var budget = effort
     private val segLimit = when {
         n <= 8 -> n
         n <= 10 -> 4
@@ -964,28 +967,4 @@ internal class FlexAutoAligner(private val items: List<AutoItem>, private val sp
             return sum
         }
     }
-}
-
-/**
- * Lines the tiles of a tiling up in a grid: where a group's parts are all groups cut the other way into the same
- * number of cells (rows of two, say), every one of them gets the average share for each cell, so the edges between
- * cells run straight through instead of zigzagging.
- */
-internal fun alignGrid(node: FlexNode): FlexNode {
-    if (node !is FlexGroup) return node
-    var kids = node.children.map { alignGrid(it) }
-    val groups = kids.filterIsInstance<FlexGroup>()
-    if (groups.size == kids.size && groups.size >= 2 && groups.all { it.children.size == groups[0].children.size && it.vertical != node.vertical && !it.isAuto }) {
-        val cells = groups[0].children.size
-        val shares = FloatArray(cells) { c -> groups.map { g -> g.weights[c] / g.weights.sum() }.average().toFloat() }
-        kids = groups.map { g -> FlexGroup(g.vertical, g.children, shares.map { it * 1000f }) }
-    }
-    return FlexGroup(node.vertical, kids, node.weights)
-}
-
-/** Puts every side by side group of a tiling on equal shares: all rows are cut in the middle, however many parts they have. */
-internal fun centreColumns(node: FlexNode): FlexNode {
-    if (node !is FlexGroup) return node
-    val kids = node.children.map { centreColumns(it) }
-    return if (node.vertical) FlexGroup(true, kids, node.weights) else FlexGroup(false, kids, List(kids.size) { 1000f })
 }

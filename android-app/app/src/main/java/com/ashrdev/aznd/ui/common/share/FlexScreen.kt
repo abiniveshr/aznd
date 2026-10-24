@@ -135,26 +135,17 @@ private val FlexBarPages = listOf(
 )
 private const val PAGE_FLEX = 1
 
-/** Best fit waits this long after a change before it runs by itself, so a slider or typing settles first. */
 private const val FIT_DELAY_MS = 600L
 
-/** A block as fitting by itself sees it: without what the fits set themselves (filling the cell, photo crops). */
 private fun fitBlockOf(b: FlexBlock): FlexBlock =
-    b.copy(fillWidth = false, photoRatio = 0f, photoZoom = 1f, photoX = 0.5f, photoY = 0.5f, freeX = 0f, freeY = 0f, freeW = 0f, freeH = 0f)
+    b.copy(photoZoom = 1f, photoX = 0.5f, photoY = 0.5f, freeX = 0f, freeY = 0f, freeW = 0f, freeH = 0f)
 
-/**
- * What fitting by itself looks at: what is on the card and how big it is drawn, not where tiles are, nor what the
- * fits set themselves (the order of the blocks, tiles filling their cells, photo crops, growth, free boxes) nor colours.
- * In flow mode the order counts: it is what the card is tiled from.
- */
 private fun fitKeyOf(spec: FlexSpec): Any {
     val st = spec.style
     val blocks = spec.blocks.sortedBy { it.id }.map { fitBlockOf(it) }
     return listOf(
         blocks, st.aspect, st.moduleScale, st.textScale, st.font, st.padding, st.spacing, st.panel,
-        st.watermark && st.watermarkText.isNotBlank(),
-        // Flow mode: the order is what the tiling is made from (reordered in the list, it flows again).
-        if (st.layoutMode == FlexLayoutMode.FLOW) spec.blocks.map { it.id } else emptyList()
+        st.watermark && st.watermarkText.isNotBlank()
     )
 }
 
@@ -248,22 +239,15 @@ fun FlexScreen(
     }
     fun updateStyle(transform: (FlexStyle) -> FlexStyle) = update(continuous = true) { it.copy(style = transform(it.style)) }
 
-    // The card fits itself when what is on it changes: blocks added, removed, edited or resized, the card size, the
-    // module or text size, the spacing. Not when tiles are only moved, or colours change. How depends on the mode:
-    // tiles get the nearest fit, flow its tiling for the order it has, free boxes only a box for a new block.
     var fittedKey by remember(preset) { mutableStateOf<Any?>(null) }
-    // The blocks as they were at the last fit: the ones that differ now are what nearest fit may move.
-    var fittedBlocks by remember(preset) { mutableStateOf<Map<Int, FlexBlock>>(emptyMap()) }
     fun markFitted(sp: FlexSpec?) {
-        if (sp == null) return
-        fittedKey = fitKeyOf(sp)
-        fittedBlocks = sp.blocks.associate { it.id to fitBlockOf(it) }
+        if (sp != null) fittedKey = fitKeyOf(sp)
     }
     fun undo() {
         val now = spec ?: return
         history.undo(now)?.let {
             spec = it
-            markFitted(it)   // an undone card is not fitted again
+            markFitted(it)
         }
     }
     fun redo() {
@@ -275,78 +259,41 @@ fun FlexScreen(
     }
 
     var aligning by remember { mutableStateOf(false) }
-    var alignAgain by remember { mutableStateOf(false) }
-    // The blur over the preview while a tiling change is worked out (and at least half a second when it is quicker).
+    var fitAgain by remember { mutableStateOf(false) }
     val veil = remember(preset) { FlexVeil() }
-    // The tilings the last best fit found, best first: "Another layout" steps through them.
     var layouts by remember(preset) { mutableStateOf<List<FlexSpec>>(emptyList()) }
-    /**
-     * Fits the card, off the main thread, and applies the result. [nearest]: the nearest fit (the closest stable
-     * layout: small edits of the tiling the card has, FlexPainter.nearestFit), else best fit (the best tiling there is,
-     * which can rearrange everything). [quiet]: no message (running by itself). [join]: one undo step with the change
-     * before it. [then]: runs with the result once applied.
-     */
-    fun autoAlign(quiet: Boolean = false, join: Boolean = false, nearest: Boolean = false, then: ((FlexAutoResult) -> Unit)? = null) {
+
+    fun rescue(join: Boolean) {
         val sp = spec ?: return
         val ct = content ?: return
+        if (sp.style.layoutMode != FlexLayoutMode.SPLIT) return
         if (aligning) {
-            // A change came in while a fit was busy: once it is done, the nearest fit runs again on the card as it is then.
-            if (quiet) alignAgain = true
+            fitAgain = true
             return
         }
         aligning = true
         val snapshot = assets
-        // New blocks, and blocks changed since the last fit: the ones nearest fit may move.
-        val focus = sp.blocks.filter { fittedBlocks[it.id] != fitBlockOf(it) }.map { it.id }.toSet()
         scope.launch {
             val run = veil.Run(this)
-            val result = try {
-                withContext(Dispatchers.Default) {
-                    if (nearest) FlexPainter.nearestFit(sp, ct, snapshot, focus) else FlexPainter.autoAlign(sp, ct, snapshot)
-                }
-            } catch (e: Exception) {
-                null
+            val fixed = try {
+                withContext(Dispatchers.Default) { runCatching { FlexPainter.rescue(sp, ct, snapshot) }.getOrNull() }
             } finally {
                 aligning = false
             }
-            // Only if the card is still the one that was aligned; the new tiling goes in under the veil.
-            run.finish(if (result != null && result.changed && spec == sp) ({ if (spec == sp) commit(result.spec, join = join, force = true) }) else null)
-            if (result == null) {
-                if (!quiet) Toast.makeText(context, "Couldn't align the card", Toast.LENGTH_SHORT).show()
-            } else if (spec == sp || spec == result.spec) {
-                markFitted(spec)
-                if (!nearest) layouts = listOf(result.spec) + result.alternatives
-                if (!quiet) Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-                then?.invoke(result)
-            }
-            if (alignAgain) {
-                alignAgain = false
-                autoAlign(quiet = true, join = true, nearest = true)
+            val stale = spec != sp
+            run.finish(if (fixed != null && !stale) ({ if (spec == sp) commit(fixed, join = join, force = true) }) else null)
+            if (fitAgain || (fixed != null && stale)) {
+                fitAgain = false
+                rescue(join = true)
             }
         }
     }
 
-    /**
-     * After a hand change of the tiling ([placed]: the block dropped, or whose split was turned or flipped): the card
-     * as it ends up (FlexPainter.placedByHand: the nearest fit round what was done), worked out off the main thread and applied as part of the same undo step, if the card has not changed again.
-     */
-    fun tuneLayout(placed: Int?, before: FlexSpec?) {
-        val sp = spec ?: return
-        val ct = content ?: return
-        val snapshot = assets
-        scope.launch {
-            val run = veil.Run(this)
-            val done = withContext(Dispatchers.Default) { runCatching { FlexPainter.placedByHand(sp, ct, snapshot, placed, before) }.getOrNull() }
-            run.finish(if (done != null && done != sp && spec == sp) ({ if (spec == sp) commit(done, join = true, force = true) }) else null)
-        }
-    }
-
-    /** The fit that runs by itself, by the card's mode (see above). [join]: part of the undo step of the change before it. */
     fun fitByItself(join: Boolean) {
         val sp = spec ?: return
         val ct = content ?: return
         when (sp.style.layoutMode) {
-            FlexLayoutMode.SPLIT, FlexLayoutMode.FLOW -> autoAlign(quiet = true, join = join, nearest = true)
+            FlexLayoutMode.SPLIT -> rescue(join)
             FlexLayoutMode.FREE -> {
                 val placed = FlexPainter.placeBoxes(sp, ct, assets)
                 if (placed != sp) commit(placed, join = join, force = true)
@@ -355,10 +302,46 @@ fun FlexScreen(
         }
     }
 
-    /**
-     * Switches the card to [mode]: free boxes start where the tiles are, flow takes the tiling for the order the card
-     * reads in, tiles get best fit. One undo step; worked out off the main thread.
-     */
+    fun bestFit(quiet: Boolean = false, join: Boolean = false, then: ((FlexAutoResult) -> Unit)? = null) {
+        val sp = spec ?: return
+        val ct = content ?: return
+        if (aligning) {
+            if (quiet) fitAgain = true
+            return
+        }
+        aligning = true
+        val snapshot = assets
+        scope.launch {
+            val run = veil.Run(this)
+            val result = try {
+                withContext(Dispatchers.Default) { runCatching { FlexPainter.autoAlign(sp, ct, snapshot) }.getOrNull() }
+            } finally {
+                aligning = false
+            }
+            run.finish(if (result != null && result.changed && spec == sp) ({ if (spec == sp) commit(result.spec, join = join, force = true) }) else null)
+            if (result == null) {
+                if (!quiet) Toast.makeText(context, "Couldn't align the card", Toast.LENGTH_SHORT).show()
+            } else if (spec == sp || spec == result.spec) {
+                layouts = listOf(result.spec) + result.alternatives
+                if (!quiet) Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                then?.invoke(result)
+            }
+            if (fitAgain) {
+                fitAgain = false
+                rescue(join = true)
+            }
+        }
+    }
+
+    fun layoutTo(tree: FlexNode?) {
+        val sp = spec ?: return
+        val ct = content ?: return
+        val next = FlexPainter.withTree(sp, tree)
+        if (next == sp) return
+        if (runCatching { FlexPainter.holdsAsMuch(sp, next, ct, assets) }.getOrDefault(false)) commit(next)
+        else Toast.makeText(context, FLEX_NO_ROOM, Toast.LENGTH_SHORT).show()
+    }
+
     fun setMode(mode: FlexLayoutMode) {
         val sp = spec ?: return
         val ct = content ?: return
@@ -373,29 +356,17 @@ fun FlexScreen(
                 run.finish(null)
                 return@launch
             }
-            // Tiles go on to best fit: the veil stays up through it.
             run.finish {
                 commit(next, force = true)
                 markFitted(next)
                 selectedBlock = null
-                if (mode == FlexLayoutMode.SPLIT) autoAlign(quiet = true, join = true)
+                if (mode == FlexLayoutMode.SPLIT) {
+                    if (next.layout == null) bestFit(quiet = true, join = true) else rescue(join = true)
+                }
             }
         }
     }
 
-    /** Flow mode: the card tiled in [order] (a block moved one place with the buttons), off the main thread, one undo step. */
-    fun flowTo(order: List<Int>) {
-        val sp = spec ?: return
-        val ct = content ?: return
-        val snapshot = assets
-        scope.launch {
-            val run = veil.Run(this)
-            val next = withContext(Dispatchers.Default) { runCatching { FlexPainter.flowOrder(sp, ct, snapshot, order) }.getOrNull() }
-            run.finish(if (next != null && spec == sp && next != sp) ({ if (spec == sp) commit(next) }) else null)
-        }
-    }
-
-    /** Another good tiling of the same blocks: the next one best fit found, after the best (worked out first if need be). */
     fun anotherLayout() {
         val now = spec ?: return
         val at = layouts.indexOf(now)
@@ -404,7 +375,7 @@ fun FlexScreen(
             scope.launch { veil.Run(this).finish { if (spec == now) commit(next, force = true) } }
             return
         }
-        autoAlign(quiet = true) { result ->
+        bestFit(quiet = true) { result ->
             if (!result.changed) {
                 if (result.alternatives.isEmpty()) Toast.makeText(context, "No other layout fits these blocks as well", Toast.LENGTH_SHORT).show()
                 else {
@@ -416,31 +387,18 @@ fun FlexScreen(
         }
     }
 
-    // A share opens fitted to what it is showing this time, once its pictures are in (their sizes count): a card with
-    // a layout of its own gets the nearest fit (its arrangement stays, new or missing blocks are fitted in), a card
-    // without one gets best fit; a flow card its tiling for its order; free boxes stay as they are. The card as it was
-    // left is one Undo away.
     var alignOnOpen by remember(preset) { mutableStateOf(true) }
     LaunchedEffect(spec != null, content, assets) {
         if (!alignOnOpen || spec == null || content == null || !assets.ready) return@LaunchedEffect
         alignOnOpen = false
-        val sp = spec
-        // Blocks the saved layout does not have yet count as changed.
-        fittedKey = sp?.let { fitKeyOf(it) }
-        val laid = FlexTree.leaves(sp?.layout).toSet()
-        fittedBlocks = sp?.blocks?.filter { it.id in laid }?.associate { it.id to fitBlockOf(it) } ?: emptyMap()
-        when (sp?.style?.layoutMode) {
-            FlexLayoutMode.SPLIT -> autoAlign(quiet = true, nearest = sp.layout != null)
-            FlexLayoutMode.FLOW, FlexLayoutMode.FREE -> fitByItself(join = false)
-            null -> {}
-        }
+        val sp = spec ?: return@LaunchedEffect
+        markFitted(sp)
+        if (sp.style.layoutMode == FlexLayoutMode.SPLIT && sp.layout == null) bestFit(quiet = true) else fitByItself(join = false)
     }
-    // Any change to what is on the card: the nearest fit, by itself, as part of the change's undo step.
     val fitKey = spec?.let { fitKeyOf(it) }
     LaunchedEffect(fitKey, assets.ready) {
         val key = fitKey ?: return@LaunchedEffect
         if (alignOnOpen || !assets.ready || content == null || key == fittedKey) return@LaunchedEffect
-        // Wait for the change to settle (a slider being dragged, typing).
         delay(FIT_DELAY_MS)
         fittedKey = key
         fitByItself(join = true)
@@ -542,13 +500,7 @@ fun FlexScreen(
                                 assets = assets,
                                 plan = pl,
                                 bottom = bottom,
-                                // A tile moved, or a split turned or flipped, by hand: photos re-crop to fill their new cells at
-                                // once; then, on a fixed size, the cells get the sizes best fit would give that tiling.
-                                onLayout = { tree, placed ->
-                                    val before = spec
-                                    update { FlexPainter.settle(it.copy(layout = tree), ct, assets) }
-                                    tuneLayout(placed, before)
-                                },
+                                onLayout = { tree -> layoutTo(tree) },
                                 onCard = { card -> commit(card) },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
@@ -557,20 +509,19 @@ fun FlexScreen(
                                     editingId = id
                                 },
                                 update = { transform -> update(transform = transform) },
+                                reorder = { transform -> update(continuous = true, transform = transform) },
                                 canUndo = history.canUndo,
                                 canRedo = history.canRedo,
                                 onUndo = { undo() },
                                 onRedo = { redo() },
-                                onAutoAlign = { autoAlign() },
-                                onNearestFit = { autoAlign(nearest = true) },
+                                onAutoAlign = { bestFit() },
                                 onAnotherLayout = { anotherLayout() },
-                                onResizeLayout = { tree -> update(continuous = true) { FlexPainter.settle(it.copy(layout = tree), ct, assets) } },
+                                onResizeLayout = { tree -> update(continuous = true) { it.copy(layout = tree) } },
                                 onFreeBox = { id, x, y, w, h, continuous ->
                                     update(continuous = continuous) { sp ->
                                         sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(freeX = x, freeY = y, freeW = w, freeH = h) else it })
                                     }
                                 },
-                                // The list order is the stacking order: the last block is on top.
                                 onLayer = { id, front ->
                                     update { sp ->
                                         val b = sp.blocks.first { it.id == id }
@@ -578,7 +529,6 @@ fun FlexScreen(
                                         sp.copy(blocks = if (front) rest + b else listOf(b) + rest)
                                     }
                                 },
-                                onFlowOrder = { order -> flowTo(order) },
                                 onMode = { setMode(it) },
                                 aligning = aligning,
                                 veiled = veil.up
@@ -720,7 +670,7 @@ private fun AzndingLabel(modifier: Modifier = Modifier) {
 }
 
 /**
- * The veil over the card preview while a tiling change is worked out (a fit, a mode switch, a flow reorder): up while
+ * The veil over the card preview while a tiling change is worked out (a fit, a mode switch): up while
  * any job holds it. A job that is quick never raises it until its change is ready; then it comes up, the change is
  * made under it, and it stays up at least [VEIL_MIN_MS] in all. A job that takes long raises it after [VEIL_SLOW_MS].
  */
@@ -794,7 +744,6 @@ private fun LookTab(
     hasDefaultPhoto: Boolean,
     bottom: Dp,
     style: ((FlexStyle) -> FlexStyle) -> Unit,
-    /** Switches the card's layout mode (tiles, flow, free): it rearranges the card, so it is not a plain style change. */
     onMode: (FlexLayoutMode) -> Unit,
     onPickPhoto: () -> Unit,
     onReset: () -> Unit
@@ -888,7 +837,6 @@ private fun LookTab(
         backgroundItems(st, hasDefaultPhoto, style, onPickPhoto) { editBackground = true }
         item {
             val base = (st.moduleScale * 100).roundToInt()
-            val shown = (st.moduleSize * 100).roundToInt()
             FlexFoldSection("Layout", "${st.layoutMode.label} · ${st.aspect.label} · modules $base%", initiallyOpen = true) {
                 Text("Layout mode", style = MaterialTheme.typography.labelMedium)
                 ChipChoice(FlexLayoutMode.entries, st.layoutMode, { it.label }) { picked -> onMode(picked) }
@@ -911,12 +859,13 @@ private fun LookTab(
                 )
                 LabeledSlider(
                     "Module size",
-                    if (shown != base) "$base% · shown at $shown%" else "$base%",
+                    "$base%",
                     st.moduleScale,
                     FLEX_MODULE_MIN..FLEX_MODULE_MAX
                 ) { v -> style { it.copy(moduleScale = (v * 20f).roundToInt() / 20f) } }
                 Text(
-                    "How big every block is drawn. Smaller fits more blocks before any has to shrink.",
+                    if (st.layoutMode == FlexLayoutMode.SPLIT) "The size every block starts from. Tiles then grow or shrink it together to fill the card; smaller fits more blocks."
+                    else "How big every block is drawn. Smaller fits more blocks.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

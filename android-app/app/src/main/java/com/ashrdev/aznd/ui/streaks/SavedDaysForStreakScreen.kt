@@ -27,7 +27,7 @@ import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
 import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.calendar.BottomAnchoredPage
 import com.ashrdev.aznd.ui.calendar.DayDecoration
-import com.ashrdev.aznd.ui.calendar.MonthCalendar
+import com.ashrdev.aznd.ui.calendar.ZoomCalendar
 import com.ashrdev.aznd.ui.calendar.SelectedDayHeader
 import com.ashrdev.aznd.ui.calendar.monthKeyOf
 import com.ashrdev.aznd.ui.calendar.rememberCalendarState
@@ -97,7 +97,7 @@ fun SavedDaysForStreakScreen(
                         )
                     }
                 }
-                MonthCalendar(
+                ZoomCalendar(
                     decorate = { dayKey ->
                         if (dayKey in savedByDay) DayDecoration(outline = true) else DayDecoration.None
                     },

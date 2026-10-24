@@ -32,7 +32,7 @@ import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.ui.calendar.BottomAnchoredPage
 import com.ashrdev.aznd.ui.calendar.DayDecoration
 import com.ashrdev.aznd.ui.calendar.DayFill
-import com.ashrdev.aznd.ui.calendar.MonthCalendar
+import com.ashrdev.aznd.ui.calendar.ZoomCalendar
 import com.ashrdev.aznd.ui.calendar.SelectedDayHeader
 import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.calendar.monthKeyOf
@@ -152,7 +152,7 @@ fun WorkoutHistoryScreen(
                     }
                 }
                 // Days with a session are outlined; favourite days swap the outline for a highlight.
-                MonthCalendar(
+                ZoomCalendar(
                     decorate = { dayKey ->
                         when {
                             dayKey !in sessionsByDay -> DayDecoration.None

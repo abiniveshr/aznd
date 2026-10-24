@@ -17,13 +17,13 @@ import com.ashrdev.aznd.ui.calendar.CalendarState
 import com.ashrdev.aznd.ui.calendar.DayBadge
 import com.ashrdev.aznd.ui.calendar.DayDecoration
 import com.ashrdev.aznd.ui.calendar.DayFill
-import com.ashrdev.aznd.ui.calendar.MonthCalendar
+import com.ashrdev.aznd.ui.calendar.ZoomCalendar
 import com.ashrdev.aznd.ui.calendar.currentMonth
 import com.ashrdev.aznd.ui.calendar.monthKeyOf
 import com.ashrdev.aznd.ui.calendar.monthRange
 import com.ashrdev.aznd.ui.calendar.todayDayKey
 
-// Thin adapter: turns a streak's data into day decorations for the common MonthCalendar.
+// Thin adapter: turns a streak's data into day decorations for the common ZoomCalendar.
 //   streak days          -> outlined
 //   saved days           -> highlighted
 //   slip days            -> small red dot (not part of the run, so no outline)
@@ -51,7 +51,7 @@ fun StreakCalendar(
         monthRange(monthKeyOf(startDate), maxOf(currentMonth(), lastUpcoming ?: currentMonth()))
     }
 
-    MonthCalendar(
+    ZoomCalendar(
         decorate = { day ->
             val inRun = day >= startDate && day <= today
             val slip = inRun && day in breaks
