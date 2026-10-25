@@ -89,3 +89,6 @@ dev log:
     21/10/2026:
         -new app theming features that extend to the flex cards
         -flex system broke on implementing new theming
+    21/10/2026-25/10/2026:
+        -flex feature fully implemented apart from presets
+        -theme presets added
