@@ -1,8 +1,14 @@
 package com.ashrdev.aznd.ui.streaks
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,79 +38,75 @@ import androidx.core.net.toUri
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.ui.common.PhotoViewerDialog
 import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.components.FilledTonalButton
-import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.common.PhotoStore
 
 private val BannerHeight = 200.dp
+private val PreviewHeight = 140.dp
 
 /** Banner aspect for the image picker (the box above is a 16:9-ish wide rectangle). */
 const val STREAK_BANNER_WIDTH_PX = 1200
 const val STREAK_BANNER_HEIGHT_PX = 675
 
-/**
- * The wide rectangle at the top of the Details page. Empty: an Add photo button. With a photo: the
- * photo (tap to view full screen) with Replace / Remove over its lower edge.
- */
+@Composable
+fun StreakBannerImage(bannerUri: String?, modifier: Modifier = Modifier, height: Dp = BannerHeight, onClick: (() -> Unit)? = null) {
+    val context = LocalContext.current
+    val bitmap = remember(bannerUri) { bannerUri?.let { PhotoStore.loadBitmap(context, it.toUri()) } }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Banner",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+        } else {
+            Icon(
+                Icons.Default.PhotoCamera,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+    }
+}
+
 @Composable
 fun StreakBannerCard(
     bannerUri: String?,
     onPick: () -> Unit,
-    onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val bitmap = remember(bannerUri) { bannerUri?.let { PhotoStore.loadBitmap(context, it.toUri()) } }
     var showFull by remember { mutableStateOf(false) }
+    StreakBannerImage(
+        bannerUri = bannerUri,
+        modifier = modifier,
+        onClick = { if (bannerUri != null) showFull = true else onPick() }
+    )
+    if (showFull && bannerUri != null) {
+        PhotoViewerDialog(uriString = bannerUri, onDismiss = { showFull = false })
+    }
+}
 
-    if (bitmap != null && bannerUri != null) {
-        Card(modifier = modifier.fillMaxWidth()) {
-            Box(modifier = Modifier
-                .fillMaxWidth()
-                .height(BannerHeight)
-            ) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Streak banner",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { showFull = true }
-                )
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilledTonalButton(onClick = onPick) { Text("Replace") }
-                    FilledTonalButton(onClick = onRemove) { Text("Remove") }
-                }
-            }
-        }
-        if (showFull) {
-            PhotoViewerDialog(uriString = bannerUri, onDismiss = { showFull = false })
-        }
-    } else {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            modifier = modifier.fillMaxWidth()
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(BannerHeight)
-            ) {
-                OutlinedButton(onClick = onPick) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add photo")
-                }
-            }
-        }
+@Composable
+fun StreakPreviewHeader(bannerUri: String?, photoUri: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
+        StreakBannerImage(bannerUri = bannerUri, height = PreviewHeight, modifier = Modifier.padding(bottom = 28.dp))
+        StreakLogo(
+            photoUri = photoUri,
+            size = 64.dp,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp)
+                .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape)
+        )
     }
 }
 

@@ -77,7 +77,11 @@ import com.ashrdev.aznd.ui.streaks.StreakDetailScreen
 import com.ashrdev.aznd.ui.streaks.StreakEditorScreen
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.streaks.StreakViewModelFactory
-import com.ashrdev.aznd.ui.streaks.StreaksScreen
+import com.ashrdev.aznd.ui.routines.RoutineDetailScreen
+import com.ashrdev.aznd.ui.routines.RoutineEditorScreen
+import com.ashrdev.aznd.ui.routines.RoutinesScreen
+import com.ashrdev.aznd.data.routines.TrackingSource
+import com.ashrdev.aznd.reminders.ReminderScheduler
 import com.ashrdev.aznd.ui.theme.AzndTheme
 import com.ashrdev.aznd.ui.theme.ThemeStore
 import com.ashrdev.aznd.ui.workout.stats.ExerciseProgressScreen
@@ -109,6 +113,8 @@ class MainActivity : ComponentActivity() {
         val graphRange = GraphRangeStore(this)
         val macroTargets = MacroTargetsStore(this)
         val dashboardStore = DashboardStore(this)
+        val trackingSource = TrackingSource(streakDao, database.routineDao(), dao, database.foodDao(), database.bodyDao())
+        ReminderScheduler.syncAsync(applicationContext)
         val dataTransfer = DataTransfer(DataRegistry.create(this, database, trainingRepository, macroTargets))
         setContent {
             AzndTheme {
@@ -116,8 +122,11 @@ class MainActivity : ComponentActivity() {
                   val navController = rememberNavController()
                   val workoutViewModel: WorkoutViewModel =
                       viewModel(factory = WorkoutViewModelFactory(dao, trainingRepository))
-                  val streakViewModel: StreakViewModel =
-                      viewModel(factory = StreakViewModelFactory(streakDao))
+                  val streakViewModel: StreakViewModel = viewModel(
+                      factory = StreakViewModelFactory(
+                          streakDao, database.routineDao(), database.reminderDao(), trackingSource
+                      ) { ReminderScheduler.syncAsync(applicationContext) }
+                  )
                   val dashboardViewModel: DashboardViewModel = viewModel(
                       factory = DashboardViewModel.factory(
                           database.foodDao(), database.bodyDao(), trainingRepository
@@ -599,19 +608,63 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // ---- Streaks ----
-                        composable(Destination.Streaks.route) {
-                            StreaksScreen(
+                        // ---- Routines ----
+                        composable(Destination.Routines.route) {
+                            val workouts by workoutViewModel.workouts.collectAsState()
+                            RoutinesScreen(
                                 viewModel = streakViewModel,
+                                workouts = workouts,
                                 onOpenStreak = { id -> navigateTo(Destination.StreakDetail.createRoute(id)) },
+                                onAddStreak = { navigateTo(Destination.StreakEditor.createRoute()) },
+                                onOpenRoutine = { id -> navigateTo(Destination.RoutineDetail.createRoute(id)) },
+                                onAddRoutine = { navigateTo(Destination.RoutineEditor.createRoute()) },
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings
                             )
                         }
-                        composable(Destination.StreakEditor.route) {
+                        composable(
+                            route = Destination.StreakEditor.route,
+                            arguments = listOf(navArgument("streakId") {
+                                type = NavType.LongType
+                                defaultValue = -1L
+                            })
+                        ) { backStackEntry ->
                             StreakEditorScreen(
+                                streakId = backStackEntry.arguments?.getLong("streakId")?.takeIf { it != -1L },
                                 viewModel = streakViewModel,
+                                onDone = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
+                        composable(
+                            route = Destination.RoutineDetail.route,
+                            arguments = listOf(navArgument("routineId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            RoutineDetailScreen(
+                                routineId = backStackEntry.arguments?.getLong("routineId") ?: -1L,
+                                viewModel = streakViewModel,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onEdit = { id -> navigateTo(Destination.RoutineEditor.createRoute(id)) },
+                                onSaveDay = { sId, date -> navigateTo(Destination.SavedDayDetail.createRoute(sId, date)) },
+                                onOpenSavedDays = { sId -> navigateTo(Destination.SavedDaysForStreak.createRoute(sId)) }
+                            )
+                        }
+                        composable(
+                            route = Destination.RoutineEditor.route,
+                            arguments = listOf(navArgument("routineId") {
+                                type = NavType.LongType
+                                defaultValue = -1L
+                            })
+                        ) { backStackEntry ->
+                            val workouts by workoutViewModel.workouts.collectAsState()
+                            RoutineEditorScreen(
+                                routineId = backStackEntry.arguments?.getLong("routineId")?.takeIf { it != -1L },
+                                viewModel = streakViewModel,
+                                workouts = workouts,
                                 onDone = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings
@@ -633,6 +686,13 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onSaveDay = { sId, date ->
                                     navigateTo(Destination.SavedDayDetail.createRoute(sId, date))
+                                },
+                                onEdit = { s ->
+                                    val routineId = s.routineId
+                                    navigateTo(
+                                        if (routineId != null) Destination.RoutineEditor.createRoute(routineId)
+                                        else Destination.StreakEditor.createRoute(s.id)
+                                    )
                                 }
                             )
                         }

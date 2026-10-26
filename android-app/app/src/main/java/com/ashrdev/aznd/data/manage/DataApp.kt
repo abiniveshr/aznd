@@ -9,7 +9,7 @@ enum class DataApp(
         "workouts", "Workouts",
         listOf("workout", "custom_exercise", "muscle_stats", "exercise_", "session_detail")
     ),
-    STREAKS("streaks", "Streaks", listOf("streak", "saved_day")),
+    STREAKS("streaks", "Routines", listOf("streak", "saved_day", "routine")),
     BODY("body", "Body", listOf("body")),
     MACROS("macros", "Macros", listOf("macro"));
 

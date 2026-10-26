@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.ashrdev.aznd.domain.streaks.TrackMode
 
 @Entity(tableName = "streaks")
 data class StreakEntity(
@@ -19,7 +20,12 @@ data class StreakEntity(
     @ColumnInfo(defaultValue = "'10,25,50,100,200,300,400,500,1000'")
     val milestones: String = DEFAULT_MILESTONES_CSV,
     // The wide photo at the top of the streak's Details page (16:9 crop). Separate from the logo.
-    val bannerUri: String? = null
+    val bannerUri: String? = null,
+    @ColumnInfo(defaultValue = "'manual_break'")
+    val trackMode: String = TrackMode.AUTO.id,
+    @ColumnInfo(defaultValue = "0")
+    val milestoneAlerts: Boolean = false,
+    val routineId: Long? = null
 )
 
 @Entity(
@@ -56,4 +62,22 @@ data class StreakSavedDayEntity(
     val photoUri: String? = null,
     val streakCountAtSave: Int = 0,
     val savedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "streak_checkins",
+    foreignKeys = [ForeignKey(
+        entity = StreakEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["streakId"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["streakId", "date"], unique = true)]
+)
+data class StreakCheckInEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val streakId: Long,
+    val date: String,
+    @ColumnInfo(defaultValue = "0")
+    val at: Long = 0
 )

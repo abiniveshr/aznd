@@ -21,12 +21,15 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *  |     |                                                 which has "Add custom exercise" -> CustomExerciseForm)
  *  |     |- Stats page: a workout ---------------------- WorkoutStats (pager: Stats | Exercises; exercise menu on the 2nd)
  *  |     '- session in progress ------------------------- WorkoutSession
- *  |- Streaks (pager: Discipline | Streaks | New) ------- Streaks
+ *  |- Routines (pager: Discipline | Routines | Streaks) -- Routines
+ *  |     |- Routines page: a routine -------------------- RoutineDetail (pager: Progress | Details | Calendar; top bar Edit -- RoutineEditor)
+ *  |     |- Routines page: Add routine ------------------ RoutineEditor (pager: Image | Routine | Goals)
  *  |     |- Streaks page: a streak ---------------------- StreakDetail (pager: Progress | Details | Calendar)
+ *  |     |                                                   |- top bar Edit -- StreakEditor (or RoutineEditor for a routine's streak)
  *  |     |                                                   |- Details page: Saved days -- SavedDaysForStreak -- SavedDayDetail
  *  |     |                                                   '- Details page: Save today -- SavedDayDetail
- *  |     |- Discipline page: placeholder (level system to come)
- *  |     '- New page: create a streak in place (Dashboard's add button -> StreakEditor, same form)
+ *  |     |- Streaks page: Add streak -------------------- StreakEditor (pager: Images | Streak | Goals)
+ *  |     '- Discipline page: placeholder (level system to come)
  *  |- Macros (pager: Graphs | Today | Edit) ------------- Macro
  *  |- Body (pager: Measurements | Strength | Composition) - Body
  *  |                     '- Strength page: a muscle ---- MuscleStats
@@ -98,7 +101,13 @@ sealed class Destination(val route: String) {
             "flex/$preset?a=$a&b=$b&s=$s"
     }
 
-    object Streaks : Destination("streaks")
+    object Routines : Destination("routines")
+    object RoutineDetail : Destination("routine_detail/{routineId}") {
+        fun createRoute(routineId: Long) = "routine_detail/$routineId"
+    }
+    object RoutineEditor : Destination("routine_editor?routineId={routineId}") {
+        fun createRoute(routineId: Long = -1L) = "routine_editor?routineId=$routineId"
+    }
     object Macro : Destination("macro")
     object Body : Destination("body")
     object BodyPage : Destination("body_page/{page}") {
@@ -114,7 +123,9 @@ sealed class Destination(val route: String) {
     object BodyCompositionHistory : Destination("body_history_composition/{metric}") {
         fun createRoute(metric: CompositionMetric) = "body_history_composition/${metric.routeId}"
     }
-    object StreakEditor : Destination("streak_editor")
+    object StreakEditor : Destination("streak_editor?streakId={streakId}") {
+        fun createRoute(streakId: Long = -1L) = "streak_editor?streakId=$streakId"
+    }
     object StreakDetail : Destination("streak_detail/{streakId}") {
         fun createRoute(streakId: Long) = "streak_detail/$streakId"
     }

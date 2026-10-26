@@ -38,7 +38,7 @@ private data class ModuleEntry(
 // To add a module (nutrition, runs, sleep ...), add one line here.
 private val modules = listOf(
     ModuleEntry("Workouts", "Routines and sessions", Icons.Default.FitnessCenter, Destination.Workouts.route),
-    ModuleEntry("Streaks", "Habits and calendars", Icons.Default.LocalFireDepartment, Destination.Streaks.route),
+    ModuleEntry("Routines", "Routines, streaks and check-ins", Icons.Default.LocalFireDepartment, Destination.Routines.route),
     ModuleEntry("Macros", "Calories and macros", Icons.Default.Restaurant, Destination.Macro.route),
     ModuleEntry("Body", "Strength, tape, composition", Icons.Default.Straighten, Destination.Body.route)
 )

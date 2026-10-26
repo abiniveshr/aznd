@@ -59,7 +59,7 @@ object DashboardTargets {
     fun route(w: DashWidget, data: DashboardData): String = when (w.type) {
         DashWidgetType.CALORIES -> Destination.Macro.route
         DashWidgetType.STREAK -> data.streakFor(w)?.let { Destination.StreakDetail.createRoute(it.streak.id) }
-            ?: if (w.streakId >= 0) Destination.Streaks.route else Destination.StreakEditor.route
+            ?: if (w.streakId >= 0) Destination.Routines.route else Destination.StreakEditor.createRoute()
         DashWidgetType.LATEST_WORKOUT -> data.sessions.firstOrNull()?.let { Destination.SessionDetail.createRoute(it.session.id) }
             ?: Destination.Workouts.route
         DashWidgetType.GRAPH -> Destination.DashboardGraph.createRoute(w.id)
@@ -73,8 +73,8 @@ object DashboardTargets {
         DashShortcut.WORKOUTS -> Destination.Workouts.route
         DashShortcut.ROUTINE -> if (data.workoutName(w.workoutId) != null) Destination.WorkoutDetail.createRoute(w.workoutId) else Destination.Workouts.route
         DashShortcut.WORKOUT_HISTORY -> Destination.WorkoutHistoryList.route
-        DashShortcut.STREAKS -> Destination.Streaks.route
-        DashShortcut.NEW_STREAK -> Destination.StreakEditor.route
+        DashShortcut.STREAKS -> Destination.Routines.route
+        DashShortcut.NEW_STREAK -> Destination.StreakEditor.createRoute()
         DashShortcut.SAVED_DAYS -> Destination.SavedDays.route
         DashShortcut.MACROS -> Destination.Macro.route
         DashShortcut.BODY -> Destination.Body.route

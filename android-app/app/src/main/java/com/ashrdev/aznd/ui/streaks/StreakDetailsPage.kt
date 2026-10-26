@@ -2,24 +2,20 @@ package com.ashrdev.aznd.ui.streaks
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -33,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ashrdev.aznd.data.streaks.StreakEntity
+import com.ashrdev.aznd.domain.streaks.BrokenStats
 import com.ashrdev.aznd.domain.streaks.StreakStats
 import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.components.Card
@@ -40,61 +37,54 @@ import com.ashrdev.aznd.ui.components.Card
 private fun days(n: Int) = "$n day${if (n == 1) "" else "s"}"
 
 /**
- * Centre page of the streak screen: banner photo, icon + name + day count, key numbers, the next
- * milestone, and Delete at the very bottom. (Save today / Log a slip / Saved days are on Calendar.)
+ * Centre page of the streak screen: banner photo, icon + name + day count, key numbers and the next
+ * milestone, which takes whatever room is left so the page is full. (Edit and Delete are in the top
+ * bar; day actions are on Calendar.)
  */
 @Composable
 fun StreakDetailsPage(
     streak: StreakEntity,
     stats: StreakStats,
+    broken: BrokenStats,
     hasMilestones: Boolean,
     bottomPadding: Dp,
     onPickBanner: () -> Unit,
-    onRemoveBanner: () -> Unit,
-    onPickLogo: () -> Unit,
-    onDelete: () -> Unit
+    onPickLogo: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        StreakBannerCard(
-            bannerUri = streak.bannerUri,
-            onPick = onPickBanner,
-            onRemove = onRemoveBanner
-        )
-        StreakIdentityCard(streak = streak, count = stats.current, onLogoClick = onPickLogo)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    val scroll = rememberScrollState()
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val roomy = maxHeight >= ROOMY_HEIGHT
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (roomy) Modifier else Modifier.verticalScroll(scroll))
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            StatTile(
-                label = "Times broken",
-                value = if (stats.timesBroken == 1) "1 time" else "${stats.timesBroken} times",
-                modifier = Modifier.weight(1f)
-            )
-            StatTile(
-                label = "Longest streak",
-                value = days(stats.longest),
-                modifier = Modifier.weight(1f)
-            )
-        }
+            StreakBannerCard(bannerUri = streak.bannerUri, onPick = onPickBanner)
+            StreakIdentityCard(streak = streak, count = stats.current, onLogoClick = onPickLogo)
 
-        MilestoneCard(stats = stats, hasMilestones = hasMilestones)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatTile(
+                    label = "Times broken",
+                    value = if (broken.events == 1) "1 time" else "${broken.events} times",
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    label = "Longest streak",
+                    value = days(stats.longest),
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
-        Spacer(modifier = Modifier.height(4.dp))
-        TextButton(
-            onClick = onDelete,
-            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Delete, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Delete streak")
+            MilestoneCard(
+                stats = stats,
+                hasMilestones = hasMilestones,
+                modifier = if (roomy) Modifier.weight(1f) else Modifier.heightIn(min = MILESTONE_MIN_HEIGHT)
+            )
         }
     }
 }
@@ -114,29 +104,29 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean) {
+private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, modifier: Modifier = Modifier) {
     val next = stats.nextMilestone
     val date = stats.nextMilestoneDate
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
         ) {
             Text(
                 "Upcoming milestone",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (next != null && date != null) {
-                Text(days(next), style = MaterialTheme.typography.titleLarge)
-                Text(displayDate(date), style = MaterialTheme.typography.bodyMedium)
+                Text(days(next), style = MaterialTheme.typography.displaySmall)
+                Text(displayDate(date), style = MaterialTheme.typography.bodyLarge)
                 MilestoneProgressBar(
                     previous = stats.previousMilestone,
                     next = next,
                     current = stats.current,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 20.dp)
                 )
             } else {
                 Text(
@@ -149,6 +139,8 @@ private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean) {
 }
 
 private const val BAR_PARTS = 10
+private val ROOMY_HEIGHT = 560.dp
+private val MILESTONE_MIN_HEIGHT = 200.dp
 
 /**
  * The stretch from the previous milestone to the next, cut into [BAR_PARTS] equal parts. The day

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -28,6 +29,30 @@ interface StreakDao {
 
     @Query("DELETE FROM streaks WHERE id = :id")
     suspend fun deleteStreak(id: Long)
+
+    @Update
+    suspend fun updateStreak(streak: StreakEntity)
+
+    @Query("SELECT * FROM streaks ORDER BY name")
+    suspend fun getStreaksOnce(): List<StreakEntity>
+
+    @Query("SELECT * FROM streaks WHERE routineId = :routineId LIMIT 1")
+    suspend fun streakForRoutine(routineId: Long): StreakEntity?
+
+    @Query("SELECT * FROM streak_breaks")
+    suspend fun getAllBreaksOnce(): List<StreakBreakEntity>
+
+    @Query("SELECT * FROM streak_checkins")
+    fun getAllCheckIns(): Flow<List<StreakCheckInEntity>>
+
+    @Query("SELECT * FROM streak_checkins")
+    suspend fun getAllCheckInsOnce(): List<StreakCheckInEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCheckIn(entity: StreakCheckInEntity)
+
+    @Query("DELETE FROM streak_checkins WHERE streakId = :streakId AND date = :date")
+    suspend fun deleteCheckIn(streakId: Long, date: String)
 
     @Query("SELECT * FROM streak_breaks")
     fun getAllBreaks(): Flow<List<StreakBreakEntity>>

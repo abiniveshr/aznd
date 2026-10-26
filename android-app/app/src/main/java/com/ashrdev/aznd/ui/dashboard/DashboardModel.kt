@@ -45,9 +45,9 @@ enum class DashModel(val id: String, val label: String) {
 
 enum class DashShortcut(val id: String, val label: String) {
     WORKOUTS("workouts", "Workouts"),
-    ROUTINE("routine", "Routine"),
+    ROUTINE("routine", "Workout routine"),
     WORKOUT_HISTORY("workout_history", "Workout history"),
-    STREAKS("streaks", "Streaks"),
+    STREAKS("streaks", "Routines"),
     NEW_STREAK("new_streak", "New streak"),
     SAVED_DAYS("saved_days", "Saved days"),
     MACROS("macros", "Macros"),

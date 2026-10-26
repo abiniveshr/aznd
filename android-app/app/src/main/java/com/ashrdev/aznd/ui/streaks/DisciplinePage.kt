@@ -17,7 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Placeholder for the discipline level system (left page of the Streaks pager). */
+/** Placeholder for the discipline level system (left page of the Routines pager). */
 @Composable
 fun DisciplinePage(bottomPadding: Dp) {
     Column(

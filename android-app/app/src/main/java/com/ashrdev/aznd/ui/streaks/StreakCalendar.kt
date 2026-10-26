@@ -91,7 +91,7 @@ fun StreakCalendarLegend(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            "\u25CF red dot: slip    filled day: saved",
+            "\u25CF red dot: break    filled day: saved",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp)

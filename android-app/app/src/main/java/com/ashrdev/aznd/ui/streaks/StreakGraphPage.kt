@@ -36,8 +36,8 @@ fun StreakGraphPage(stats: StreakStats, milestones: List<Int>, bottomPadding: Dp
         StatsGraph(
             modes = modes,
             title = "Streak",
-            footnote = "The line climbs a day at a time and drops to zero on a slip. " +
-                "Brighter points are milestones, darker ones are slips."
+            footnote = "The line climbs a day at a time and drops to zero when the streak breaks. " +
+                "Brighter points are milestones, darker ones are breaks."
         )
     }
 }
@@ -61,7 +61,7 @@ fun streakGraphModes(stats: StreakStats, milestones: List<Int>): List<GraphMode>
                 progress.add(GraphPoint(t, before.toDouble(), detail = "Streak ended", valueText = dayText(before)))
             }
             progress.add(
-                GraphPoint(t, 0.0, detail = "Slip: streak reset", valueText = dayText(0), tint = PointTint.BELOW)
+                GraphPoint(t, 0.0, detail = "Streak broken", valueText = dayText(0), tint = PointTint.BELOW)
             )
         } else if (count in milestoneSet) {
             progress.add(

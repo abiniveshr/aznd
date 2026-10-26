@@ -5,6 +5,7 @@ import com.ashrdev.aznd.data.streaks.DEFAULT_MILESTONES_CSV
 import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
+import com.ashrdev.aznd.domain.streaks.TrackMode
 import com.ashrdev.aznd.ui.common.DayRange
 import org.json.JSONArray
 import org.json.JSONObject
@@ -16,7 +17,7 @@ class StreaksModule(
     override val id = "streaks"
     override val app = DataApp.STREAKS
     override val title = "Streaks"
-    override val description = "Your streaks with their start dates, slips, milestones and quotes"
+    override val description = "Your streaks with their start dates, breaks, milestones and quotes"
     override val unit = "streaks"
     override val deleteNote = "Their saved days are deleted with them."
     override val canExport = true
@@ -45,6 +46,7 @@ class StreaksModule(
                         .put("startDate", s.startDate)
                         .put("quote", s.quote)
                         .put("milestones", s.milestones)
+                        .put("trackMode", s.trackMode)
                         .put("breaks", JSONArray(breaks[s.id].orEmpty().map { it.date }))
                 }
             )
@@ -67,7 +69,8 @@ class StreaksModule(
                     name = name,
                     startDate = startDate,
                     quote = s.stringOrNull("quote"),
-                    milestones = s.stringOrNull("milestones") ?: DEFAULT_MILESTONES_CSV
+                    milestones = s.stringOrNull("milestones") ?: DEFAULT_MILESTONES_CSV,
+                    trackMode = TrackMode.fromId(s.stringOrNull("trackMode")).id
                 )
             )
             if (existing == null) added++ else skipped++

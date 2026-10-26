@@ -23,6 +23,14 @@ import com.ashrdev.aznd.data.macro.MIGRATION_14_15
 import com.ashrdev.aznd.data.macro.MIGRATION_15_16
 import com.ashrdev.aznd.data.streaks.MIGRATION_18_19
 import com.ashrdev.aznd.data.streaks.MIGRATION_19_20
+import com.ashrdev.aznd.data.streaks.StreakCheckInEntity
+import com.ashrdev.aznd.data.routines.MIGRATION_20_21
+import com.ashrdev.aznd.data.routines.MIGRATION_21_22
+import com.ashrdev.aznd.data.routines.ReminderDao
+import com.ashrdev.aznd.data.routines.ReminderEntity
+import com.ashrdev.aznd.data.routines.RoutineDao
+import com.ashrdev.aznd.data.routines.RoutineEntity
+import com.ashrdev.aznd.data.routines.RoutineLogEntity
 import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
@@ -66,6 +74,10 @@ import java.util.Locale
         StreakEntity::class,
         StreakBreakEntity::class,
         StreakSavedDayEntity::class,
+        StreakCheckInEntity::class,
+        RoutineEntity::class,
+        RoutineLogEntity::class,
+        ReminderEntity::class,
         Exercise::class,
         TemplateSet::class,
         LoggedSession::class,
@@ -75,7 +87,7 @@ import java.util.Locale
         FoodEntry::class,
         Ingredient::class
     ],
-    version = 20
+    version = 22
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -88,6 +100,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun foodDao(): FoodDao
     abstract fun ingredientDao(): IngredientDao
     abstract fun manageDao(): ManageDao
+    abstract fun routineDao(): RoutineDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -98,7 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aznd.db"
-                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
+                ).addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
                     .fallbackToDestructiveMigration(true)
                     .addCallback(object : Callback() {
                         // Runs on every open, before the first query: the old single "SHOULDERS"

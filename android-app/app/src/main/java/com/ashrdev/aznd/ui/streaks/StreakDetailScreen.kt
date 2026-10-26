@@ -2,27 +2,15 @@ package com.ashrdev.aznd.ui.streaks
 
 import android.app.DatePickerDialog
 import android.widget.Toast
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import com.ashrdev.aznd.domain.streaks.StreakStats
-import com.ashrdev.aznd.domain.streaks.computeCurrentStreak
-import com.ashrdev.aznd.domain.streaks.computeStreakStats
-import com.ashrdev.aznd.domain.streaks.dateKey
-import com.ashrdev.aznd.domain.streaks.displayDate
-import com.ashrdev.aznd.domain.streaks.todayKey
-import com.ashrdev.aznd.ui.components.AlertDialog
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,43 +22,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.StreakEntity
-import com.ashrdev.aznd.data.streaks.parseMilestones
-import com.ashrdev.aznd.ui.calendar.CalendarState
-import com.ashrdev.aznd.ui.calendar.rememberCalendarState
-import com.ashrdev.aznd.ui.common.BarPage
-import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.domain.streaks.TrackMode
+import com.ashrdev.aznd.domain.streaks.dateKey
+import com.ashrdev.aznd.domain.streaks.todayKey
 import com.ashrdev.aznd.ui.common.rememberImagePicker
-import com.ashrdev.aznd.ui.common.rememberSubPageBar
+import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import java.util.Calendar
 
-private const val PAGE_GRAPH = 0
-private const val PAGE_DETAILS = 1
-private const val PAGE_CALENDAR = 2
-
-private val DetailPages = listOf(
-    BarPage("Progress", Icons.Default.BarChart),
-    BarPage("Details", Icons.Default.LocalFireDepartment),
-    BarPage("Calendar", Icons.Default.DateRange)
-)
-
-private val slipPhrases = listOf(
+private val breakPhrases = listOf(
     "Do not worry, we start again",
     "Get back up",
     "On your feet soldier"
 )
 
 /**
- * One streak: three swipeable pages, opening on the middle one.
- *   Progress | Details | Calendar
- *  - Details: banner photo (Add photo), icon + name + day count (tap the icon to change it), times
- *    broken, longest streak, upcoming milestone, Delete.
- *  - Progress (swipe left): the app's shared graph, fed with this streak's history.
- *  - Calendar (swipe right): the streak calendar with milestones marked, plus Save today,
- *    Log a slip and Saved days.
+ * One streak, in the shared [TrackedDetailScreen]: Progress | Details | Calendar, opening on Details.
+ * Top bar: Edit and Delete. The calendar has Save today, Break streak (automatic check-in) or
+ * Check in (manual check-in), and Saved days.
  */
 @Composable
 fun StreakDetailScreen(
@@ -80,23 +51,19 @@ fun StreakDetailScreen(
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSavedDays: () -> Unit,
-    onSaveDay: (Long, String) -> Unit
+    onSaveDay: (Long, String) -> Unit,
+    onEdit: (StreakEntity) -> Unit
 ) {
     val context = LocalContext.current
     var streak by remember { mutableStateOf<StreakEntity?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
-    var tappedDate by remember { mutableStateOf<String?>(null) }
-    val pagerState = rememberPagerState(initialPage = PAGE_DETAILS) { DetailPages.size }
-    val subPages = rememberSubPageBar(pagerState, DetailPages)
-    val calendarState = rememberCalendarState()
 
     LaunchedEffect(streakId) {
         streak = viewModel.getStreak(streakId)
         loaded = true
     }
 
-    // The icon (square) and the banner photo (wide) each have their own picker and column.
     val logoPicker = rememberImagePicker(
         aspect = STREAK_LOGO_ASPECT to 1f,
         outputWidth = STREAK_LOGO_PX,
@@ -118,37 +85,35 @@ fun StreakDetailScreen(
         }
     )
 
-    val breaksList by viewModel.breaksForStreak(streakId).collectAsState(initial = emptyList())
+    val track by viewModel.trackFor(streakId).collectAsState(initial = null)
     val savedDaysList by viewModel.savedDaysForStreak(streakId).collectAsState(initial = emptyList())
 
     if (!loaded) return
-    val current = streak
-    if (current == null) {
+    val loadedStreak = streak
+    if (loadedStreak == null) {
         LaunchedEffect(Unit) { onBack() }
         return
     }
-
-    val breaks = breaksList.toSet()
-    val savedDays = savedDaysList.map { it.date }.toSet()
+    val t = track ?: return
+    val current = t.streak.copy(photoUri = loadedStreak.photoUri, bannerUri = loadedStreak.bannerUri)
+    val mode = t.mode
+    val breaks = t.tracked.breaks
+    val manualBreaks = t.manualBreaks
     val today = todayKey()
-    val milestones = remember(current.milestones) { parseMilestones(current.milestones) }
-    val stats = remember(current.startDate, breaks, milestones, today) {
-        computeStreakStats(current.startDate, breaks, milestones, today)
-    }
 
-    fun markSlip(date: String) {
-        Toast.makeText(context, slipPhrases[breaksList.size % slipPhrases.size], Toast.LENGTH_SHORT).show()
+    fun breakOn(date: String) {
+        Toast.makeText(context, breakPhrases[manualBreaks.size % breakPhrases.size], Toast.LENGTH_SHORT).show()
         viewModel.markBreak(streakId, date)
     }
 
-    val logSlip: () -> Unit = {
+    val breakStreak: () -> Unit = {
         val cal = Calendar.getInstance()
         DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
                 val picked = dateKey(year, month, dayOfMonth)
                 if (picked in breaks) viewModel.unmarkBreak(streakId, picked)
-                else markSlip(picked)
+                else breakOn(picked)
             },
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
@@ -174,122 +139,49 @@ fun StreakDetailScreen(
         )
     }
 
-    tappedDate?.let { date ->
-        val inStreak = date >= current.startDate && date <= today
-        val reached = stats.reachedMilestones[date]
-        val upcoming = stats.upcomingMilestones[date]
-        val isBroken = date in breaks
-        val lines = buildList {
-            if (inStreak) {
-                val length = computeCurrentStreak(current.startDate, breaks, date)
-                add("Streak length on this day: $length day${if (length == 1) "" else "s"}")
-            }
-            if (reached != null) add("Milestone reached: $reached days")
-            if (upcoming != null) add("Milestone due: $upcoming days")
-            if (isEmpty()) add(if (date > today) "Nothing on this day yet." else "Before this streak started.")
-        }
-        AlertDialog(
-            onDismissRequest = { tappedDate = null },
-            title = { Text(displayDate(date)) },
-            text = { Column { lines.forEach { Text(it) } } },
-            confirmButton = {
-                if (inStreak) {
-                    TextButton(onClick = {
-                        if (isBroken) viewModel.unmarkBreak(streakId, date)
-                        else markSlip(date)
-                        tappedDate = null
-                    }) {
-                        Text(if (isBroken) "Undo slip" else "Mark as slip")
-                    }
-                } else {
-                    TextButton(onClick = { tappedDate = null }) { Text("Close") }
-                }
-            },
-            dismissButton = if (inStreak) {
-                { TextButton(onClick = { tappedDate = null }) { Text("Close") } }
-            } else null
-        )
-    }
-
-    ScreenScaffold(
+    TrackedDetailScreen(
         title = "Streak View",
+        streak = current,
+        track = t,
+        savedDays = savedDaysList.map { it.date }.toSet(),
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        subPages = subPages
-    ) { padding ->
-        val bottom = padding.calculateBottomPadding()
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
-            when (index) {
-                PAGE_GRAPH -> StreakGraphPage(stats = stats, milestones = milestones, bottomPadding = bottom)
-                PAGE_CALENDAR -> CalendarPage(
-                    startDate = current.startDate,
-                    breaks = breaks,
-                    savedDays = savedDays,
-                    stats = stats,
-                    state = calendarState,
-                    bottomPadding = bottom,
-                    onDayClick = { tappedDate = it },
-                    onSaveToday = { onSaveDay(streakId, today) },
-                    onLogSlip = logSlip,
-                    onOpenSavedDays = onOpenSavedDays
-                )
-                else -> StreakDetailsPage(
-                    streak = current,
-                    stats = stats,
-                    hasMilestones = milestones.isNotEmpty(),
-                    bottomPadding = bottom,
-                    onPickBanner = { bannerPicker.launch() },
-                    onRemoveBanner = {
-                        viewModel.updateStreakBanner(streakId, null)
-                        streak = current.copy(bannerUri = null)
-                    },
-                    onPickLogo = { logoPicker.launch() },
-                    onDelete = { showDelete = true }
-                )
+        topBarActions = {
+            IconButton(onClick = { onEdit(current) }) {
+                Icon(Icons.Default.Edit, contentDescription = if (current.routineId != null) "Edit routine" else "Edit streak")
             }
+            IconButton(onClick = { showDelete = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete streak", tint = MaterialTheme.colorScheme.error)
+            }
+        },
+        onPickBanner = { bannerPicker.launch() },
+        onPickLogo = { logoPicker.launch() },
+        dayAction = { date ->
+            if (mode == TrackMode.AUTO) {
+                val isBroken = date in manualBreaks
+                DayAction(if (isBroken) "Undo break" else "Break streak") {
+                    if (isBroken) viewModel.unmarkBreak(streakId, date) else breakOn(date)
+                }
+            } else {
+                val checkedIn = date in t.checkIns
+                DayAction(if (checkedIn) "Undo check-in" else "Check in") { viewModel.setCheckIn(streakId, date, !checkedIn) }
+            }
+        },
+        calendarActions = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(onClick = { onSaveDay(streakId, today) }, modifier = Modifier.weight(1f)) { Text("Save today") }
+                val check = t.check
+                if (mode == TrackMode.AUTO) {
+                    OutlinedButton(onClick = breakStreak, modifier = Modifier.weight(1f)) { Text("Break streak") }
+                } else if (check != null) {
+                    CheckInButton(check, onChange = { viewModel.setCheckIn(streakId, today, it) }, modifier = Modifier.weight(1f), outlined = true)
+                }
+            }
+            OutlinedButton(onClick = onOpenSavedDays, modifier = Modifier.fillMaxWidth()) { Text("Saved days") }
         }
-    }
-}
-
-@Composable
-private fun CalendarPage(
-    startDate: String,
-    breaks: Set<String>,
-    savedDays: Set<String>,
-    stats: StreakStats,
-    state: CalendarState,
-    bottomPadding: Dp,
-    onDayClick: (String) -> Unit,
-    onSaveToday: () -> Unit,
-    onLogSlip: () -> Unit,
-    onOpenSavedDays: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        StreakCalendar(
-            startDate = startDate,
-            breaks = breaks,
-            savedDays = savedDays,
-            reachedMilestones = stats.reachedMilestones,
-            upcomingMilestones = stats.upcomingMilestones,
-            state = state,
-            onDayClick = onDayClick,
-            modifier = Modifier.fillMaxWidth()
-        )
-        StreakCalendarLegend()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(onClick = onSaveToday, modifier = Modifier.weight(1f)) { Text("Save today") }
-            OutlinedButton(onClick = onLogSlip, modifier = Modifier.weight(1f)) { Text("Log a slip") }
-        }
-        OutlinedButton(onClick = onOpenSavedDays, modifier = Modifier.fillMaxWidth()) { Text("Saved days") }
-    }
+    )
 }

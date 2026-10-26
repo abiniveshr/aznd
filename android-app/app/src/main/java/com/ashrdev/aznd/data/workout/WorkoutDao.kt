@@ -5,12 +5,19 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ashrdev.aznd.data.routines.SessionTime
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkoutDao {
     @Query("SELECT workoutName, startedAt FROM sessions ORDER BY startedAt DESC LIMIT 1")
     suspend fun getMostRecentSession(): RecentWorkoutSession?
+
+    @Query("SELECT workoutId, startedAt FROM sessions")
+    fun observeSessionTimes(): Flow<List<SessionTime>>
+
+    @Query("SELECT workoutId, startedAt FROM sessions")
+    suspend fun sessionTimesOnce(): List<SessionTime>
     
     @Insert
     suspend fun insertWorkout(workout: WorkoutEntity): Long
