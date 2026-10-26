@@ -40,9 +40,11 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.routines.ReminderEntity
 import com.ashrdev.aznd.data.routines.RoutineEntity
 import com.ashrdev.aznd.data.streaks.DEFAULT_MILESTONES
+import com.ashrdev.aznd.data.streaks.defaultMilestonesFor
 import com.ashrdev.aznd.data.streaks.formatMilestones
 import com.ashrdev.aznd.data.streaks.parseMilestones
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
+import com.ashrdev.aznd.domain.streaks.ProgressUnit
 import com.ashrdev.aznd.domain.streaks.RoutineFrequency
 import com.ashrdev.aznd.domain.streaks.RoutineSchedule
 import com.ashrdev.aznd.domain.streaks.RoutineType
@@ -100,6 +102,20 @@ class RoutineDraft {
     var milestoneAlerts by mutableStateOf(false)
     val milestones = mutableStateListOf<Int>().apply { addAll(DEFAULT_MILESTONES) }
     val reminders = mutableStateListOf<ReminderDraft>()
+
+    val progressUnit: ProgressUnit
+        get() = RoutineSchedule(frequency, weekdays, perWeek, everyText.toIntOrNull() ?: 1, everyUnit).progressUnit
+
+    fun retuned(change: () -> Unit) {
+        val before = progressUnit
+        val wasDefault = milestones.toList() == defaultMilestonesFor(before)
+        change()
+        val after = progressUnit
+        if (after != before && wasDefault) {
+            milestones.clear()
+            milestones.addAll(defaultMilestonesFor(after))
+        }
+    }
 
     val canSave: Boolean
         get() = name.isNotBlank() &&
@@ -263,7 +279,7 @@ private fun RoutineDetailsForm(draft: RoutineDraft, workouts: List<WorkoutWithEx
             valueText = draft.frequency.label,
             options = RoutineFrequency.entries,
             optionText = { it.label },
-            onSelect = { draft.frequency = it }
+            onSelect = { f -> draft.retuned { draft.frequency = f } }
         )
         when (draft.frequency) {
             RoutineFrequency.WEEKDAYS -> {
@@ -284,7 +300,7 @@ private fun RoutineDetailsForm(draft: RoutineDraft, workouts: List<WorkoutWithEx
                     Text("Every", style = MaterialTheme.typography.titleMedium)
                     OutlinedTextField(
                         value = draft.everyText,
-                        onValueChange = { v -> if (v.length <= 3 && v.all { it.isDigit() }) draft.everyText = v },
+                        onValueChange = { v -> if (v.length <= 3 && v.all { it.isDigit() }) draft.retuned { draft.everyText = v } },
                         label = { Text("Number") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -295,7 +311,7 @@ private fun RoutineDetailsForm(draft: RoutineDraft, workouts: List<WorkoutWithEx
                         valueText = draft.everyUnit.label,
                         options = RoutineUnit.entries,
                         optionText = { it.label },
-                        onSelect = { draft.everyUnit = it },
+                        onSelect = { u -> draft.retuned { draft.everyUnit = u } },
                         modifier = Modifier.weight(1.3f)
                     )
                 }
@@ -338,7 +354,7 @@ private fun RoutineGoalsPage(draft: RoutineDraft, bottomPadding: Dp) {
                 else -> draft.trackMode.blurb
             }
         )
-        MilestonesEditor(draft.milestones, enabled = draft.trackAsStreak)
+        MilestonesEditor(draft.milestones, enabled = draft.trackAsStreak, unit = draft.progressUnit)
         NotificationsEditor(
             milestoneAlerts = draft.milestoneAlerts,
             onMilestoneAlerts = { draft.milestoneAlerts = it },

@@ -1,6 +1,5 @@
 package com.ashrdev.aznd.ui.routines
 
-import com.ashrdev.aznd.data.routines.routineType
 import com.ashrdev.aznd.data.routines.schedule
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,15 +36,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.streaks.nextMilestone
 import com.ashrdev.aznd.data.streaks.parseMilestones
-import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.domain.streaks.RoutineFrequency
-import com.ashrdev.aznd.domain.streaks.RoutineType
 import com.ashrdev.aznd.domain.streaks.todayKey
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.streaks.CheckInButton
+import com.ashrdev.aznd.ui.streaks.CheckInBox
 import com.ashrdev.aznd.ui.streaks.DisciplinePage
 import com.ashrdev.aznd.ui.streaks.RoutineStatus
 import com.ashrdev.aznd.ui.streaks.StreakLogo
@@ -66,7 +63,6 @@ private val RoutinesPages = listOf(
 @Composable
 fun RoutinesScreen(
     viewModel: StreakViewModel,
-    workouts: List<WorkoutWithExercises>,
     onOpenStreak: (Long) -> Unit,
     onAddStreak: () -> Unit,
     onOpenRoutine: (Long) -> Unit,
@@ -105,7 +101,6 @@ fun RoutinesScreen(
                 )
                 else -> RoutineListPage(
                     routines = routines,
-                    workouts = workouts,
                     bottomPadding = bottom,
                     onOpen = onOpenRoutine,
                     onOpenStreak = onOpenStreak,
@@ -143,7 +138,6 @@ private fun AddRow(label: String, hint: String?, onClick: () -> Unit) {
 @Composable
 private fun RoutineListPage(
     routines: List<RoutineStatus>,
-    workouts: List<WorkoutWithExercises>,
     bottomPadding: Dp,
     onOpen: (Long) -> Unit,
     onOpenStreak: (Long) -> Unit,
@@ -158,7 +152,6 @@ private fun RoutineListPage(
         items(routines, key = { it.routine.id }) { item ->
             RoutineCard(
                 item = item,
-                workoutName = workouts.firstOrNull { it.workout.id == item.routine.workoutId }?.workout?.name,
                 onClick = { onOpen(item.routine.id) },
                 onOpenStreak = onOpenStreak,
                 onToggleDone = { onToggleDone(item, it) }
@@ -172,12 +165,6 @@ private fun RoutineListPage(
             )
         }
     }
-}
-
-private fun typeLine(item: RoutineStatus, workoutName: String?): String {
-    val r = item.routine
-    val type = if (r.routineType == RoutineType.WORKOUT && workoutName != null) workoutName else r.routineType.label
-    return "$type · ${r.schedule.label()}"
 }
 
 private fun statusLine(item: RoutineStatus, done: Boolean): String {
@@ -194,7 +181,6 @@ private fun statusLine(item: RoutineStatus, done: Boolean): String {
 @Composable
 private fun RoutineCard(
     item: RoutineStatus,
-    workoutName: String?,
     onClick: () -> Unit,
     onOpenStreak: (Long) -> Unit,
     onToggleDone: (Boolean) -> Unit
@@ -211,20 +197,10 @@ private fun RoutineCard(
             Column(Modifier.weight(1f)) {
                 Text(r.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    typeLine(item, workoutName),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
                     statusLine(item, done),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (item.manual) {
-                    CheckInButton(item.info, onChange = onToggleDone, modifier = Modifier.padding(top = 6.dp))
-                }
             }
             val streak = item.streak
             if (streak != null) {
@@ -235,6 +211,10 @@ private fun RoutineCard(
                     Text("${streak.currentStreak}", style = MaterialTheme.typography.titleLarge)
                     Text(if (streak.currentStreak == 1) "day" else "days", style = MaterialTheme.typography.labelSmall)
                 }
+            }
+            if (item.manual) {
+                Spacer(Modifier.width(8.dp))
+                CheckInBox(item.info, onChange = onToggleDone)
             }
         }
     }
@@ -301,9 +281,9 @@ private fun StreakCard(item: StreakWithCount, onClick: () -> Unit, onCheckIn: (B
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item.check?.let { check ->
-                    CheckInButton(check, onChange = onCheckIn, modifier = Modifier.padding(top = 6.dp))
-                }
+            }
+            item.check?.let { check ->
+                CheckInBox(check, onChange = onCheckIn)
             }
             Spacer(Modifier.width(12.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

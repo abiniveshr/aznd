@@ -50,8 +50,10 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.routines.ReminderEntity
 import com.ashrdev.aznd.data.streaks.DEFAULT_MILESTONES
 import com.ashrdev.aznd.data.streaks.StreakEntity
+import com.ashrdev.aznd.data.streaks.defaultMilestonesFor
 import com.ashrdev.aznd.data.streaks.formatMilestones
 import com.ashrdev.aznd.data.streaks.parseMilestones
+import com.ashrdev.aznd.domain.streaks.ProgressUnit
 import com.ashrdev.aznd.domain.streaks.TrackMode
 import com.ashrdev.aznd.domain.streaks.Weekdays
 import com.ashrdev.aznd.domain.streaks.dateKey
@@ -230,19 +232,19 @@ fun TrackModeOptions(selected: TrackMode, onSelect: (TrackMode) -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MilestonesEditor(milestones: SnapshotStateList<Int>, enabled: Boolean = true) {
+fun MilestonesEditor(milestones: SnapshotStateList<Int>, enabled: Boolean = true, unit: ProgressUnit = ProgressUnit.DAYS) {
     var input by remember { mutableStateOf("") }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        SectionTitle("Milestones (days)")
+        SectionTitle("Milestones (${unit.plural})")
         TextButton(
             enabled = enabled,
             onClick = {
                 milestones.clear()
-                milestones.addAll(DEFAULT_MILESTONES)
+                milestones.addAll(defaultMilestonesFor(unit))
             }
         ) { Text("Reset to default") }
     }

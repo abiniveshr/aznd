@@ -610,10 +610,8 @@ class MainActivity : ComponentActivity() {
 
                         // ---- Routines ----
                         composable(Destination.Routines.route) {
-                            val workouts by workoutViewModel.workouts.collectAsState()
                             RoutinesScreen(
                                 viewModel = streakViewModel,
-                                workouts = workouts,
                                 onOpenStreak = { id -> navigateTo(Destination.StreakDetail.createRoute(id)) },
                                 onAddStreak = { navigateTo(Destination.StreakEditor.createRoute()) },
                                 onOpenRoutine = { id -> navigateTo(Destination.RoutineDetail.createRoute(id)) },

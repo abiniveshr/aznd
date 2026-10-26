@@ -116,7 +116,8 @@ fun StreakIdentityCard(
     streak: StreakEntity,
     count: Int,
     onLogoClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    countText: String? = null
 ) {
     val quote = streak.quote?.takeIf { it.isNotBlank() }
     Card(modifier = modifier.fillMaxWidth()) {
@@ -135,7 +136,7 @@ fun StreakIdentityCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(streak.name, style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "$count day${if (count == 1) "" else "s"}",
+                    countText ?: "$count day${if (count == 1) "" else "s"}",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

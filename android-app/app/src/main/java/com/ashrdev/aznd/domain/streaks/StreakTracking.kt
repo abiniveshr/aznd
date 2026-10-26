@@ -66,6 +66,25 @@ object Weekdays {
     }
 }
 
+enum class ProgressUnit(val singular: String, val plural: String, val daysPer: Double) {
+    DAYS("day", "days", 1.0),
+    WEEKS("week", "weeks", 7.0),
+    MONTHS("month", "months", 365.25 / 12);
+
+    fun toDays(n: Int): Int = Math.round(n * daysPer).toInt().coerceAtLeast(1)
+
+    fun completed(days: Int): Int {
+        var n = Math.floor(days / daysPer).toInt().coerceAtLeast(0)
+        while (toDays(n + 1) <= days) n++
+        while (n > 0 && toDays(n) > days) n--
+        return n
+    }
+
+    fun label(n: Int): String = "$n ${if (n == 1) singular else plural}"
+
+    fun describeDays(days: Int): String = label(completed(days))
+}
+
 class PeriodState(val perDay: Boolean, val done: Boolean)
 
 class RoutineSchedule(
@@ -98,6 +117,17 @@ class RoutineSchedule(
             RoutineFrequency.WEEKDAYS -> weekdays == 0 || weekdays == Weekdays.ALL
             RoutineFrequency.PER_WEEK -> false
             RoutineFrequency.CUSTOM -> !subDay && customDaily
+        }
+
+    val progressUnit: ProgressUnit
+        get() = when (frequency) {
+            RoutineFrequency.PER_WEEK -> ProgressUnit.WEEKS
+            RoutineFrequency.CUSTOM -> when (unit) {
+                RoutineUnit.WEEKS -> ProgressUnit.WEEKS
+                RoutineUnit.MONTHS -> ProgressUnit.MONTHS
+                else -> ProgressUnit.DAYS
+            }
+            else -> ProgressUnit.DAYS
         }
 
     fun label(): String = when (frequency) {

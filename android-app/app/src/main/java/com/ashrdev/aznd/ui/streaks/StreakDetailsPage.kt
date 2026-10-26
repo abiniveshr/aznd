@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.domain.streaks.BrokenStats
+import com.ashrdev.aznd.domain.streaks.ProgressUnit
 import com.ashrdev.aznd.domain.streaks.StreakStats
 import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.components.Card
@@ -49,7 +50,9 @@ fun StreakDetailsPage(
     hasMilestones: Boolean,
     bottomPadding: Dp,
     onPickBanner: () -> Unit,
-    onPickLogo: () -> Unit
+    onPickLogo: () -> Unit,
+    unit: ProgressUnit = ProgressUnit.DAYS,
+    missed: Int? = null
 ) {
     val scroll = rememberScrollState()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -62,27 +65,41 @@ fun StreakDetailsPage(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             StreakBannerCard(bannerUri = streak.bannerUri, onPick = onPickBanner)
-            StreakIdentityCard(streak = streak, count = stats.current, onLogoClick = onPickLogo)
+            StreakIdentityCard(
+                streak = streak,
+                count = stats.current,
+                onLogoClick = onPickLogo,
+                countText = if (unit == ProgressUnit.DAYS) null else unit.describeDays(stats.current)
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            if (missed != null) {
                 StatTile(
-                    label = "Times broken",
-                    value = if (broken.events == 1) "1 time" else "${broken.events} times",
-                    modifier = Modifier.weight(1f)
+                    label = "Times missed",
+                    value = if (missed == 1) "1 time" else "$missed times",
+                    modifier = Modifier.fillMaxWidth()
                 )
-                StatTile(
-                    label = "Longest streak",
-                    value = days(stats.longest),
-                    modifier = Modifier.weight(1f)
-                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatTile(
+                        label = "Times broken",
+                        value = if (broken.events == 1) "1 time" else "${broken.events} times",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatTile(
+                        label = "Longest streak",
+                        value = days(stats.longest),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             MilestoneCard(
                 stats = stats,
                 hasMilestones = hasMilestones,
+                unit = unit,
                 modifier = if (roomy) Modifier.weight(1f) else Modifier.heightIn(min = MILESTONE_MIN_HEIGHT)
             )
         }
@@ -104,7 +121,7 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, modifier: Modifier = Modifier) {
+private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, unit: ProgressUnit, modifier: Modifier = Modifier) {
     val next = stats.nextMilestone
     val date = stats.nextMilestoneDate
     Card(modifier = modifier.fillMaxWidth()) {
@@ -120,12 +137,13 @@ private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, modifier: 
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (next != null && date != null) {
-                Text(days(next), style = MaterialTheme.typography.displaySmall)
+                Text(unit.describeDays(next), style = MaterialTheme.typography.displaySmall)
                 Text(displayDate(date), style = MaterialTheme.typography.bodyLarge)
                 MilestoneProgressBar(
                     previous = stats.previousMilestone,
                     next = next,
                     current = stats.current,
+                    unit = unit,
                     modifier = Modifier.padding(top = 20.dp)
                 )
             } else {
@@ -152,6 +170,7 @@ private fun MilestoneProgressBar(
     previous: Int,
     next: Int,
     current: Int,
+    unit: ProgressUnit,
     modifier: Modifier = Modifier
 ) {
     val measurer = rememberTextMeasurer()
@@ -162,6 +181,10 @@ private fun MilestoneProgressBar(
     val markerStyle = TextStyle(fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
     val span = (next - previous).coerceAtLeast(1)
     val fraction = ((current - previous).toFloat() / span).coerceIn(0f, 1f)
+    val previousUnits = unit.completed(previous)
+    val nextUnits = unit.completed(next)
+    val currentUnits = unit.completed(current)
+    val unitSpan = nextUnits - previousUnits
 
     Canvas(
         modifier = modifier
@@ -180,7 +203,13 @@ private fun MilestoneProgressBar(
         // Day count at every other boundary, above the bar.
         for (k in 0..BAR_PARTS step 2) {
                 val x = barLeft + barW * k / BAR_PARTS
-                val value = Math.round(previous + span * k / BAR_PARTS.toDouble()).toInt()
+                val value = when {
+                    unit == ProgressUnit.DAYS -> Math.round(previous + span * k / BAR_PARTS.toDouble()).toInt()
+                    unitSpan >= BAR_PARTS -> Math.round(previousUnits + unitSpan * k / BAR_PARTS.toDouble()).toInt()
+                    k == 0 -> previousUnits
+                    k == BAR_PARTS -> nextUnits
+                    else -> continue
+                }
                 val layout = measurer.measure(value.toString(), labelStyle)
                 val labelX = (x - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
                 drawText(layout, topLeft = Offset(labelX, barTop - 4.dp.toPx() - layout.size.height))
@@ -210,7 +239,7 @@ private fun MilestoneProgressBar(
         val markerY = barTop + barH / 2f
         drawCircle(divider, radius = 9.dp.toPx(), center = Offset(markerX, markerY))
         drawCircle(primary, radius = 6.5.dp.toPx(), center = Offset(markerX, markerY))
-        val markerLayout = measurer.measure("$current/$next", markerStyle)
+        val markerLayout = measurer.measure(if (unit == ProgressUnit.DAYS) "$current/$next" else "$currentUnits/$nextUnits", markerStyle)
         val markerTextX = (markerX - markerLayout.size.width / 2f)
             .coerceIn(0f, size.width - markerLayout.size.width)
         drawText(markerLayout, topLeft = Offset(markerTextX, markerY + 12.dp.toPx()))

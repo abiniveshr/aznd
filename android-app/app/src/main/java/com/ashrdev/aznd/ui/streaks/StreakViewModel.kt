@@ -17,6 +17,7 @@ import com.ashrdev.aznd.data.streaks.StreakCheckInEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.data.streaks.StreakSavedDayEntity
+import com.ashrdev.aznd.data.streaks.milestonesInDays
 import com.ashrdev.aznd.domain.streaks.CheckInfo
 import com.ashrdev.aznd.domain.streaks.StreakTracking
 import com.ashrdev.aznd.domain.streaks.TrackMode
@@ -139,7 +140,7 @@ class StreakViewModel(
                     startDate = routine.startDate,
                     photoUri = routine.photoUri,
                     quote = linked?.quote,
-                    milestones = routine.milestones,
+                    milestones = milestonesInDays(routine.milestones, routine.schedule.progressUnit),
                     bannerUri = routine.bannerUri,
                     trackMode = routine.trackMode,
                     milestoneAlerts = routine.milestoneAlerts,

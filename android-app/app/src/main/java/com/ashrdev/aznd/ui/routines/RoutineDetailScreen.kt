@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.data.routines.schedule
 import com.ashrdev.aznd.domain.streaks.TrackMode
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.streaks.CheckInButton
@@ -73,6 +74,8 @@ fun RoutineDetailScreen(
         },
         onPickBanner = { onEdit(routine.id) },
         onPickLogo = { onEdit(routine.id) },
+        unit = routine.schedule.progressUnit,
+        missed = track.tracked.breaks.size,
         dayAction = { date ->
             when {
                 control != null -> {

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.routines.StreakTrack
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.data.streaks.parseMilestones
+import com.ashrdev.aznd.domain.streaks.ProgressUnit
 import com.ashrdev.aznd.domain.streaks.StreakStats
 import com.ashrdev.aznd.domain.streaks.StreakTracking
 import com.ashrdev.aznd.domain.streaks.computeCurrentStreak
@@ -71,7 +72,9 @@ fun TrackedDetailScreen(
     onPickBanner: () -> Unit,
     onPickLogo: () -> Unit,
     dayAction: (String) -> DayAction?,
-    calendarActions: @Composable ColumnScope.() -> Unit
+    calendarActions: @Composable ColumnScope.() -> Unit,
+    unit: ProgressUnit = ProgressUnit.DAYS,
+    missed: Int? = null
 ) {
     var tappedDate by remember { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState(initialPage = PAGE_DETAILS) { DetailPages.size }
@@ -94,10 +97,10 @@ fun TrackedDetailScreen(
         val lines = buildList {
             if (inStreak) {
                 val length = computeCurrentStreak(streak.startDate, breaks, date)
-                add("Streak length on this day: $length day${if (length == 1) "" else "s"}")
+                add("${if (missed != null) "Run" else "Streak length"} on this day: ${unit.describeDays(length)}")
             }
-            if (reached != null) add("Milestone reached: $reached days")
-            if (upcoming != null) add("Milestone due: $upcoming days")
+            if (reached != null) add("Milestone reached: ${unit.describeDays(reached)}")
+            if (upcoming != null) add("Milestone due: ${unit.describeDays(upcoming)}")
             if (isEmpty()) add(if (date > today) "Nothing on this day yet." else "Before this streak started.")
         }
         AlertDialog(
@@ -149,7 +152,9 @@ fun TrackedDetailScreen(
                     hasMilestones = milestones.isNotEmpty(),
                     bottomPadding = bottom,
                     onPickBanner = onPickBanner,
-                    onPickLogo = onPickLogo
+                    onPickLogo = onPickLogo,
+                    unit = unit,
+                    missed = missed
                 )
             }
         }

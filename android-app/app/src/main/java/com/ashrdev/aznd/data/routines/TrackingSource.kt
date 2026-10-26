@@ -9,6 +9,7 @@ import com.ashrdev.aznd.data.streaks.StreakBreakEntity
 import com.ashrdev.aznd.data.streaks.StreakCheckInEntity
 import com.ashrdev.aznd.data.streaks.StreakDao
 import com.ashrdev.aznd.data.streaks.StreakEntity
+import com.ashrdev.aznd.data.streaks.milestonesInDays
 import com.ashrdev.aznd.data.streaks.parseMilestones
 import com.ashrdev.aznd.data.workout.WorkoutDao
 import com.ashrdev.aznd.domain.streaks.CheckInfo
@@ -111,7 +112,7 @@ class TrackingSnapshot(
             name = routine.name,
             startDate = routine.startDate,
             photoUri = routine.photoUri,
-            milestones = routine.milestones,
+            milestones = milestonesInDays(routine.milestones, routine.schedule.progressUnit),
             bannerUri = routine.bannerUri,
             trackMode = TrackMode.AUTO.id,
             routineId = routine.id

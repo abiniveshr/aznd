@@ -20,6 +20,7 @@ import com.ashrdev.aznd.data.routines.nextMilestone
 import com.ashrdev.aznd.data.routines.schedule
 import com.ashrdev.aznd.data.routines.reachedToday
 import com.ashrdev.aznd.domain.streaks.CheckInfo
+import com.ashrdev.aznd.domain.streaks.ProgressUnit
 import com.ashrdev.aznd.domain.streaks.TrackMode
 import com.ashrdev.aznd.domain.streaks.Weekdays
 import com.ashrdev.aznd.domain.streaks.parseKey
@@ -112,7 +113,9 @@ object ReminderScheduler {
                 val alerted = prefs.getStringSet(KEY_ALERTED, emptySet()).orEmpty()
                 val key = alertKey(id, snapshot.today)
                 if (track != null && reached != null && key !in alerted) {
-                    notify(context, NOTIFY_MILESTONE_BASE + id.toInt(), "$reached-day milestone", "${track.streak.name}: $reached days. Keep going!")
+                    val unit = track.routine?.schedule?.progressUnit ?: ProgressUnit.DAYS
+                    val title = if (unit == ProgressUnit.DAYS) "$reached-day milestone" else "${unit.describeDays(reached)} milestone"
+                    notify(context, NOTIFY_MILESTONE_BASE + id.toInt(), title, "${track.streak.name}: ${unit.describeDays(reached)}. Keep going!")
                     prefs.edit().putStringSet(KEY_ALERTED, alerted + key).apply()
                 }
             }
