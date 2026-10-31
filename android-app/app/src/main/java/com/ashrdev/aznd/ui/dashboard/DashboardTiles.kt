@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,7 +53,6 @@ import com.ashrdev.aznd.domain.GraphWindow
 import com.ashrdev.aznd.ui.common.BodyFigure
 import com.ashrdev.aznd.ui.common.compareColors
 import com.ashrdev.aznd.ui.common.rememberGraphRangeState
-import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.macro.GaugeArc
 import com.ashrdev.aznd.ui.macro.GaugeSegment
 import kotlin.math.abs
@@ -66,27 +64,35 @@ private val M = DashMetrics
 private const val LINE = 1.3f
 private const val GAUGE_MAX = 340f
 
-private fun style(sp: Float, k: Float, weight: FontWeight = FontWeight.Normal): TextStyle =
-    TextStyle(fontSize = (sp * k).sp, lineHeight = (sp * k * LINE).sp, fontWeight = weight)
+// Text takes the dashboard look's font and size (LocalDashText), when drawn and when measured alike.
+private fun style(sp: Float, k: Float, weight: FontWeight = FontWeight.Normal, text: DashText = DashText(null, 1f)): TextStyle =
+    TextStyle(
+        fontSize = (sp * k * text.scale).sp,
+        lineHeight = (sp * k * text.scale * LINE).sp,
+        fontWeight = weight,
+        fontFamily = text.family
+    )
 
 @Composable
 fun rememberDashMeasure(): DashMeasure {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    return remember(measurer, density) {
+    // Not "text": that is the name of the string measured below.
+    val dashText = LocalDashText.current
+    return remember(measurer, density, dashText) {
         object : DashMeasure {
             override fun width(text: String, sp: Float, bold: Boolean): Float {
                 if (text.isEmpty()) return 0f
                 val r = measurer.measure(
                     text,
-                    style(sp, 1f, if (bold) FontWeight.Bold else FontWeight.Normal),
+                    style(sp, 1f, if (bold) FontWeight.Bold else FontWeight.Normal, dashText),
                     softWrap = false,
                     maxLines = 1
                 )
                 return with(density) { r.size.width.toDp().value } + 1f
             }
 
-            override fun line(sp: Float): Float = with(density) { (sp * LINE).sp.toDp().value }
+            override fun line(sp: Float): Float = with(density) { (sp * dashText.scale * LINE).sp.toDp().value }
         }
     }
 }
@@ -104,10 +110,10 @@ fun DashTile(
     // tiles for dragging): the tile then only draws.
     interactive: Boolean = true
 ) {
-    val k = cell.scale * widget.size.factor
-    Card(
+    val k = cell.scale * widget.size.factor * LocalDashLook.current.moduleScale
+    // The panel itself comes from the dashboard look (app theme cards unless styled).
+    DashTileFrame(
         modifier = modifier
-            .clip(CardDefaults.shape)
             .then(if (interactive) Modifier.combinedClickable(onClick = onOpen, onLongClick = onHold) else Modifier)
     ) {
         Box(Modifier.fillMaxSize()) {
@@ -129,7 +135,7 @@ private fun Line(text: String, sp: Float, k: Float, modifier: Modifier = Modifie
     Text(
         text,
         modifier = modifier,
-        style = style(sp, k, weight),
+        style = style(sp, k, weight, LocalDashText.current),
         color = color,
         maxLines = 1,
         softWrap = false,
@@ -357,8 +363,9 @@ private fun Gauge(segments: List<GaugeSegment>, width: Float, consumed: Double, 
     val gw = min(width, GAUGE_MAX)
     GaugeArc(segments = segments, modifier = Modifier.width(gw.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(kcal(consumed), style = TextStyle(fontSize = (gw * 0.16f).sp, lineHeight = (gw * 0.19f).sp, fontWeight = FontWeight.Bold), maxLines = 1)
-            Text(of, style = TextStyle(fontSize = (gw * 0.062f).sp, lineHeight = (gw * 0.08f).sp), color = muted(), maxLines = 1)
+            val family = LocalDashText.current.family
+            Text(kcal(consumed), style = TextStyle(fontSize = (gw * 0.16f).sp, lineHeight = (gw * 0.19f).sp, fontWeight = FontWeight.Bold, fontFamily = family), maxLines = 1)
+            Text(of, style = TextStyle(fontSize = (gw * 0.062f).sp, lineHeight = (gw * 0.08f).sp, fontFamily = family), color = muted(), maxLines = 1)
         }
     }
 }

@@ -163,8 +163,9 @@ object DashboardText {
         return if (modes.isEmpty()) "Graph" else modes.joinToString(" vs ") { it.label }
     }
 
-    fun shape(w: DashWidget, data: DashboardData, m: DashMeasure): DashShape {
-        val f = w.size.factor
+    /** [scale]: the dashboard look's module size, on top of the widget's own size. */
+    fun shape(w: DashWidget, data: DashboardData, m: DashMeasure, scale: Float = 1f): DashShape {
+        val f = w.size.factor * scale
         return when (w.type) {
             DashWidgetType.CALORIES -> DashboardShapes.calories(f)
             DashWidgetType.STREAK -> DashboardShapes.streak(streak(w, data), m, f)

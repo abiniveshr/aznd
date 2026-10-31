@@ -16,12 +16,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,28 +36,16 @@ import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.themedFill
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
-import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.runtime.produceState
-import com.ashrdev.aznd.data.macro.MacroTargetsStore
-import com.ashrdev.aznd.domain.macro.MacroStats
-import com.ashrdev.aznd.ui.dashboard.DashWidgetType
-import com.ashrdev.aznd.ui.dashboard.DashboardData
-import com.ashrdev.aznd.ui.dashboard.DashboardSeries
 import com.ashrdev.aznd.ui.dashboard.DashboardStore
 import com.ashrdev.aznd.ui.dashboard.DashboardViewModel
-import com.ashrdev.aznd.ui.dashboard.rememberDashboardModes
-
-private const val TOP_LIFTS = 3
-private const val CLOCK_TICK_MS = 60_000L
+import com.ashrdev.aznd.ui.dashboard.rememberDashboardData
+import com.ashrdev.aznd.data.macro.MacroTargetsStore
 
 @Composable
 fun HomeScreen(
@@ -94,43 +80,7 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val bottomClearance = bottomBarClearance()
 
-    val streaks by streakViewModel.streaksWithCounts.collectAsState()
-    val sessions by workoutViewModel.allSessions.collectAsState()
-    val workouts by workoutViewModel.workouts.collectAsState()
-    val food by dashboardViewModel.food.collectAsState()
-    val weights by dashboardViewModel.weights.collectAsState()
-    val measurements by dashboardViewModel.measurements.collectAsState()
-    val burnt by dashboardViewModel.burntByDay.collectAsState()
-    val widgets = dashboardStore.widgets
-    val liftLimit = remember(widgets) {
-        maxOf(TOP_LIFTS, widgets.filter { it.type == DashWidgetType.TOP_LIFT }.maxOfOrNull { it.rank } ?: 0)
-    }
-
-    var topExercises by remember { mutableStateOf<List<TopExerciseStat>>(emptyList()) }
-
-    LaunchedEffect(liftLimit, sessions.size) {
-        topExercises = workoutViewModel.getTopExercises(liftLimit)
-    }
-    LaunchedEffect(sessions.size) { dashboardViewModel.refresh(sessions.size) }
-
-    val nowMs by produceState(System.currentTimeMillis()) {
-        while (true) {
-            delay(CLOCK_TICK_MS)
-            value = System.currentTimeMillis()
-        }
-    }
-    val modes = rememberDashboardModes(dashboardViewModel, sessions)
-    val dayStart = MacroStats.dayStart(nowMs)
-    val today = remember(food, burnt, weights, measurements, dayStart, macroTargets.goal, macroTargets.advancedOffset, macroTargets.proteinG, macroTargets.carbsG, macroTargets.fatG) {
-        DashboardSeries.today(
-            food, burnt, weights, measurements, macroTargets.goal, macroTargets.advancedOffset,
-            macroTargets.proteinG, macroTargets.carbsG, macroTargets.fatG, nowMs
-        )
-    }
-    val minute = nowMs / CLOCK_TICK_MS
-    val dashboardData = remember(streaks, topExercises, sessions, workouts, today, modes, minute) {
-        DashboardData(streaks, topExercises, sessions, workouts, today, modes, nowMs)
-    }
+    val dashboardData = rememberDashboardData(workoutViewModel, streakViewModel, dashboardViewModel, dashboardStore, macroTargets)
 
     val pagePosition = { pagerState.currentPage + pagerState.currentPageOffsetFraction }
 
@@ -138,16 +88,7 @@ fun HomeScreen(
         scope.launch { pagerState.animateScrollToPage(index) }
     }
 
-    // Dashboard edit mode: holding a tile enters it (and lifts the tile); Done, Back or leaving the
-    // page ends it. Every drop is saved as it happens, so there is nothing to confirm.
-    var editing by rememberSaveable { mutableStateOf(false) }
-    val noWidgets = widgets.isEmpty()
-    LaunchedEffect(pagerState.currentPage, noWidgets) {
-        if (pagerState.currentPage != homeIndex || noWidgets) editing = false
-    }
-
     BackHandler(enabled = pagerState.currentPage != homeIndex) { goToPage(homeIndex) }
-    BackHandler(enabled = editing) { editing = false }
     BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
@@ -161,25 +102,14 @@ fun HomeScreen(
                     SlidingPageTitle(
                         pageCount = pages.size,
                         position = pagePosition,
-                        title = { if (it == homeIndex && editing) "Edit dashboard" else pages[it].title }
+                        title = { pages[it].title }
                     )
                 },
                 actions = {
                     SlidingPageActions(pageCount = pages.size, position = pagePosition) { page ->
                         if (page == homeIndex) {
-                            if (editing) {
-                                // Back to the tiles arranging themselves (like Flex's Best fit).
-                                IconButton(onClick = { dashboardStore.autoArrange() }, enabled = dashboardStore.layout != null) {
-                                    Icon(Icons.Default.AutoFixHigh, contentDescription = "Auto arrange")
-                                }
-                            }
-                            IconButton(onClick = { onNavigate(Destination.DashboardSettings.createRoute()) }) {
+                            IconButton(onClick = { onNavigate(Destination.DashboardSettings.route) }) {
                                 Icon(Icons.Default.Tune, contentDescription = "Dashboard settings")
-                            }
-                            if (editing) {
-                                IconButton(onClick = { editing = false }) {
-                                    Icon(Icons.Default.Check, contentDescription = "Done")
-                                }
                             }
                         }
                     }
@@ -194,9 +124,7 @@ fun HomeScreen(
         ) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                // A held tile owns the finger; the pages stay put while the dashboard is edited.
-                userScrollEnabled = !editing
+                modifier = Modifier.fillMaxSize()
             ) { page ->
                 when (pages[page]) {
                     HomePageId.HISTORY -> HistoryPage(
@@ -205,14 +133,11 @@ fun HomeScreen(
                         bottomPadding = bottomClearance
                     )
                     HomePageId.DASHBOARD -> DashboardPage(
-                        widgets = widgets,
-                        layout = dashboardStore.layout,
+                        store = dashboardStore,
                         data = dashboardData,
-                        editing = editing,
-                        onStartEditing = { editing = true },
-                        onLayout = { dashboardStore.arrange(it) },
                         onNavigate = onNavigate,
-                        onOpenSettings = { focus -> onNavigate(Destination.DashboardSettings.createRoute(focus)) },
+                        // Long press: edit mode for the page you're on.
+                        onEdit = { presetId, widget -> onNavigate(Destination.DashboardEdit.createRoute(presetId, widget)) },
                         bottomPadding = bottomClearance
                     )
                     HomePageId.APPS -> AppsPage(

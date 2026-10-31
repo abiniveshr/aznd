@@ -33,6 +33,8 @@ import com.ashrdev.aznd.ui.common.share.route
 import com.ashrdev.aznd.ui.home.HomeScreen
 import com.ashrdev.aznd.ui.dashboard.DashboardGraphScreen
 import com.ashrdev.aznd.ui.dashboard.DashboardSettingsScreen
+import com.ashrdev.aznd.ui.dashboard.DashboardEditScreen
+import com.ashrdev.aznd.ui.dashboard.rememberDashboardData
 import com.ashrdev.aznd.ui.dashboard.DashboardStore
 import com.ashrdev.aznd.ui.dashboard.DashboardViewModel
 import com.ashrdev.aznd.ui.dashboard.rememberDashboardModes
@@ -212,7 +214,7 @@ class MainActivity : ComponentActivity() {
                                 onHome = goHome,
                                 onOpenSettings = openSettings,
                                 onOpenAppearance = { navigateTo(Destination.Appearance.route) },
-                                onOpenDashboard = { navigateTo(Destination.DashboardSettings.createRoute()) },
+                                onOpenDashboard = { navigateTo(Destination.DashboardSettings.route) },
                                 workoutSettings = workoutSettings
                             )
                         }
@@ -224,37 +226,55 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        composable(Destination.DashboardSettings.route) {
+                            DashboardSettingsScreen(
+                                store = dashboardStore,
+                                onEditPreset = { id -> navigateTo(Destination.DashboardEdit.createRoute(id)) },
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
+                            )
+                        }
                         composable(
-                            route = Destination.DashboardSettings.route,
-                            arguments = listOf(navArgument("focus") {
-                                type = NavType.IntType
-                                defaultValue = -1
-                            })
+                            route = Destination.DashboardEdit.route,
+                            arguments = listOf(
+                                navArgument("presetId") { type = NavType.IntType },
+                                navArgument("widget") {
+                                    type = NavType.IntType
+                                    defaultValue = -1
+                                }
+                            )
                         ) { backStackEntry ->
                             val streaks by streakViewModel.streaksWithCounts.collectAsState()
                             val workouts by workoutViewModel.workouts.collectAsState()
                             val sessions by workoutViewModel.allSessions.collectAsState()
-                            DashboardSettingsScreen(
+                            DashboardEditScreen(
                                 store = dashboardStore,
+                                data = rememberDashboardData(workoutViewModel, streakViewModel, dashboardViewModel, dashboardStore, macroTargets),
                                 streaks = streaks,
                                 workouts = workouts,
                                 modes = rememberDashboardModes(dashboardViewModel, sessions),
+                                presetId = backStackEntry.arguments?.getInt("presetId") ?: -1,
+                                focusWidget = backStackEntry.arguments?.getInt("widget") ?: -1,
                                 onBack = goBack,
                                 onHome = goHome,
-                                onOpenSettings = openSettings,
-                                focusId = backStackEntry.arguments?.getInt("focus") ?: -1
+                                onOpenSettings = openSettings
                             )
                         }
                         composable(
                             route = Destination.DashboardGraph.route,
-                            arguments = listOf(navArgument("widgetId") { type = NavType.IntType })
+                            arguments = listOf(
+                                navArgument("presetId") { type = NavType.IntType },
+                                navArgument("widgetId") { type = NavType.IntType }
+                            )
                         ) { backStackEntry ->
+                            val presetId = backStackEntry.arguments?.getInt("presetId") ?: -1
                             val widgetId = backStackEntry.arguments?.getInt("widgetId") ?: -1
                             val sessions by workoutViewModel.allSessions.collectAsState()
                             DashboardGraphScreen(
-                                widget = dashboardStore.widgets.firstOrNull { it.id == widgetId },
+                                widget = dashboardStore.preset(presetId)?.widgets?.firstOrNull { it.id == widgetId },
                                 modes = rememberDashboardModes(dashboardViewModel, sessions),
-                                onEdit = { id -> navigateTo(Destination.DashboardSettings.createRoute(id)) },
+                                onEdit = { id -> navigateTo(Destination.DashboardEdit.createRoute(presetId, id)) },
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings

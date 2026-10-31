@@ -56,13 +56,13 @@ object DashboardTargets {
         DashModel.COMPOSITION -> 2
     }
 
-    fun route(w: DashWidget, data: DashboardData): String = when (w.type) {
+    fun route(w: DashWidget, data: DashboardData, presetId: Int): String = when (w.type) {
         DashWidgetType.CALORIES -> Destination.Macro.route
         DashWidgetType.STREAK -> data.streakFor(w)?.let { Destination.StreakDetail.createRoute(it.streak.id) }
             ?: if (w.streakId >= 0) Destination.Routines.route else Destination.StreakEditor.createRoute()
         DashWidgetType.LATEST_WORKOUT -> data.sessions.firstOrNull()?.let { Destination.SessionDetail.createRoute(it.session.id) }
             ?: Destination.Workouts.route
-        DashWidgetType.GRAPH -> Destination.DashboardGraph.createRoute(w.id)
+        DashWidgetType.GRAPH -> Destination.DashboardGraph.createRoute(presetId, w.id)
         DashWidgetType.BODY_MODEL -> Destination.BodyPage.createRoute(bodyPage(w.model))
         DashWidgetType.SHORTCUT -> shortcutRoute(w, data)
         DashWidgetType.TOP_LIFT -> data.liftFor(w)?.let { Destination.ExerciseProgress.createRoute(it.workoutId, it.exerciseId) }

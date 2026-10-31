@@ -39,7 +39,9 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *  |    |- Body Stats History (pager: Measurements | Strength | Composition; only Composition has content yet)
  *  |    |     '- Composition: Bodyweight or Body fat -- BodyCompositionHistory (pager: Calendar | Graph | Logs)
  *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
- *  '- Dashboard page: tiled widgets, each opens its screen; tune button or long press -> DashboardSettings,
+ *  '- Dashboard page: the active preset pages, scrolled vertically; each widget opens its screen;
+ *                     tune button -> DashboardSettings (Look | Presets | Pages), long press ->
+ *                     DashboardEdit (Tuning | Live tiling | placeholder),
  *                     graph widget -> DashboardGraph, 3D model widget -> BodyPage
  *
  * Flex (share card maker): Share in the pull-up bar on Home, and the Share button of SessionDetail,
@@ -113,11 +115,15 @@ sealed class Destination(val route: String) {
     object BodyPage : Destination("body_page/{page}") {
         fun createRoute(page: Int) = "body_page/$page"
     }
-    object DashboardSettings : Destination("dashboard_settings?focus={focus}") {
-        fun createRoute(focus: Int = -1) = "dashboard_settings?focus=$focus"
+    object DashboardSettings : Destination("dashboard_settings")
+    // Edit mode for one dashboard page. [widget]: open its options on the Tuning page
+    // (ADD_WIDGET: open the add-widget picker there); -1 opens on the live tiling.
+    object DashboardEdit : Destination("dashboard_edit/{presetId}?widget={widget}") {
+        const val ADD_WIDGET = -2
+        fun createRoute(presetId: Int, widget: Int = -1) = "dashboard_edit/$presetId?widget=$widget"
     }
-    object DashboardGraph : Destination("dashboard_graph/{widgetId}") {
-        fun createRoute(widgetId: Int) = "dashboard_graph/$widgetId"
+    object DashboardGraph : Destination("dashboard_graph/{presetId}/{widgetId}") {
+        fun createRoute(presetId: Int, widgetId: Int) = "dashboard_graph/$presetId/$widgetId"
     }
     object BodyHistory : Destination("body_history")
     object BodyCompositionHistory : Destination("body_history_composition/{metric}") {
