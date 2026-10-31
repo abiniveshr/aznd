@@ -113,17 +113,24 @@ fun WorkoutSessionScreen(
         emptyList()
     }
 
-    // The top bar shows the exercise on screen, with the workout name under it.
-    val currentExercise = state.cards.getOrNull(pagerState.currentPage)?.exerciseId
-        ?.let { id -> exercises.firstOrNull { it.id == id }?.name }
+    // The top bar shows the exercise on screen, with the workout name under it. It follows the
+    // card swipe (drift + cross-fade) instead of snapping at the halfway point; the Add page has
+    // no exercise, so it shows just the workout name.
+    val cards = state.cards
+    val exerciseNames = remember(cards, exercises) {
+        cards.map { card -> card.exerciseId?.let { id -> exercises.firstOrNull { it.id == id }?.name } }
+    }
 
     ScreenScaffold(
-        title = currentExercise ?: workoutName,
-        subtitle = if (currentExercise != null) workoutName else null,
+        title = workoutName,
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        extraActions = barActions
+        extraActions = barActions,
+        pageCount = if (phase == LoggerPhase.Active) pagerState.pageCount else 0,
+        pagePosition = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+        pageTitle = { page -> exerciseNames.getOrNull(page) ?: workoutName },
+        pageSubtitle = { page -> if (exerciseNames.getOrNull(page) != null) workoutName else null }
     ) { padding ->
         when (phase) {
             LoggerPhase.EmptyWorkout -> Text(

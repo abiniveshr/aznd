@@ -65,7 +65,9 @@ fun WorkoutStatsScreen(
     val subPages = rememberSubPageBar(pagerState, StatsPages)
 
     ScreenScaffold(
-        title = if (pagerState.currentPage == 0) "$workoutName • Stats" else "$workoutName • Exercises",
+        title = "$workoutName • Stats",
+        // Per-page title follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page -> if (page == 0) "$workoutName • Stats" else "$workoutName • Exercises" },
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,

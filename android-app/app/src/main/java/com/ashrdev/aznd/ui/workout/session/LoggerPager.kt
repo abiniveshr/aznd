@@ -28,6 +28,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +47,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.common.SlidingPageTitle
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
@@ -155,11 +157,15 @@ fun LoggerPager(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text(
-                text = if (pagerState.currentPage < cards.size) "${pagerState.currentPage + 1} / ${cards.size}" else "Add",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // The counter drifts and cross-fades with the swipe, like a top-bar title.
+            ProvideTextStyle(MaterialTheme.typography.labelLarge.copy(color = MaterialTheme.colorScheme.primary)) {
+                SlidingPageTitle(
+                    pageCount = pagerState.pageCount,
+                    position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                    title = { page -> if (page < cards.size) "${page + 1} / ${cards.size}" else "Add" },
+                    endAligned = true
+                )
+            }
         }
         HorizontalPager(
             state = pagerState,

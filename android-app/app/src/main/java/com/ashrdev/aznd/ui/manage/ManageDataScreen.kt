@@ -140,8 +140,10 @@ fun ManageDataScreen(
         .filter { s -> selectedApps.isEmpty() || registry.module(s.id)?.app in selectedApps }
         .map { it.id }.toSet()
 
+    // Which dialog the filter opens with (logic, not chrome).
     val page = ManagePage.entries[pagerState.currentPage]
-    val primary = when (page) {
+    // Each page's big button slides with that page, so it is built per page, not from currentPage.
+    fun primaryFor(p: ManagePage): PrimaryAction = when (p) {
         ManagePage.DELETE -> PrimaryAction(
             Icons.Default.Delete,
             if (deleteIds.isEmpty()) "Delete selected" else "Delete selected (${deleteIds.size})",
@@ -234,15 +236,20 @@ fun ManageDataScreen(
         )
     }
 
+    // Import has no dates, so its subtitle leaves the period out. Both read here, once, because
+    // pageSubtitle is evaluated while drawing.
+    val summaryWithDates = filter.summary(includeDates = true)
+    val summaryNoDates = filter.summary(includeDates = false)
+
     ScreenScaffold(
         title = "Manage data",
-        subtitle = filter.summary(includeDates = page != ManagePage.IMPORT),
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        primaryAction = primary,
-        reservePrimarySpace = true,
         subPages = subPages,
+        pageTitle = { "Manage data" },
+        pageSubtitle = { p -> if (ManagePage.entries[p] == ManagePage.IMPORT) summaryNoDates else summaryWithDates },
+        pagePrimaryActions = { p -> listOf(primaryFor(ManagePage.entries[p])) },
         manageDataEnabled = false,
         topBarActions = {
             IconButton(onClick = { showFilter = true }) {

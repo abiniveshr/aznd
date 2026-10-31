@@ -1,7 +1,6 @@
 package com.ashrdev.aznd.ui.home
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -12,7 +11,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.ashrdev.aznd.ui.common.SlidingPageActions
+import com.ashrdev.aznd.ui.common.SlidingPageTitle
 import com.ashrdev.aznd.ui.common.TrayMemory
 import com.ashrdev.aznd.ui.common.bottomBarClearance
 import com.ashrdev.aznd.ui.common.rememberTrayState
@@ -130,6 +130,8 @@ fun HomeScreen(
         DashboardData(streaks, topExercises, sessions, workouts, today, modes, nowMs)
     }
 
+    val pagePosition = { pagerState.currentPage + pagerState.currentPageOffsetFraction }
+
     fun goToPage(index: Int) {
         scope.launch { pagerState.animateScrollToPage(index) }
     }
@@ -143,15 +145,20 @@ fun HomeScreen(
         contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
             TopAppBar(
+                // Title and the Dashboard-only Tune button follow the swipe instead of popping at 50 %.
                 title = {
-                    Crossfade(targetState = pagerState.currentPage, label = "pageTitle") { page ->
-                        Text(pages[page].title)
-                    }
+                    SlidingPageTitle(
+                        pageCount = pages.size,
+                        position = pagePosition,
+                        title = { pages[it].title }
+                    )
                 },
                 actions = {
-                    if (pagerState.currentPage == homeIndex) {
-                        IconButton(onClick = { onNavigate(Destination.DashboardSettings.createRoute()) }) {
-                            Icon(Icons.Default.Tune, contentDescription = "Dashboard settings")
+                    SlidingPageActions(pageCount = pages.size, position = pagePosition) { page ->
+                        if (page == homeIndex) {
+                            IconButton(onClick = { onNavigate(Destination.DashboardSettings.createRoute()) }) {
+                                Icon(Icons.Default.Tune, contentDescription = "Dashboard settings")
+                            }
                         }
                     }
                 }

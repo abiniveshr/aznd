@@ -120,10 +120,14 @@ fun MacroScreen(
     }
 
     ScreenScaffold(
-        title = when (pagerState.currentPage) {
-            PAGE_GRAPHS -> "Macros • Graphs"
-            PAGE_EDIT -> "Macros • Edit"
-            else -> "Macros"
+        title = "Macros",
+        // Per-page title follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page ->
+            when (page) {
+                PAGE_GRAPHS -> "Macros • Graphs"
+                PAGE_EDIT -> "Macros • Edit"
+                else -> "Macros"
+            }
         },
         onBack = onBack,
         onHome = onHome,

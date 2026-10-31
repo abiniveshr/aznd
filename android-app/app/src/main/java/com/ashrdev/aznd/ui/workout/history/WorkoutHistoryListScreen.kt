@@ -98,15 +98,19 @@ fun WorkoutHistoryListScreen(
     }
 
     ScreenScaffold(
-        title = when (pagerState.currentPage) {
-            PAGE_PRESETS -> "Workout history • By workout"
-            PAGE_ALL -> "Workout history • All sessions"
-            else -> "Workout history • Calendar"
-        },
+        title = "Workout history",
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        subPages = subPages
+        subPages = subPages,
+        // Per page, so the title follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page ->
+            when (page) {
+                PAGE_PRESETS -> "Workout history • By workout"
+                PAGE_ALL -> "Workout history • All sessions"
+                else -> "Workout history • Calendar"
+            }
+        }
     ) { padding ->
         val bottom = padding.calculateBottomPadding()
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->

@@ -78,10 +78,14 @@ fun RoutinesScreen(
     val today = todayKey()
 
     ScreenScaffold(
-        title = when (pagerState.currentPage) {
-            PAGE_DISCIPLINE -> "Discipline"
-            PAGE_STREAKS -> "Streaks"
-            else -> "Routines"
+        title = "Routines",
+        // Follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page ->
+            when (page) {
+                PAGE_DISCIPLINE -> "Discipline"
+                PAGE_STREAKS -> "Streaks"
+                else -> "Routines"
+            }
         },
         onBack = onBack,
         onHome = onHome,

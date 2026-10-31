@@ -94,10 +94,14 @@ fun BodyScreen(
     }
 
     ScreenScaffold(
-        title = when (pagerState.currentPage) {
-            PAGE_MEASURE -> "Body • Measurements"
-            PAGE_COMPOSITION -> "Body • Composition"
-            else -> "Body • Strength"
+        title = "Body",
+        // Per page so the title follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page ->
+            when (page) {
+                PAGE_MEASURE -> "Body • Measurements"
+                PAGE_COMPOSITION -> "Body • Composition"
+                else -> "Body • Strength"
+            }
         },
         onBack = onBack,
         onHome = onHome,

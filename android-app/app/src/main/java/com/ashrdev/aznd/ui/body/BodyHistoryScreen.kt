@@ -73,10 +73,14 @@ fun BodyHistoryScreen(
     val subPages = rememberSubPageBar(pagerState, BodyHistoryPages)
 
     ScreenScaffold(
-        title = when (pagerState.currentPage) {
-            HISTORY_MEASURE -> "Body history • Measurements"
-            HISTORY_COMPOSITION -> "Body history • Composition"
-            else -> "Body history • Strength"
+        title = "Body history",
+        // Per page so the title follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page ->
+            when (page) {
+                HISTORY_MEASURE -> "Body history • Measurements"
+                HISTORY_COMPOSITION -> "Body history • Composition"
+                else -> "Body history • Strength"
+            }
         },
         onBack = onBack,
         onHome = onHome,

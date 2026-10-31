@@ -105,15 +105,19 @@ fun CompositionHistoryScreen(
     }
 
     ScreenScaffold(
-        title = "${metric.label} • " + when (pagerState.currentPage) {
-            PAGE_CALENDAR -> "Calendar"
-            PAGE_LOGS -> "Logs"
-            else -> "Graph"
-        },
+        title = metric.label,
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        subPages = subPages
+        subPages = subPages,
+        // Per page, so the suffix follows the swipe instead of snapping at the halfway point.
+        pageTitle = { page ->
+            "${metric.label} • " + when (page) {
+                PAGE_CALENDAR -> "Calendar"
+                PAGE_LOGS -> "Logs"
+                else -> "Graph"
+            }
+        }
     ) { padding ->
         val bottom = padding.calculateBottomPadding() + 16.dp
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->

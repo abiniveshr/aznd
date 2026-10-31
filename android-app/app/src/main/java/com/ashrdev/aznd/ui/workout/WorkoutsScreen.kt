@@ -123,38 +123,41 @@ fun WorkoutsScreen(
         else onOpenSession(EMPTY_WORKOUT_ID)
     }
 
-    val page = pagerState.currentPage
+    // Title, top-bar + and bottom buttons belong to one page each: they follow the swipe.
     ScreenScaffold(
-        title = when (page) {
-            PAGE_EXERCISES -> "Exercises"
-            PAGE_STATS -> "Workout stats"
-            else -> "Workouts"
+        title = "Workouts",
+        pageTitle = { page ->
+            when (page) {
+                PAGE_EXERCISES -> "Exercises"
+                PAGE_STATS -> "Workout stats"
+                else -> "Workouts"
+            }
         },
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
         subPages = subPages,
         reservePrimarySpace = true,
-        primaryAction = if (page == PAGE_VIEW) PrimaryAction(
-            icon = Icons.Default.Add,
-            label = "New Preset",
-            onClick = onAddWorkout
-        ) else null,
-        secondaryAction = if (page == PAGE_VIEW) PrimaryAction(
-            icon = Icons.Default.PlayArrow,
-            label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume FS" else "Freestyle",
-            onClick = startEmpty
-        ) else null,
-        topBarActions = if (page == PAGE_EXERCISES) {
-            {
-                if (openCustom != null) {
-                    IconButton(onClick = openCustom) {
-                        Icon(Icons.Default.Add, contentDescription = "Add custom exercise")
-                    }
+        pagePrimaryActions = { page ->
+            if (page == PAGE_VIEW) listOf(
+                PrimaryAction(
+                    icon = Icons.Default.Add,
+                    label = "New Preset",
+                    onClick = onAddWorkout
+                ),
+                PrimaryAction(
+                    icon = Icons.Default.PlayArrow,
+                    label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume FS" else "Freestyle",
+                    onClick = startEmpty
+                )
+            ) else emptyList()
+        },
+        pageTopBarActions = { page ->
+            if (page == PAGE_EXERCISES && openCustom != null) {
+                IconButton(onClick = openCustom) {
+                    Icon(Icons.Default.Add, contentDescription = "Add custom exercise")
                 }
             }
-        } else {
-            {}
         }
     ) { padding ->
         val bottom = padding.calculateBottomPadding()
