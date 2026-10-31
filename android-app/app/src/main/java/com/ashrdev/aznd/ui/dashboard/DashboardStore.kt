@@ -4,18 +4,41 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileTree
+import com.ashrdev.aznd.ui.common.tiling.TileTreeJson
 import org.json.JSONArray
 import org.json.JSONObject
 
 class DashboardStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("dashboard", Context.MODE_PRIVATE)
+    private val loaded = load()
 
-    var widgets: List<DashWidget> by mutableStateOf(load())
+    var widgets: List<DashWidget> by mutableStateOf(loaded.first)
         private set
 
-    fun update(list: List<DashWidget>) {
+    /**
+     * The tiling arranged by hand in the dashboard's edit mode, or null to let the tiles arrange
+     * themselves. Widgets added later join it as new rows; removed ones drop out of it.
+     */
+    var layout: TileNode? by mutableStateOf(loaded.second)
+        private set
+
+    fun update(list: List<DashWidget>, tree: TileNode? = layout) {
         widgets = list.take(DashDefaults.MAX_WIDGETS)
-        prefs.edit().putString(KEY, encode(widgets).toString()).apply()
+        layout = tree?.let { TileTree.prune(it, widgets.map { w -> w.id }.toSet()) }
+        prefs.edit().putString(KEY, encode(widgets, layout).toString()).apply()
+    }
+
+    /** A tiling dropped into place in edit mode. The widget list follows its reading order. */
+    fun arrange(tree: TileNode) {
+        val order = TileTree.leaves(tree)
+        update(widgets.sortedBy { w -> order.indexOf(w.id).let { if (it < 0) Int.MAX_VALUE else it } }, tree)
+    }
+
+    /** Back to the automatic arrangement. */
+    fun autoArrange() {
+        update(widgets, null)
     }
 
     fun edit(id: Int, change: (DashWidget) -> DashWidget) {
@@ -33,23 +56,31 @@ class DashboardStore(context: Context) {
 
     fun move(from: Int, to: Int) {
         if (from !in widgets.indices || to !in widgets.indices) return
-        update(widgets.toMutableList().apply { add(to, removeAt(from)) })
+        val list = widgets.toMutableList().apply { add(to, removeAt(from)) }
+        val ids = list.map { it.id }
+        // Reordering the list reorders the hand-made tiling the same way: its shape stays, the tiles
+        // take its places in the new reading order.
+        val tree = layout?.let { TileTree.effective(it, ids, false) }?.let { TileTree.relabel(it, ids) }
+        update(list, tree)
     }
 
     fun reset() {
-        update(DashDefaults.widgets())
+        update(DashDefaults.widgets(), null)
     }
 
-    private fun load(): List<DashWidget> {
-        val raw = prefs.getString(KEY, null) ?: return DashDefaults.widgets()
-        return runCatching { decode(JSONObject(raw)) }.getOrNull() ?: DashDefaults.widgets()
+    private fun load(): Pair<List<DashWidget>, TileNode?> {
+        val raw = prefs.getString(KEY, null) ?: return DashDefaults.widgets() to null
+        return runCatching {
+            val o = JSONObject(raw)
+            decode(o) to o.optJSONObject("layout")?.let { TileTreeJson.decode(it) }
+        }.getOrNull() ?: (DashDefaults.widgets() to null)
     }
 
     private companion object {
         const val KEY = "layout"
         const val VERSION = 1
 
-        fun encode(list: List<DashWidget>): JSONObject {
+        fun encode(list: List<DashWidget>, layout: TileNode?): JSONObject {
             val arr = JSONArray()
             for (w in list) {
                 arr.put(
@@ -66,7 +97,9 @@ class DashboardStore(context: Context) {
                         .put("model", w.model.id)
                 )
             }
-            return JSONObject().put("v", VERSION).put("widgets", arr)
+            val out = JSONObject().put("v", VERSION).put("widgets", arr)
+            layout?.let { out.put("layout", TileTreeJson.encode(it)) }
+            return out
         }
 
         fun decode(o: JSONObject): List<DashWidget> {

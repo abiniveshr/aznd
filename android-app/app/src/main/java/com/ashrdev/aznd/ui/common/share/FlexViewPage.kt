@@ -243,7 +243,7 @@ internal fun FlexViewPage(
                     return
                 }
                 settling = scope.launch {
-                    delay(DROP_HOVER_MS)
+                    delay(FLEX_DROP_HOVER_MS)
                     if (dragging == id) spot = next
                 }
             }
@@ -447,7 +447,7 @@ internal fun FlexViewPage(
                                 id != null -> FlexPoses(
                                     offsets, id, hx, hy, lift.value,
                                     heldBox = heldBox,
-                                    landing = if (showing != null) LANDING_ALPHA else 0f
+                                    landing = if (showing != null) FLEX_LANDING_ALPHA else 0f
                                 )
                                 offsets.isNotEmpty() -> FlexPoses(offsets)
                                 else -> null
@@ -606,14 +606,14 @@ internal fun FlexViewPage(
     }
 }
 
-private fun DrawScope.outlineArea(r: FloatArray, k: Float, color: Color, fill: Float, radius: CornerRadius, width: Dp = 2.5.dp) {
+internal fun DrawScope.outlineArea(r: FloatArray, k: Float, color: Color, fill: Float, radius: CornerRadius, width: Dp = 2.5.dp) {
     val at = Offset(r[0] * k, r[1] * k)
     val extent = Size(r[2] * k, r[3] * k)
     if (fill > 0f) drawRoundRect(color.copy(alpha = fill), topLeft = at, size = extent, cornerRadius = radius)
     drawRoundRect(color, topLeft = at, size = extent, cornerRadius = radius, style = Stroke(width = width.toPx()))
 }
 
-private fun DrawScope.dropIndicator(s: DropSpot, k: Float, color: Color, radius: CornerRadius) {
+internal fun DrawScope.dropIndicator(s: DropSpot, k: Float, color: Color, radius: CornerRadius) {
     when (s.kind) {
         DropKind.GAP, DropKind.EDGE -> {
             if (s.spans) outlineArea(s.region, k, color, 0.08f, radius, 1.5.dp)
@@ -632,7 +632,8 @@ private fun DrawScope.dropIndicator(s: DropSpot, k: Float, color: Color, radius:
 
 private class DropGhost(val spot: DropSpot, val base: FlexSpec, val card: FlexSpec, val plan: FlexPlan, val fits: Boolean)
 
-private val NO_ROOM_RED = Color(0xFFE5484D)
+/** A drop aimed where it can't go (no room): Flex and the dashboard's edit mode. */
+internal val NO_ROOM_RED = Color(0xFFE5484D)
 
 private val HANDLE_REACH = 30.dp
 private val HANDLE_INSET = 14.dp
@@ -641,6 +642,8 @@ private val BAR_REACH = 18.dp
 
 private val DROP_BAR = 6.dp
 
-private const val LANDING_ALPHA = 0.45f
+/** How opaque a held tile is drawn where it will land, while the layout shows the drop. */
+internal const val FLEX_LANDING_ALPHA = 0.45f
 
-private const val DROP_HOVER_MS = 150L
+/** How long a new drop zone has to be held before the layout previews it. */
+internal const val FLEX_DROP_HOVER_MS = 150L

@@ -99,13 +99,16 @@ fun DashTile(
     data: DashboardData,
     onOpen: () -> Unit,
     onHold: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // False when the page around it takes the taps and holds (the dashboard grid does, to lift
+    // tiles for dragging): the tile then only draws.
+    interactive: Boolean = true
 ) {
     val k = cell.scale * widget.size.factor
     Card(
         modifier = modifier
             .clip(CardDefaults.shape)
-            .combinedClickable(onClick = onOpen, onLongClick = onHold)
+            .then(if (interactive) Modifier.combinedClickable(onClick = onOpen, onLongClick = onHold) else Modifier)
     ) {
         Box(Modifier.fillMaxSize()) {
             when (widget.type) {

@@ -5,6 +5,8 @@ import com.ashrdev.aznd.ui.common.tiling.AlignSpace
 import com.ashrdev.aznd.ui.common.tiling.DrawableShape
 import com.ashrdev.aznd.ui.common.tiling.StatShape
 import com.ashrdev.aznd.ui.common.tiling.TileAligner
+import com.ashrdev.aznd.ui.common.tiling.TileArea
+import com.ashrdev.aznd.ui.common.tiling.TileCell
 import com.ashrdev.aznd.ui.common.tiling.TileFitter
 import com.ashrdev.aznd.ui.common.tiling.TileGroup
 import com.ashrdev.aznd.ui.common.tiling.TileItem
@@ -23,7 +25,7 @@ sealed class DashShape {
 }
 
 class DashCell(
-    val id: Int,
+    override val id: Int,
     val x: Float,
     val y: Float,
     val w: Float,
@@ -31,11 +33,29 @@ class DashCell(
     val scale: Float,
     val columns: Int,
     val cut: Boolean
-)
+) : TileCell {
+    override val cellLeft: Float get() = x
+    override val cellTop: Float get() = y
+    override val cellWidth: Float get() = w
+    override val cellHeight: Float get() = h
+}
 
-class DashArranged(val width: Float, val height: Float, val cells: List<DashCell>, val tree: TileNode?) {
+// A TileArea so the edit mode can aim drops with the same dropSpot as Flex.
+class DashArranged(
+    val width: Float,
+    val height: Float,
+    override val cells: List<DashCell>,
+    override val tree: TileNode?,
+    override val gap: Float = DashMetrics.GAP
+) : TileArea {
     val cuts: Int get() = cells.count { it.cut }
     fun cell(id: Int): DashCell? = cells.firstOrNull { it.id == id }
+    fun hit(x: Float, y: Float): DashCell? = cells.firstOrNull { it.cellContains(x, y) }
+
+    override val contentLeft: Float get() = 0f
+    override val contentTop: Float get() = 0f
+    override val contentWidth: Float get() = width
+    override val contentHeight: Float get() = height
 }
 
 class DashStatBuilder(private val reflowKeep: Float) {
@@ -82,9 +102,17 @@ object DashboardLayout {
 
     fun cached(key: String): DashArranged? = synchronized(cache) { cache[key] }
 
-    fun arrangeCached(key: String, tiles: List<Pair<Int, DashShape>>, width: Float, viewport: Float, gap: Float): DashArranged {
+    // [layout]: a tiling arranged by hand in edit mode; null lets the aligner pick the best one.
+    fun arrangeCached(
+        key: String,
+        tiles: List<Pair<Int, DashShape>>,
+        width: Float,
+        viewport: Float,
+        gap: Float,
+        layout: TileNode? = null
+    ): DashArranged {
         cached(key)?.let { return it }
-        val a = arrange(tiles, width, viewport, gap)
+        val a = if (layout != null) arrangeTree(layout, tiles, width, viewport, gap) else arrange(tiles, width, viewport, gap)
         synchronized(cache) { cache[key] = a }
         return a
     }
@@ -178,6 +206,32 @@ object DashboardLayout {
         return fallback ?: place(stackedTree(shown.map { it.first }), items, shapes, width, max(viewport, stacked), gap)
     }
 
+    // A hand-made tiling keeps its shape: only the tiles' sizes are solved, growing the page (it
+    // scrolls) until nothing is cut off, as the automatic layout does.
+    fun arrangeTree(
+        layout: TileNode,
+        tiles: List<Pair<Int, DashShape>>,
+        width: Float,
+        viewport: Float,
+        gap: Float
+    ): DashArranged {
+        val shown = tiles.take(TileAligner.MAX_BLOCKS)
+        if (shown.isEmpty() || width <= 0f || viewport <= 0f) return DashArranged(width, 0f, emptyList(), null)
+        val tree = TileTree.effective(layout, shown.map { it.first }, false)
+            ?: return DashArranged(width, 0f, emptyList(), null)
+        val align = shown.map { alignItem(it.first, it.second, width) }
+        val items = shown.associate { it.first to tileItem(it.first, it.second) }
+        val shapes = shown.toMap()
+        val stacked = TileAligner.stackedHeight(align, AlignSpace(width, viewport, gap), rules)
+        var fallback: DashArranged? = null
+        for (h in heights(viewport, stacked)) {
+            val arranged = place(tree, items, shapes, width, h, gap)
+            if (arranged.cuts == 0) return arranged
+            if (fallback == null || arranged.cuts < fallback.cuts) fallback = arranged
+        }
+        return fallback ?: place(tree, items, shapes, width, viewport, gap)
+    }
+
     fun judge(a: DashArranged, items: Map<Int, AlignItem>, viewport: Float, gap: Float): Double {
         val space = AlignSpace(a.width, viewport, gap)
         var score = 0.0
@@ -235,7 +289,7 @@ object DashboardLayout {
             DashCell(id, b[0], b[1], b[2], b[3], c.scale, c.columns, c.cut)
         }
         val used = out.maxOfOrNull { it.y + it.h } ?: 0f
-        return DashArranged(width, max(used, 0f), out, tree)
+        return DashArranged(width, max(used, 0f), out, tree, gap)
     }
 
     private fun shift(n: TileNode, boxes: Map<Int, FloatArray>, dy: Float) {

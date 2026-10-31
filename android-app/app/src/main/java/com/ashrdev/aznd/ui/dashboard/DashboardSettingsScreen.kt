@@ -119,8 +119,9 @@ fun DashboardSettingsScreen(
         ) {
             item(key = "intro") {
                 Text(
-                    "Tiles arrange and size themselves to fill the screen. The order here is the reading order. " +
-                        "Hold a widget or drag its handle to move it. Up to ${DashDefaults.MAX_WIDGETS} widgets.",
+                    "Tiles size themselves to fill the screen. Hold a tile on the dashboard to drag it into a gap " +
+                        "or beside another; the order here is the reading order and follows along. " +
+                        "Hold a widget here or drag its handle to reorder. Up to ${DashDefaults.MAX_WIDGETS} widgets.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

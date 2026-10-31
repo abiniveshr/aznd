@@ -11,6 +11,7 @@ import com.ashrdev.aznd.ui.theme.toJsonArray
 import com.ashrdev.aznd.ui.common.tiling.TileGroup
 import com.ashrdev.aznd.ui.common.tiling.TileLeaf
 import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileTreeJson
 import com.ashrdev.aznd.ui.common.tiling.TileTree
 import org.json.JSONArray
 import org.json.JSONObject
@@ -114,33 +115,9 @@ private fun specToJson(spec: FlexSpec): JSONObject {
     return out
 }
 
-private fun nodeToJson(n: TileNode): JSONObject = when (n) {
-    is TileLeaf -> JSONObject().put("id", n.id)
-    is TileGroup -> JSONObject()
-        .put("vertical", n.vertical)
-        .put("weights", JSONArray().also { a -> n.weights.forEach { a.put(it.toDouble()) } })
-        .put("children", JSONArray().also { a -> n.children.forEach { a.put(nodeToJson(it)) } })
-}
+private fun nodeToJson(n: TileNode): JSONObject = TileTreeJson.encode(n)
 
-private fun nodeFromJson(o: JSONObject, depth: Int = 0): TileNode? {
-    if (depth > 12) return null
-    if (o.has("children")) {
-        val arr = o.getJSONArray("children")
-        val weights = o.optJSONArray("weights")
-        val kids = ArrayList<TileNode>()
-        val ws = ArrayList<Float>()
-        for (i in 0 until arr.length()) {
-            nodeFromJson(arr.getJSONObject(i), depth + 1)?.let {
-                kids.add(it)
-                ws.add((weights?.optDouble(i, 0.0) ?: 0.0).toFloat().let { w -> if (w.isFinite() && w > 0f) w else 0f })
-            }
-        }
-        if (kids.isEmpty()) return null
-        if (kids.size == 1) return kids[0]
-        return TileGroup(o.optBoolean("vertical", true), kids, ws)
-    }
-    return if (o.has("id")) TileLeaf(o.getInt("id")) else null
-}
+private fun nodeFromJson(o: JSONObject): TileNode? = TileTreeJson.decode(o)
 
 /**
  * Cards saved before tiling placed blocks in rows ("place" beside or below the one before, and a "width" share).

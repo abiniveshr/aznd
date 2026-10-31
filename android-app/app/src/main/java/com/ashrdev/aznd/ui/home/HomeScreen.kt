@@ -43,6 +43,8 @@ import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -136,7 +138,16 @@ fun HomeScreen(
         scope.launch { pagerState.animateScrollToPage(index) }
     }
 
+    // Dashboard edit mode: holding a tile enters it (and lifts the tile); Done, Back or leaving the
+    // page ends it. Every drop is saved as it happens, so there is nothing to confirm.
+    var editing by rememberSaveable { mutableStateOf(false) }
+    val noWidgets = widgets.isEmpty()
+    LaunchedEffect(pagerState.currentPage, noWidgets) {
+        if (pagerState.currentPage != homeIndex || noWidgets) editing = false
+    }
+
     BackHandler(enabled = pagerState.currentPage != homeIndex) { goToPage(homeIndex) }
+    BackHandler(enabled = editing) { editing = false }
     BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
@@ -150,14 +161,25 @@ fun HomeScreen(
                     SlidingPageTitle(
                         pageCount = pages.size,
                         position = pagePosition,
-                        title = { pages[it].title }
+                        title = { if (it == homeIndex && editing) "Edit dashboard" else pages[it].title }
                     )
                 },
                 actions = {
                     SlidingPageActions(pageCount = pages.size, position = pagePosition) { page ->
                         if (page == homeIndex) {
+                            if (editing) {
+                                // Back to the tiles arranging themselves (like Flex's Best fit).
+                                IconButton(onClick = { dashboardStore.autoArrange() }, enabled = dashboardStore.layout != null) {
+                                    Icon(Icons.Default.AutoFixHigh, contentDescription = "Auto arrange")
+                                }
+                            }
                             IconButton(onClick = { onNavigate(Destination.DashboardSettings.createRoute()) }) {
                                 Icon(Icons.Default.Tune, contentDescription = "Dashboard settings")
+                            }
+                            if (editing) {
+                                IconButton(onClick = { editing = false }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Done")
+                                }
                             }
                         }
                     }
@@ -172,7 +194,9 @@ fun HomeScreen(
         ) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                // A held tile owns the finger; the pages stay put while the dashboard is edited.
+                userScrollEnabled = !editing
             ) { page ->
                 when (pages[page]) {
                     HomePageId.HISTORY -> HistoryPage(
@@ -182,7 +206,11 @@ fun HomeScreen(
                     )
                     HomePageId.DASHBOARD -> DashboardPage(
                         widgets = widgets,
+                        layout = dashboardStore.layout,
                         data = dashboardData,
+                        editing = editing,
+                        onStartEditing = { editing = true },
+                        onLayout = { dashboardStore.arrange(it) },
                         onNavigate = onNavigate,
                         onOpenSettings = { focus -> onNavigate(Destination.DashboardSettings.createRoute(focus)) },
                         bottomPadding = bottomClearance
