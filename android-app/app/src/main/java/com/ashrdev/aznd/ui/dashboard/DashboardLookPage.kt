@@ -26,7 +26,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.FillCopySource
-import com.ashrdev.aznd.ui.common.FillEditorDialog
+import com.ashrdev.aznd.ui.common.FillEditor
 import com.ashrdev.aznd.ui.common.TaperLineControls
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.common.share.ChipChoice
@@ -61,53 +61,8 @@ fun DashLookPage(
         val resolved = app.fill(e)
         FillCopySource(e.label, resolved.base.toArgb(), resolved.style)
     }
-    var editBackground by remember { mutableStateOf(false) }
-    var editTiles by remember { mutableStateOf(false) }
     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
         style { it.copy(photoUri = uri.toString(), bgMode = DashBgMode.PHOTO) }
-    }
-
-    if (editBackground) {
-        FillEditorDialog(
-            title = "Background",
-            baseLabel = "Colour",
-            baseColor = look.bgA,
-            fill = look.backgroundFill(),
-            onDismiss = { editBackground = false },
-            onApply = { color, fill ->
-                style { l ->
-                    if (fill.base == FillBase.GRADIENT) {
-                        val stops = fill.gradient.cleanStops()
-                        l.copy(
-                            bgMode = DashBgMode.GRADIENT,
-                            bgA = stops.first().color,
-                            bgB = stops.last().color,
-                            gradientAngle = fill.gradient.angle,
-                            bgGradient = fill.gradient,
-                            bgPatterns = fill.patterns
-                        )
-                    } else {
-                        l.copy(bgMode = DashBgMode.SOLID, bgA = color, bgGradient = null, bgPatterns = fill.patterns)
-                    }
-                }
-                editBackground = false
-            },
-            copyFrom = themeSources
-        )
-    }
-    if (editTiles) {
-        FillEditorDialog(
-            title = "Tiles",
-            baseLabel = "Tile colour",
-            baseColor = look.tileColor,
-            fill = look.tileFill,
-            onDismiss = { editTiles = false },
-            onApply = { color, fill ->
-                style { it.copy(tileColor = color, tileFill = fill, customColors = true) }
-                editTiles = false
-            },
-            copyFrom = themeSources
-        )
     }
 
     LazyColumn(
@@ -122,7 +77,7 @@ fun DashLookPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        backgroundItems(look, style, onPickPhoto = { picker.launch() }) { editBackground = true }
+        backgroundItems(look, style, themeSources, onPickPhoto = { picker.launch() })
         item {
             val base = (look.moduleScale * 100).roundToInt()
             FlexFoldSection("Size", "Modules $base%", initiallyOpen = true) {
@@ -165,7 +120,7 @@ fun DashLookPage(
                 }
             }
         }
-        item { TilesSection(look, style) { editTiles = true } }
+        item { TilesSection(look, style, themeSources) }
         if (look.tileBorderKind == BorderKind.LINE && look.tiles != DashTileStyle.THEME) {
             item {
                 FlexFoldSection("Line shape", "${look.lineTaper.shape.label} · ${look.lineTaper.region.label}") {
@@ -182,36 +137,38 @@ fun DashLookPage(
 private fun LazyListScope.backgroundItems(
     look: DashLook,
     style: ((DashLook) -> DashLook) -> Unit,
-    onPickPhoto: () -> Unit,
-    onAdvanced: () -> Unit
+    themeSources: List<FillCopySource>,
+    onPickPhoto: () -> Unit
 ) {
     item {
         FlexFoldSection("Background", look.bgMode.label, initiallyOpen = true) {
             ChipChoice(DashBgMode.entries, look.bgMode, { it.label }) { picked -> style { it.copy(bgMode = picked) } }
             when (look.bgMode) {
                 DashBgMode.THEME -> Note("The app theme's background, as on every other screen.")
-                DashBgMode.SOLID, DashBgMode.GRADIENT -> {
-                    val advanced = look.bgMode == DashBgMode.GRADIENT && look.bgGradient != null
-                    if (advanced) {
-                        Note("Advanced gradient: ${look.backgroundFill().summary()}.")
-                        TextButton(onClick = { style { it.copy(bgGradient = null) } }) { Text("Back to a simple two-colour gradient") }
-                    } else {
-                        ColorRow(if (look.bgMode == DashBgMode.GRADIENT) "Start colour" else "Colour", look.bgA) { c ->
-                            style { it.copy(bgA = c) }
-                        }
-                        if (look.bgMode == DashBgMode.GRADIENT) {
-                            ColorRow("End colour", look.bgB) { c -> style { it.copy(bgB = c) } }
-                            LabeledSlider("Angle", "${look.gradientAngle}°", look.gradientAngle.toFloat(), 0f..360f) { v ->
-                                style { it.copy(gradientAngle = v.roundToInt()) }
+                // Solid or gradient, with its patterns: edited right here. Solid / Gradient is the chips above.
+                DashBgMode.SOLID, DashBgMode.GRADIENT -> FillEditor(
+                    baseLabel = "Colour",
+                    baseColor = look.bgA,
+                    fill = look.backgroundFill(),
+                    chooseBase = false,
+                    onChange = { color, fill ->
+                        style { l ->
+                            if (fill.base == FillBase.GRADIENT) {
+                                val stops = fill.gradient.cleanStops()
+                                l.copy(
+                                    bgA = stops.first().color,
+                                    bgB = stops.last().color,
+                                    gradientAngle = fill.gradient.angle,
+                                    bgGradient = fill.gradient,
+                                    bgPatterns = fill.patterns
+                                )
+                            } else {
+                                l.copy(bgA = color, bgPatterns = fill.patterns)
                             }
                         }
-                    }
-                    val patterns = look.bgPatterns.filter { it.isActive }
-                    if (patterns.isNotEmpty()) Note("Patterns: ${patterns.joinToString(", ") { it.kind.label }}")
-                    OutlinedButton(onClick = onAdvanced, modifier = Modifier.fillMaxWidth()) {
-                        Text("Multi-colour gradient & pattern")
-                    }
-                }
+                    },
+                    copyFrom = themeSources
+                )
                 DashBgMode.PHOTO -> {
                     Note(if (look.photoUri != null) "Using the photo you chose." else "No photo yet. Choose one to use as the background.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -237,7 +194,7 @@ private fun LazyListScope.backgroundItems(
 }
 
 @Composable
-private fun TilesSection(look: DashLook, style: ((DashLook) -> DashLook) -> Unit, onEditFill: () -> Unit) {
+private fun TilesSection(look: DashLook, style: ((DashLook) -> DashLook) -> Unit, themeSources: List<FillCopySource>) {
     FlexFoldSection("Tiles", look.tiles.label) {
         ChipChoice(DashTileStyle.entries, look.tiles, { it.label }) { picked -> style { it.copy(tiles = picked) } }
         if (look.tiles == DashTileStyle.THEME) {
@@ -248,8 +205,14 @@ private fun TilesSection(look: DashLook, style: ((DashLook) -> DashLook) -> Unit
             LabeledSlider("Opacity", "${(look.tileAlpha * 100).roundToInt()}%", look.tileAlpha, 0.04f..1f) { v ->
                 style { it.copy(tileAlpha = v) }
             }
-            Note("Fill: ${look.tileFill.summary()}" + if (look.customColors) "" else " (colour from the app theme until you pick one)")
-            OutlinedButton(onClick = onEditFill, modifier = Modifier.fillMaxWidth()) { Text("Tile gradient & pattern") }
+            if (!look.customColors) Note("The tile colour comes from the app theme until you change the fill here.")
+            FillEditor(
+                baseLabel = "Tile colour",
+                baseColor = look.tileColor,
+                fill = look.tileFill,
+                onChange = { color, fill -> style { it.copy(tileColor = color, tileFill = fill, customColors = true) } },
+                copyFrom = themeSources
+            )
         }
         val line = look.tileBorderKind == BorderKind.LINE
         if (look.tiles != DashTileStyle.NONE) {

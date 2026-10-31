@@ -58,7 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.AdvancedColorPickerDialog
 import com.ashrdev.aznd.ui.common.FillCopySource
-import com.ashrdev.aznd.ui.common.FillEditorDialog
+import com.ashrdev.aznd.ui.common.FillEditor
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.TaperLineControls
 import com.ashrdev.aznd.ui.components.AlertDialog
@@ -99,7 +99,8 @@ fun AppearanceScreen(
     val settings by ThemeStore.settings.collectAsState()
     var editingDark by remember { mutableStateOf(false) }
     var pickerFor by remember { mutableStateOf<ThemeColor?>(null) }
-    var fillFor by remember { mutableStateOf<ThemeColor?>(null) }
+    // The element whose gradient and pattern editor is open under its row.
+    var fillOpen by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
     var confirmPreset by remember { mutableStateOf<ThemePreset?>(null) }
     var pickContrast by remember { mutableStateOf(false) }
@@ -168,24 +169,6 @@ fun AppearanceScreen(
             onPick = { picked ->
                 ThemeStore.update { HighContrast.apply(it, contrast.copy(color = Color(picked))) }
                 pickContrast = false
-            }
-        )
-    }
-
-    fillFor?.let { element ->
-        FillEditorDialog(
-            title = element.label,
-            baseLabel = "Colour",
-            baseColor = palette.colorOf(element).toArgb(),
-            fill = palette.fillOf(element),
-            onDismiss = { fillFor = null },
-            onApply = { color, fill ->
-                editPalette { it.withColor(element, Color(color)).withFill(element, fill) }
-                fillFor = null
-            },
-            // Every other element of the palette being edited (light or dark), as it is now.
-            copyFrom = ThemeColor.entries.filter { it != element }.map { other ->
-                FillCopySource(other.label, palette.colorOf(other).toArgb(), palette.fillOf(other))
             }
         )
     }
@@ -373,11 +356,34 @@ fun AppearanceScreen(
                         )
                     }
                     ThemeColor.entries.forEach { element ->
+                        val open = element.fillable && fillOpen == element.name
                         ElementRow(
                             element = element,
                             palette = palette,
-                            onClick = { if (element.fillable) fillFor = element else pickerFor = element }
+                            open = open,
+                            onClick = {
+                                if (!element.fillable) pickerFor = element
+                                else fillOpen = if (open) null else element.name
+                            }
                         )
+                        if (element.fillable) {
+                            AnimatedVisibility(visible = open) {
+                                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                                    FillEditor(
+                                        baseLabel = "Colour",
+                                        baseColor = palette.colorOf(element).toArgb(),
+                                        fill = palette.fillOf(element),
+                                        onChange = { color, fill ->
+                                            editPalette { it.withColor(element, Color(color)).withFill(element, fill) }
+                                        },
+                                        // Every other element of the palette being edited (light or dark), as it is now.
+                                        copyFrom = ThemeColor.entries.filter { it != element }.map { other ->
+                                            FillCopySource(other.label, palette.colorOf(other).toArgb(), palette.fillOf(other))
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -565,11 +571,12 @@ private fun BorderSlider(label: String, value: Float, line: Boolean, onLine: (Bo
     }
 }
 
-/** One palette element: its swatch (showing the gradient / pattern), name, what it currently is, and its colour. Tapping it opens its editor. */
+/** One palette element: its swatch (showing the gradient / pattern), name, what it currently is, and its colour. Tapping it opens its editor (for fills, right under the row). */
 @Composable
 private fun ElementRow(
     element: ThemeColor,
     palette: Palette,
+    open: Boolean,
     onClick: () -> Unit
 ) {
     Column {
@@ -599,6 +606,13 @@ private fun ElementRow(
                 }
             }
             Text(palette.colorOf(element).toHexString(), style = MaterialTheme.typography.bodySmall)
+            if (element.fillable) {
+                Icon(
+                    Icons.Default.ExpandMore,
+                    contentDescription = if (open) "Close ${element.label} editor" else "Edit ${element.label}",
+                    modifier = Modifier.padding(start = 8.dp).rotate(if (open) 180f else 0f)
+                )
+            }
         }
     }
 }

@@ -97,7 +97,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.FillCopySource
-import com.ashrdev.aznd.ui.common.FillEditorDialog
+import com.ashrdev.aznd.ui.common.FillEditor
 import com.ashrdev.aznd.ui.common.ReorderableItem
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.dragReorderHandle
@@ -759,52 +759,6 @@ private fun LookTab(
         val resolved = app.fill(e)
         FillCopySource(e.label, resolved.base.toArgb(), resolved.style)
     }
-    var editBackground by remember { mutableStateOf(false) }
-    var editPanels by remember { mutableStateOf(false) }
-
-    if (editBackground) {
-        FillEditorDialog(
-            title = "Background",
-            baseLabel = "Colour",
-            baseColor = st.bgA,
-            fill = st.backgroundFill(),
-            onDismiss = { editBackground = false },
-            onApply = { color, fill ->
-                style { s ->
-                    if (fill.base == FillBase.GRADIENT) {
-                        val stops = fill.gradient.cleanStops()
-                        s.copy(
-                            bgMode = FlexBgMode.GRADIENT,
-                            bgA = stops.first().color,
-                            bgB = stops.last().color,
-                            gradientAngle = fill.gradient.angle,
-                            bgGradient = fill.gradient,
-                            bgPatterns = fill.patterns
-                        )
-                    } else {
-                        s.copy(bgMode = FlexBgMode.SOLID, bgA = color, bgGradient = null, bgPatterns = fill.patterns)
-                    }
-                }
-                editBackground = false
-            },
-            copyFrom = themeSources
-        )
-    }
-    if (editPanels) {
-        FillEditorDialog(
-            title = "Panels",
-            baseLabel = "Panel colour",
-            baseColor = st.panelColor,
-            fill = st.panelFill,
-            onDismiss = { editPanels = false },
-            onApply = { color, fill ->
-                style { it.copy(panelColor = color, panelFill = fill) }
-                editPanels = false
-            },
-            copyFrom = themeSources
-        )
-    }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 8.dp),
@@ -838,7 +792,7 @@ private fun LookTab(
                 }
             }
         }
-        backgroundItems(st, hasDefaultPhoto, style, onPickPhoto) { editBackground = true }
+        backgroundItems(st, hasDefaultPhoto, style, onPickPhoto, themeSources)
         item {
             val base = (st.moduleScale * 100).roundToInt()
             FlexFoldSection("Layout", "${st.layoutMode.label} · ${st.aspect.label} · modules $base%", initiallyOpen = true) {
@@ -911,14 +865,13 @@ private fun LookTab(
                     LabeledSlider("Opacity", "${(st.panelAlpha * 100).roundToInt()}%", st.panelAlpha, 0.04f..1f) { v ->
                         style { it.copy(panelAlpha = v) }
                     }
-                    Text(
-                        "Fill: ${st.panelFill.summary()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    FillEditor(
+                        baseLabel = "Panel colour",
+                        baseColor = st.panelColor,
+                        fill = st.panelFill,
+                        onChange = { color, fill -> style { it.copy(panelColor = color, panelFill = fill) } },
+                        copyFrom = themeSources
                     )
-                    OutlinedButton(onClick = { editPanels = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Panel gradient & pattern")
-                    }
                 }
                 if (st.panel != FlexPanel.NONE) {
                     Text("Panel border", style = MaterialTheme.typography.labelMedium)
@@ -1039,43 +992,36 @@ private fun LazyListScope.backgroundItems(
     hasDefaultPhoto: Boolean,
     style: ((FlexStyle) -> FlexStyle) -> Unit,
     onPickPhoto: () -> Unit,
-    onAdvanced: () -> Unit
+    themeSources: List<FillCopySource>
 ) {
     item {
         FlexFoldSection("Background", st.bgMode.label) {
             ChipChoice(FlexBgMode.entries, st.bgMode, { it.label }) { picked -> style { it.copy(bgMode = picked) } }
             if (st.bgMode != FlexBgMode.PHOTO) {
-                val advancedGradient = st.bgMode == FlexBgMode.GRADIENT && st.bgGradient != null
-                if (advancedGradient) {
-                    Text(
-                        "Advanced gradient: ${st.backgroundFill().summary()}.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    TextButton(onClick = { style { it.copy(bgGradient = null) } }) { Text("Back to a simple two-colour gradient") }
-                } else {
-                    ColorRow(if (st.bgMode == FlexBgMode.GRADIENT) "Start colour" else "Colour", st.bgA) { c ->
-                        style { it.copy(bgA = c) }
-                    }
-                    if (st.bgMode == FlexBgMode.GRADIENT) {
-                        ColorRow("End colour", st.bgB) { c -> style { it.copy(bgB = c) } }
-                        LabeledSlider("Angle", "${st.gradientAngle}°", st.gradientAngle.toFloat(), 0f..360f) { v ->
-                            style { it.copy(gradientAngle = v.roundToInt()) }
+                // Solid or gradient, with its patterns: edited right here. Solid / Gradient is the chips above.
+                FillEditor(
+                    baseLabel = "Colour",
+                    baseColor = st.bgA,
+                    fill = st.backgroundFill(),
+                    chooseBase = false,
+                    onChange = { color, fill ->
+                        style { s ->
+                            if (fill.base == FillBase.GRADIENT) {
+                                val stops = fill.gradient.cleanStops()
+                                s.copy(
+                                    bgA = stops.first().color,
+                                    bgB = stops.last().color,
+                                    gradientAngle = fill.gradient.angle,
+                                    bgGradient = fill.gradient,
+                                    bgPatterns = fill.patterns
+                                )
+                            } else {
+                                s.copy(bgA = color, bgPatterns = fill.patterns)
+                            }
                         }
-                    }
-                }
-                val activePatterns = st.bgPatterns.filter { it.isActive }
-                if (activePatterns.isNotEmpty()) {
-                    Text(
-                        if (activePatterns.size == 1) "Pattern: ${activePatterns[0].kind.label}"
-                        else "Patterns: ${activePatterns.joinToString(", ") { it.kind.label }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                OutlinedButton(onClick = onAdvanced, modifier = Modifier.fillMaxWidth()) {
-                    Text("Multi-colour gradient & pattern")
-                }
+                    },
+                    copyFrom = themeSources
+                )
             } else {
                 val note = when {
                     st.photoUri != null -> "Using the photo you chose."
