@@ -10,16 +10,17 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  * the Home button returns to the Dashboard page of the Home pager.
  *
  * Home (pager: History | Dashboard | Apps) - opens on Dashboard
- *  |- Workouts (pager: Exercises | Workouts | Stats) -------- Workouts
+ *  |- Workouts (pager: Exercises | Workouts | Split) -------- Workouts
  *  |     |- Workouts page: Start on a card ------------- WorkoutSession -- Finish --> (back)
- *  |     |                 a workout ------------------- WorkoutDetail
+ *  |     |                 a workout ------------------- WorkoutDetail (pager: Edit | Workout | Stats;
+ *  |     |                                                 Stats has two vertical pages: the workout, its exercises)
  *  |     |                                                 |- Start ---- WorkoutSession
  *  |     |                                                 '- exercise -- ExerciseViewer
  *  |     |- Exercises page: an exercise ---------------- ExerciseViewer (pager: Tutorial | Exercise | Stats; Edit on custom exercises -> CustomExerciseForm)
  *  |     |                   + (top bar, every page) --- CustomExerciseForm (add)
- *  |     |- Add workout button (Workouts page; "Empty workout" beside it starts a session with no template) or Edit in WorkoutDetail --------- WorkoutBuilder (Add exercise opens the picker,
+ *  |     |- New Preset button (Workouts page; "Freestyle" beside it starts a session with no template) --------- WorkoutBuilder (Add exercise opens the picker,
  *  |     |                                                 which has "Add custom exercise" -> CustomExerciseForm)
- *  |     |- Stats page: a workout ---------------------- WorkoutStats (pager: Stats | Exercises; exercise menu on the 2nd)
+ *  |     |- Split page: placeholder (workout split to come)
  *  |     '- session in progress ------------------------- WorkoutSession
  *  |- Routines (pager: Discipline | Routines | Streaks) -- Routines
  *  |     |- Routines page: a routine -------------------- RoutineDetail (pager: Progress | Details | Calendar; top bar Edit -- RoutineEditor)
@@ -35,7 +36,7 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *  |                     '- Strength page: a muscle ---- MuscleStats
  *  |- History page
  *  |    |- Workout History -- WorkoutHistoryList (pick a workout) -- WorkoutHistory (calendar) -- SessionDetail
- *  |    |                                                              '- Stats -- WorkoutStats
+ *  |    |                                                              '- Stats -- WorkoutDetail (Stats page)
  *  |    |- Body Stats History (pager: Measurements | Strength | Composition; only Composition has content yet)
  *  |    |     '- Composition: Bodyweight or Body fat -- BodyCompositionHistory (pager: Calendar | Graph | Logs)
  *  |    '- Saved Streaks ---- SavedDays (pick a streak) -- SavedDaysForStreak (calendar) -- SavedDayDetail
@@ -65,9 +66,6 @@ sealed class Destination(val route: String) {
     object WorkoutHistory : Destination("workout_history/{workoutId}") {
         fun createRoute(workoutId: Long) = "workout_history/$workoutId"
     }
-    object WorkoutStats : Destination("workout_stats/{workoutId}") {
-        fun createRoute(workoutId: Long) = "workout_stats/$workoutId"
-    }
     object WorkoutSession : Destination("workout_session/{workoutId}") {
         fun createRoute(workoutId: Long) = "workout_session/$workoutId"
     }
@@ -78,8 +76,9 @@ sealed class Destination(val route: String) {
     object CustomExerciseForm : Destination("custom_exercise_form?exerciseId={exerciseId}") {
         fun createRoute(exerciseId: Long?) = "custom_exercise_form?exerciseId=${exerciseId ?: -1}"
     }
-    object WorkoutDetail : Destination("workout_detail/{workoutId}") {
-        fun createRoute(workoutId: Long) = "workout_detail/$workoutId"
+    // [page]: which page it opens on (WorkoutDetailPage: EDIT, WORKOUT or STATS).
+    object WorkoutDetail : Destination("workout_detail/{workoutId}?page={page}") {
+        fun createRoute(workoutId: Long, page: Int = 1) = "workout_detail/$workoutId?page=$page"
     }
     object ExerciseProgress : Destination("exercise_progress/{workoutId}/{exerciseId}") {
         fun createRoute(workoutId: Long, exerciseId: Long) = "exercise_progress/$workoutId/$exerciseId"

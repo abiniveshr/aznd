@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
@@ -51,28 +52,13 @@ fun WorkoutBuilderScreen(
 ) {
     LaunchedEffect(workoutId) { viewModel.load(workoutId) }
     val ready by viewModel.ready.collectAsState()
-    val state by viewModel.state.collectAsState()
-    val exercises by viewModel.exercises.collectAsState()
-    val settings by viewModel.settings.collectAsState()
     var name by rememberSaveable { mutableStateOf(initialName) }
     var showDelete by remember { mutableStateOf(false) }
-    var showAddPicker by remember { mutableStateOf(false) }
     // Blocks a second tap on Save while the first one is still writing (it would create a second workout).
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     if (!ready) return
-
-    if (showAddPicker) {
-        ExercisePickerDialog(
-            exercises = exercises,
-            onDismiss = { showAddPicker = false },
-            onPick = {
-                showAddPicker = false
-                viewModel.addCardWithExercise(it.id)
-            }
-        )
-    }
 
     if (showDelete && workoutId != null && onDelete != null) {
         AlertDialog(
@@ -126,38 +112,72 @@ fun WorkoutBuilderScreen(
             ) { Text("Save") }
         }
     ) { padding ->
-        // The workout name is the first list item, so the exercise cards start at index 1.
-        val listState = rememberLazyListState()
-        val reorder = rememberReorderState(
-            listState = listState,
-            firstItemIndex = 1,
-            itemCount = state.cards.size
-        ) { from, to -> viewModel.moveCard(from, to) }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "name") {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Workout name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+        BuilderEditorList(
+            name = name,
+            onNameChange = { name = it },
+            viewModel = viewModel,
+            bottom = padding.calculateBottomPadding()
+        )
+    }
+}
+
+/**
+ * The editor itself: the workout name, then the exercise cards (hold or drag to reorder, Add
+ * exercise opens the picker). Used by this screen (new workouts) and by the workout screen's Edit
+ * page. Saving is the caller's: it reads [name] and calls [BuilderViewModel.save].
+ */
+@Composable
+fun BuilderEditorList(
+    name: String,
+    onNameChange: (String) -> Unit,
+    viewModel: BuilderViewModel,
+    bottom: Dp
+) {
+    val state by viewModel.state.collectAsState()
+    val exercises by viewModel.exercises.collectAsState()
+    val settings by viewModel.settings.collectAsState()
+    var showAddPicker by remember { mutableStateOf(false) }
+
+    if (showAddPicker) {
+        ExercisePickerDialog(
+            exercises = exercises,
+            onDismiss = { showAddPicker = false },
+            onPick = {
+                showAddPicker = false
+                viewModel.addCardWithExercise(it.id)
             }
-            builderItems(
-                state = state,
-                exercises = exercises,
-                showTargets = settings.targetReps,
-                actions = viewModel.actions,
-                onAddExercise = { showAddPicker = true },
-                reorder = reorder
+        )
+    }
+
+    // The workout name is the first list item, so the exercise cards start at index 1.
+    val listState = rememberLazyListState()
+    val reorder = rememberReorderState(
+        listState = listState,
+        firstItemIndex = 1,
+        itemCount = state.cards.size
+    ) { from, to -> viewModel.moveCard(from, to) }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottom),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item(key = "name") {
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                label = { Text("Workout name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
             )
         }
+        builderItems(
+            state = state,
+            exercises = exercises,
+            showTargets = settings.targetReps,
+            actions = viewModel.actions,
+            onAddExercise = { showAddPicker = true },
+            reorder = reorder
+        )
     }
 }

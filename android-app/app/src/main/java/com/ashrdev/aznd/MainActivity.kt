@@ -94,9 +94,9 @@ import com.ashrdev.aznd.ui.workout.WorkoutsScreen
 import com.ashrdev.aznd.ui.common.GraphRangeStore
 import com.ashrdev.aznd.ui.common.LocalGraphRangeStore
 import com.ashrdev.aznd.ui.workout.stats.WorkoutGraphViewModel
-import com.ashrdev.aznd.ui.workout.stats.WorkoutStatsScreen
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.WorkoutViewModelFactory
+import com.ashrdev.aznd.ui.workout.WorkoutDetailPage
 import com.ashrdev.aznd.ui.workout.WorkoutDetailScreen
 
 class MainActivity : ComponentActivity() {
@@ -320,7 +320,6 @@ class MainActivity : ComponentActivity() {
                                         navigateTo(Destination.WorkoutBuilder.createRoute(null))
                                     },
                                     onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
-                                    onOpenWorkoutStats = { id -> navigateTo(Destination.WorkoutStats.createRoute(id)) },
                                     onOpenExercise = { id -> navigateTo(Destination.ExerciseViewer.createRoute(id)) },
                                     onBack = goBack,
                                     onHome = goHome,
@@ -354,7 +353,7 @@ class MainActivity : ComponentActivity() {
                                     navigateTo(Destination.SessionDetail.createRoute(id))
                                 },
                                 onOpenStats = { id ->
-                                    navigateTo(Destination.WorkoutStats.createRoute(id))
+                                    navigateTo(Destination.WorkoutDetail.createRoute(id, WorkoutDetailPage.STATS))
                                 },
                                 onBack = goBack,
                                 onHome = goHome,
@@ -362,43 +361,54 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(
-                            route = Destination.WorkoutStats.route,
-                            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
+                            route = Destination.WorkoutDetail.route,
+                            arguments = listOf(
+                                navArgument("workoutId") { type = NavType.LongType },
+                                navArgument("page") {
+                                    type = NavType.IntType
+                                    defaultValue = WorkoutDetailPage.WORKOUT
+                                }
+                            )
                         ) { backStackEntry ->
                             val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            // One editor per screen instance: opening the workout again starts from
+                            // the saved template, never from an earlier visit's unsaved edits.
+                            val builderVm: BuilderViewModel = viewModel(
+                                viewModelStoreOwner = backStackEntry,
+                                factory = BuilderViewModel.factory(trainingRepository, workoutSettings)
+                            )
                             val graphVm: WorkoutGraphViewModel = viewModel(
+                                viewModelStoreOwner = backStackEntry,
                                 factory = WorkoutGraphViewModel.factory(
                                     trainingRepository, workoutId, workoutSettings.settings.value.trackRpe
                                 )
                             )
-                            WorkoutStatsScreen(
-                                graphViewModel = graphVm,
-                                workoutId = workoutId,
-                                viewModel = workoutViewModel,
-                                onBack = goBack,
-                                onHome = goHome,
-                                onOpenSettings = openSettings,
-                                useTargets = workoutSettings.settings.value.targetReps
-                            )
-                        }
-                        composable(
-                            route = Destination.WorkoutDetail.route,
-                            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
-                        ) { backStackEntry ->
-                            val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
-                            WorkoutDetailScreen(
-                                workoutId = workoutId,
-                                viewModel = workoutViewModel,
-                                onBack = goBack,
-                                onHome = goHome,
-                                onOpenSettings = openSettings,
-                                onEdit = { id -> navigateTo(Destination.WorkoutBuilder.createRoute(id)) },
-                                onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
-                                onViewExercise = { exId ->
-                                    navigateTo(Destination.ExerciseViewer.createRoute(exId))
-                                },
-                                onShare = { id -> navigateTo(FlexPreset.ROUTINE.route(a = id)) }
-                            )
+                            CompositionLocalProvider(
+                                LocalOpenCustomExercise provides { navigateTo(Destination.CustomExerciseForm.createRoute(null)) }
+                            ) {
+                                WorkoutDetailScreen(
+                                    workoutId = workoutId,
+                                    viewModel = workoutViewModel,
+                                    builderViewModel = builderVm,
+                                    graphViewModel = graphVm,
+                                    useTargets = workoutSettings.settings.value.targetReps,
+                                    initialPage = backStackEntry.arguments?.getInt("page") ?: WorkoutDetailPage.WORKOUT,
+                                    onBack = goBack,
+                                    onHome = goHome,
+                                    onOpenSettings = openSettings,
+                                    onOpenSession = { id -> navigateTo(Destination.WorkoutSession.createRoute(id)) },
+                                    onViewExercise = { exId ->
+                                        navigateTo(Destination.ExerciseViewer.createRoute(exId))
+                                    },
+                                    onShare = { id -> navigateTo(FlexPreset.ROUTINE.route(a = id)) },
+                                    onSaveRecord = { name -> workoutViewModel.saveWorkoutRecord(workoutId, name) },
+                                    deleteTemplate = trainingRepository::deleteTemplate,
+                                    onDeleted = {
+                                        workoutViewModel.deleteWorkout(workoutId)
+                                        popToRoute(Destination.Workouts.route)
+                                    }
+                                )
+                            }
                         }
                         composable(
                             route = Destination.ExerciseViewer.route,

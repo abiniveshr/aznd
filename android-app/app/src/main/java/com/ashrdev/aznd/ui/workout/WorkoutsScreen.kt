@@ -2,6 +2,7 @@ package com.ashrdev.aznd.ui.workout
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
@@ -52,12 +54,12 @@ import com.ashrdev.aznd.ui.workout.exercise.LocalOpenCustomExercise
 
 private const val PAGE_EXERCISES = 0
 private const val PAGE_VIEW = 1
-private const val PAGE_STATS = 2
+private const val PAGE_SPLIT = 2
 
 private val WorkoutPages = listOf(
     BarPage("Exercises", Icons.AutoMirrored.Filled.List),
     BarPage("Workouts", Icons.Default.FitnessCenter),
-    BarPage("Stats", Icons.Default.BarChart)
+    BarPage("Split", Icons.Default.ViewWeek)
 )
 
 /**
@@ -66,7 +68,8 @@ private val WorkoutPages = listOf(
  *  - Workouts: every workout with a Start button; tap a workout to see what is in it.
  *  - Exercises (swipe left): every catalog exercise, A-Z, in the same searcher as the add-exercise
  *    picker. Tapping one opens the exercise viewer. The + in the top bar adds a custom exercise.
- *  - Stats (swipe right): pick a workout to open its stats.
+ *  - Split (swipe right): a placeholder for the workout split (which workout on which day).
+ * A workout's stats are on its own screen, a swipe right from its exercises.
  */
 @Composable
 fun WorkoutsScreen(
@@ -74,7 +77,6 @@ fun WorkoutsScreen(
     onOpenWorkout: (Long) -> Unit,
     onAddWorkout: () -> Unit,
     onOpenSession: (Long) -> Unit,
-    onOpenWorkoutStats: (Long) -> Unit,
     onOpenExercise: (Long) -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
@@ -129,7 +131,7 @@ fun WorkoutsScreen(
         pageTitle = { page ->
             when (page) {
                 PAGE_EXERCISES -> "Exercises"
-                PAGE_STATS -> "Workout stats"
+                PAGE_SPLIT -> "Workout split"
                 else -> "Workouts"
             }
         },
@@ -169,11 +171,7 @@ fun WorkoutsScreen(
                     bottomPadding = bottom,
                     onOpen = { onOpenExercise(it.id) }
                 )
-                PAGE_STATS -> StatsPickerPage(
-                    workouts = workouts,
-                    bottomPadding = bottom,
-                    onOpen = onOpenWorkoutStats
-                )
+                PAGE_SPLIT -> SplitPage(bottomPadding = bottom)
                 else -> ViewPage(
                     workouts = workouts,
                     bottomPadding = bottom,
@@ -284,45 +282,25 @@ private fun ExercisesPage(
     )
 }
 
-// ---- Stats page: pick a workout ----
+// ---- Split page: placeholder ----
 
 @Composable
-private fun StatsPickerPage(
-    workouts: List<WorkoutWithExercises>,
-    bottomPadding: Dp,
-    onOpen: (Long) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+private fun SplitPage(bottomPadding: Dp) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 24.dp, end = 24.dp, bottom = bottomPadding),
+        contentAlignment = Alignment.Center
     ) {
-        if (workouts.isEmpty()) {
-            item(key = "empty") { Text("No workouts yet.", style = MaterialTheme.typography.bodyMedium) }
-        }
-        items(workouts, key = { it.workout.id }) { item ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpen(item.workout.id) }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "${item.exercises.size} exercises",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(Icons.Default.ChevronRight, contentDescription = null)
-                }
-            }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.ViewWeek, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Workout split", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Plan which workout goes on which day. Coming soon. A workout's stats are now on its own screen: open it and swipe right.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
