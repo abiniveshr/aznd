@@ -41,7 +41,47 @@ interface TileRules {
     val splitLow: Float
     val splitHigh: Float
     val rowGrow: Float
+
+    /**
+     * Side by side, a picture takes the width its row leaves after the other parts have what they need at natural size
+     * (within its own cap and least width), instead of the width that makes the parts equally tall. Off keeps the
+     * equal-height split.
+     */
+    val pictureFirstRows: Boolean get() = false
+
+    /**
+     * How far past its own height cap a picture may be drawn when its cell has room nobody else can use: the cap
+     * keeps a picture from growing while other content shrinks, but room left over at the end is better spent on it
+     * than left empty. 1 keeps the cap hard.
+     */
+    val pictureOverflow: Float get() = 1f
+
+    /** Whether the automatic stack may pair a small block beside its neighbour (see [TileFlow]). Off leaves it a plain stack. */
+    val pairsSmall: Boolean get() = false
+
+    /**
+     * When a stack ends above the bottom of its room and nothing can grow into what is left, that room is spread: half
+     * of it widens the gaps (each by at most this share of the stack's room), the rest is an equal margin above and
+     * below, so the content sits centred instead of at the top over a hole. 0 keeps the stack at the top.
+     */
+    val spreadGap: Float get() = 0f
+
+    /**
+     * A card that would leave more than [sparseMargin] of its room as spread margin lets titles, text and statistics
+     * grow past their caps by this factor (together, so their size relation stays), as far as the width allows, before
+     * the margin is spread. 1 keeps the caps.
+     */
+    val sparseBoost: Float get() = 1f
+    val sparseMargin: Float get() = 0.25f
     val zoom: TileZoom
+
+    /**
+     * A statistic whose layout would cover less than this share of its cell, grown as far as [fillMax] lets it, takes
+     * the layout that covers the most when that is clearly more (see [TileFitter.statistic]): beside a tall picture a
+     * statistic reflows into fewer columns and grows to the picture's height instead of sitting in a hole. 0 keeps
+     * the layout the reflow rule picked.
+     */
+    val statFillShare: Float get() = 0f
 
     val textMinScale: Float
     val statMinScale: Float
@@ -67,5 +107,12 @@ interface TileRules {
     fun appetite(kind: TileKind): Float
 
     fun tileCost(item: AlignItem, space: AlignSpace, cw: Float, ch: Float, fit: TileFit, top: Boolean, air: Boolean = top): Double
+
+    /**
+     * The least [tileCost] can ever be for a tile of [kind], whatever its cell (0 unless the kind earns a reward, as
+     * pictures do for the area they cover). [groupCost] is never negative. The search uses this to drop a split as soon
+     * as the parts it has priced, plus the least the rest could cost, cannot beat the best split it already has.
+     */
+    fun tileCostFloor(kind: TileKind): Double
     fun groupCost(stacked: Boolean, sizes: FloatArray, used: FloatArray): Double
 }

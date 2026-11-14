@@ -2,6 +2,7 @@
 
 package com.ashrdev.aznd.ui.common.share
 
+import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -322,6 +323,7 @@ internal fun FlexEditPage(
                             block = block,
                             spec = spec,
                             content = content,
+                            photo = (block.keys?.firstOrNull() ?: content.photoUri)?.let { assets.images[it] },
                             onChange = { changed, continuous -> onChange(changed, continuous) },
                             onPickPhoto = { picker.launch() }
                         )
@@ -374,6 +376,8 @@ private fun BlockOptions(
     block: FlexBlock,
     spec: FlexSpec,
     content: FlexContent,
+    /** The photo block's picture, as the card draws it (null while it loads or when there is none). */
+    photo: Bitmap?,
     onChange: (changed: FlexBlock, continuous: Boolean) -> Unit,
     onPickPhoto: () -> Unit
 ) {
@@ -428,7 +432,7 @@ private fun BlockOptions(
                     TextButton(onClick = { onChange(block.copy(keys = null), false) }) { Text("Use default") }
                 }
             }
-            // A photo takes at most half the card, so the shapes on offer are those that suit that half.
+            // A fixed shape takes at most half the card, so the shapes on offer are those that suit that half; "Fill its tile" is not held to it.
             val limit = spec.style.photoLimit()
             val options = FlexPhotoRatio.entries.filter { it.allowedOn(limit) }
             val current = options.firstOrNull { abs(it.ratio - block.photoRatio) < 0.01f } ?: FlexPhotoRatio.AUTO
@@ -436,19 +440,24 @@ private fun BlockOptions(
             val lowest = real.minByOrNull { it.ratio }?.label
             val highest = real.maxByOrNull { it.ratio }?.label
             DropdownField(
-                label = "Crop shape (at most half the card" + if (lowest != null && highest != null) ", $lowest to $highest)" else ")",
+                label = "Crop shape (fixed shapes at most half the card" + if (lowest != null && highest != null) ", $lowest to $highest)" else ")",
                 options = options,
                 selected = current,
                 optionLabel = { it.label }
             ) { onChange(block.copy(photoRatio = it.ratio), false) }
-            LabeledSlider("Zoom", "${(block.photoZoom * 10).roundToInt() / 10f}×", block.photoZoom, 1f..3f) {
-                onChange(block.copy(photoZoom = it), true)
-            }
-            LabeledSlider("Move left / right", "${(block.photoX * 100).roundToInt()}%", block.photoX, 0f..1f) {
-                onChange(block.copy(photoX = it), true)
-            }
-            LabeledSlider("Move up / down", "${(block.photoY * 100).roundToInt()}%", block.photoY, 0f..1f) {
-                onChange(block.copy(photoY = it), true)
+            if (current == FlexPhotoRatio.FREE) {
+                // Free crop: the frame is dragged on the photo itself, so zoom and move have no part in it.
+                FlexCropEditor(block = block, photo = photo, onChange = onChange)
+            } else {
+                LabeledSlider("Zoom", "${(block.photoZoom * 10).roundToInt() / 10f}×", block.photoZoom, 1f..3f) {
+                    onChange(block.copy(photoZoom = it), true)
+                }
+                LabeledSlider("Move left / right", "${(block.photoX * 100).roundToInt()}%", block.photoX, 0f..1f) {
+                    onChange(block.copy(photoX = it), true)
+                }
+                LabeledSlider("Move up / down", "${(block.photoY * 100).roundToInt()}%", block.photoY, 0f..1f) {
+                    onChange(block.copy(photoY = it), true)
+                }
             }
         }
     }

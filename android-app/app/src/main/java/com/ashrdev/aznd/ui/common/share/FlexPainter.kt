@@ -23,15 +23,20 @@ import com.ashrdev.aznd.ui.common.tiling.DrawableShape
 import com.ashrdev.aznd.ui.common.tiling.DropZone
 import com.ashrdev.aznd.ui.common.tiling.StatShape
 import com.ashrdev.aznd.ui.common.tiling.TileAligner
+import com.ashrdev.aznd.ui.common.tiling.TileBudget
 import com.ashrdev.aznd.ui.common.tiling.TileArea
 import com.ashrdev.aznd.ui.common.tiling.TileCell
 import com.ashrdev.aznd.ui.common.tiling.TileDivider
 import com.ashrdev.aznd.ui.common.tiling.TileFit
+import com.ashrdev.aznd.ui.common.tiling.TileFlow
 import com.ashrdev.aznd.ui.common.tiling.TileGroup
+import com.ashrdev.aznd.ui.common.tiling.TileHide
 import com.ashrdev.aznd.ui.common.tiling.TileItem
 import com.ashrdev.aznd.ui.common.tiling.TileKind
 import com.ashrdev.aznd.ui.common.tiling.TileLeaf
 import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileScale
+import com.ashrdev.aznd.ui.common.tiling.TileScaleResult
 import com.ashrdev.aznd.ui.common.tiling.TileSolved
 import com.ashrdev.aznd.ui.common.tiling.TileSolver
 import com.ashrdev.aznd.ui.common.tiling.TileTree
@@ -295,7 +300,12 @@ object FlexPainter {
 
         fun arrange(shown: List<FlexBlock>): Arranged {
             val byId = shown.associateBy { it.id }
-            val tree = TileTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
+            val stack = TileTree.effective(spec.layout, shown.map { it.id }, st.aspect == FlexAspect.WIDE)
+            // Flow with no tiling of the person's own may pair small blocks where that clearly saves room (see TileFlow).
+            val tree = if (spec.layout == null && !free && st.aspect != FlexAspect.WIDE) {
+                val stackBanner = TileTree.banner(stack)
+                TileFlow.paired(stack, shown.associate { it.id to m.item(it, stackBanner) }, gap, FlexTileRules, pad, padV, availW, roomOf(st))
+            } else stack
             val banner = TileTree.banner(tree)
             val tiler = m.tiler(shown, banner, byContent = free)
             val height: Float = if (free) {
@@ -340,15 +350,21 @@ object FlexPainter {
             return Arranged(tree, boxes, solved, height, availH, cuts, minScale)
         }
 
-        var arranged = arrange(live)
-        while (arranged.clipped && !free && live.size > 1) {
-            val last = TileTree.leaves(arranged.tree).lastOrNull() ?: break
-            val fewer = live.filter { it.id != last }
-            val next = arrange(fewer)
-            if (next.cuts >= arranged.cuts) break
-            live = fewer
-            hidden.add(last)
-            arranged = next
+        val laidOut = HashMap<Set<Int>, Arranged>()
+        fun arrangedFor(ids: Collection<Int>): Arranged {
+            val key = ids.toSet()
+            return laidOut.getOrPut(key) { arrange(admitted.filter { it.id in key }) }
+        }
+        var arranged = arrangedFor(live.map { it.id })
+        if (arranged.clipped && !free && live.size > 1) {
+            val kinds = live.associate { it.id to it.type.blockClass.kind }
+            val order = TileTree.leaves(arranged.tree).filter { it in kinds }
+            val gone = TileHide.choose(order, { kinds.getValue(it) }, { ids -> arrangedFor(ids).cuts })
+            if (gone.isNotEmpty()) {
+                live = live.filter { it.id !in gone }
+                hidden.addAll(gone)
+                arranged = arrangedFor(live.map { it.id })
+            }
         }
         return FlexPlan(
             width = st.aspect.width.toFloat(),
@@ -451,7 +467,7 @@ object FlexPainter {
         return Metrics(c, content, st.aspect.width - 2f * st.padding).visibleArea(b)
     }
 
-    private const val BUDGET_SLACK = 0.03f
+    private const val BUDGET_SLACK = 0f
 
     private fun roomOf(st: FlexStyle): Float {
         val height = if (st.aspect == FlexAspect.FREE) TOO_TALL else st.aspect.height.toFloat()
@@ -472,12 +488,26 @@ object FlexPainter {
         val full = tree ?: budgetTree(m, st, shown)
         fun fits(keep: Collection<Int>): Boolean {
             val t = TileTree.prune(full, keep.toSet()) ?: return true
-            return m.leastOf(shown.filter { it.id in keep }, t, strict) <= room
+            val kept = shown.filter { it.id in keep }
+            if (m.leastOf(kept, t, strict) <= room) return true
+            return strict && kept.size > 1 && budgetFits(m, st, kept, room)
         }
         if (fits(shown.map { it.id })) return shown
         val held = ArrayList<FlexBlock>()
         for (b in shown) if (fits(held.map { it.id } + b.id)) held += b
         return held
+    }
+
+    /**
+     * Whether [kept] can be shown whole in [room] by some tiling, not only the card's own: the engine's answer for a
+     * stack and for columns, and for the best tilings of a quick aligner run (see [TileBudget]).
+     */
+    private fun budgetFits(m: Metrics, st: FlexStyle, kept: List<FlexBlock>, room: Float): Boolean {
+        val banner = kept.firstOrNull()?.takeIf { it.type.blockClass == FlexBlockClass.TITLE }?.id
+        val items = kept.associate { it.id to m.item(it, banner) }
+        val align = kept.map { autoItem(m.c, m, it, m.availW) }
+        val trees = listOf(budgetTree(m, st, kept), budgetTree(m, st, kept, columns = true))
+        return TileBudget.fits(items, align, trees, m.availW, st.spacing.toFloat(), room, FlexTileRules)
     }
 
     private fun admit(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, layout: TileNode?): List<FlexBlock> =
@@ -490,13 +520,13 @@ object FlexPainter {
         return if (safe.size > now.size) safe else now
     }
 
-    private fun budgetTree(m: Metrics, st: FlexStyle, shown: List<FlexBlock>): TileNode? {
+    private fun budgetTree(m: Metrics, st: FlexStyle, shown: List<FlexBlock>, columns: Boolean = false): TileNode? {
         fun stack(l: List<FlexBlock>): TileNode? = when (l.size) {
             0 -> null
             1 -> TileLeaf(l[0].id)
             else -> TileGroup(true, l.map { TileLeaf(it.id) }, List(l.size) { 0f })
         }
-        if (st.aspect != FlexAspect.WIDE || shown.size < 3) return stack(shown)
+        if ((st.aspect != FlexAspect.WIDE && !columns) || shown.size < 3) return stack(shown)
         val banner = shown.first().takeIf { it.type.blockClass == FlexBlockClass.TITLE }
         val rest = if (banner != null) shown.drop(1) else shown
         val colW = (m.availW - st.spacing) / 2f
@@ -718,8 +748,8 @@ object FlexPainter {
             val cls = b.type.blockClass
             if (cls == FlexBlockClass.DRAWABLE) return 1f
             val need = needOf(b)
-            val fits = if (need > 0f) availW / need else LIMIT_SCALE
-            return min(LIMIT_SCALE, fits).coerceAtLeast(FlexFit.minScale(cls.kind))
+            val fits = if (need > 0f) availW / need else FlexTileRules.BUDGET_SCALE
+            return min(FlexTileRules.BUDGET_SCALE, fits).coerceAtLeast(FlexFit.minScale(cls.kind))
         }
 
         fun short(b: FlexBlock, box: FlexBlockBox): Boolean =
@@ -811,7 +841,7 @@ object FlexPainter {
         }
 
         fun leastH(b: FlexBlock, w: Float): Float {
-            val s = LIMIT_SCALE
+            val s = FlexTileRules.BUDGET_SCALE
             return when (b.type.blockClass) {
                 FlexBlockClass.DRAWABLE -> {
                     val sh = shape(b)
@@ -882,7 +912,7 @@ object FlexPainter {
 
     /** A block as the auto aligner sees it: its class, its least and its hugging width, and how its height goes with its width. */
     private fun autoItem(c: Ctx, m: Metrics, b: FlexBlock, availW: Float): AlignItem = when (b.type.blockClass) {
-        FlexBlockClass.DRAWABLE -> AlignItem(b.id, TileKind.DRAWABLE, 0f, availW, drawable = m.shape(b))
+        FlexBlockClass.DRAWABLE -> AlignItem(b.id, TileKind.DRAWABLE, 0f, availW, drawable = m.shape(b).planned())
         FlexBlockClass.STATISTIC -> {
             val shape = m.stat(b) ?: StatShape(intArrayOf(1), floatArrayOf(1f), floatArrayOf(0f), 1, FlexTileRules.reflowKeep)
             AlignItem(b.id, TileKind.STATISTIC, shape.need, min(shape.hug, availW), stat = shape)
@@ -1001,7 +1031,7 @@ object FlexPainter {
         for (found in quick.tried.sortedBy { it.score }) if (better(found.spec)) return best
         val live = held.mapNotNull { probe.byId[it] }
         budgetTree(probe.m, spec.style, live)?.let { better(withLayout(spec, probe.drawable, live, it)) }
-        if (best == null && better(autoAlign(spec, content, assets).spec)) return best
+        if (best == null && better(autoAlign(spec, content, assets, rescale = false).spec)) return best
         return best
     }
 
@@ -1272,7 +1302,8 @@ object FlexPainter {
         return Search(spec, content, assets, reading).score(p)
     }
 
-    fun autoAlign(spec: FlexSpec, content: FlexContent, assets: FlexAssets): FlexAutoResult {
+    /** [rescale]: best fit may also change the card's Module size ([scaled]); off for the automatic rescue, which must not touch what the person set. */
+    fun autoAlign(spec: FlexSpec, content: FlexContent, assets: FlexAssets, rescale: Boolean = true): FlexAutoResult {
         if (spec.style.layoutMode == FlexLayoutMode.FREE) return FlexAutoResult(spec, false, "Free mode is placed by hand")
         val before = plan(spec, content, assets)
         val probe = Search(spec, content, assets, emptyList())
@@ -1288,16 +1319,53 @@ object FlexPainter {
                 chosen = Found(kept, p, search.score(p))
             }
         }
+        val rescaled = if (rescale) scaled(spec, chosen, content, assets, reading) else chosen
+        val resized = rescaled.spec.style.moduleScale != spec.style.moduleScale
+        chosen = rescaled
         if (chosen.spec == spec) return FlexAutoResult(spec, false, "Already the best fit", others)
         if (before.hidden.isEmpty() && !holdsAsMuch(spec, chosen.spec, content, assets)) return FlexAutoResult(spec, false, "Already the best fit", others)
         val now = search.score(before)
-        if (now - chosen.score < 0.005 && before.hidden.size <= chosen.plan.hidden.size) return FlexAutoResult(spec, false, "Already the best fit", others)
+        if (!resized && now - chosen.score < 0.005 && before.hidden.size <= chosen.plan.hidden.size) return FlexAutoResult(spec, false, "Already the best fit", others)
         val message = when {
             chosen.plan.hidden.size > before.hidden.size -> "Aligned; ${chosen.plan.hidden.size} block(s) don't fit this size"
             chosen.plan.minScale < LIMIT_SCALE + 0.05f -> "Aligned; it's a tight fit"
             else -> "Aligned"
         }
         return FlexAutoResult(chosen.spec, true, message, others)
+    }
+
+    /** The least Module size best fit chooses (a card already set lower keeps its own as the least): the smallest text stays as large as the person's size and [MIN_TILE_SCALE] allow. */
+    private const val WAND_MIN = 0.8f
+
+    /** How many Module sizes best fit tries between its least and [FLEX_MODULE_MAX] (besides the card's own). */
+    private const val WAND_TRIES = 6
+
+    /**
+     * Best fit also chooses the card's content scale: the Module size ([FlexStyle.moduleScale], the slider in the
+     * Layout section, saved with the card's style) that [TileScale] finds leaves the least of the card empty with
+     * nothing clipped or hidden, for the tiling [found] (laid out again at each size, which is cheap next to the search
+     * that found it). A size at which text would be drawn smaller than [MIN_TILE_SCALE] of the person's own
+     * size is not tried. A fixed card size only: a Free size card grows with its content. And only while the Module size is
+     * still its default ([TileScale.mayRescale]): a size the person set with the slider is kept, the wand only rearranges.
+     */
+    private fun scaled(spec: FlexSpec, found: Found, content: FlexContent, assets: FlexAssets, reading: List<Int>): Found {
+        if (spec.style.aspect == FlexAspect.FREE) return found
+        val base = spec.style.moduleScale
+        if (!TileScale.mayRescale(base, FLEX_MODULE_DEFAULT)) return found
+        val sizes = TileScale.candidates(base, min(base, WAND_MIN), FLEX_MODULE_MAX, WAND_TRIES)
+        val least = MIN_TILE_SCALE * min(1f, base)
+        val pick = TileScale.choose(sizes, base) { size ->
+            val next = found.spec.copy(style = found.spec.style.copy(moduleScale = size))
+            val p = plan(next, content, assets)
+            val covered = p.boxes.sumOf { it.width.toDouble() * it.height } / (p.contentWidth.toDouble() * p.contentHeight).coerceAtLeast(1.0)
+            val clipped = (if (p.clipped) 1 else 0) + max(0, p.hidden.size - found.plan.hidden.size)
+            val small = belowLeast(next, content, assets, p) + (if (size * p.minScale < least - 0.012f) 1 else 0)
+            TileScaleResult(1.0 - covered, clipped, small)
+        } ?: return found
+        if (pick.scale == base) return found
+        val next = found.spec.copy(style = found.spec.style.copy(moduleScale = pick.scale))
+        val p = plan(next, content, assets)
+        return Found(next, p, Search(next, content, assets, reading).score(p))
     }
 
     // -----------------------------------------------------------------------------------------
@@ -1335,13 +1403,20 @@ object FlexPainter {
         FlexBlockType.PHOTO -> {
             val bmp = photoBitmap(c, b, ct)
             val lim = c.limits
-            val own = (if (b.photoRatio > 0f) b.photoRatio else bmp?.let { it.width.toFloat() / it.height } ?: 1f)
-                .coerceIn(lim.range.start, lim.range.endInclusive)
+            // A free crop takes the shape of the part of the photo the person framed; it is never "fill", so the tile
+            // keeps that shape (within the card's limit) like a fixed ratio.
+            val cropShape = if (b.photoRatio == FLEX_PHOTO_FREE && bmp != null) freeCropOf(b).let {
+                FlexCrop.ratio(it.l, it.t, it.r, it.b, bmp.width.toFloat(), bmp.height.toFloat())
+            } else null
             val circle = b.variant == 1
             val fill = b.photoRatio == 0f && !circle
-            val lo = if (circle) 1f else if (fill) lim.range.start else own
-            val hi = if (circle) 1f else if (fill) lim.range.endInclusive else own
-            DrawableShape(bmp != null, if (circle) 1f else own, lo, hi, 0f, 0f, lim.maxWidth, lim.maxHeight, greedy = true, crops = fill)
+            // "Fill its tile" may take the whole card and any crop in the wide range; a fixed or free shape keeps the half-card limit.
+            val box = if (fill) c.fillLimits else lim
+            val own = (cropShape ?: if (b.photoRatio > 0f) b.photoRatio else bmp?.let { it.width.toFloat() / it.height } ?: 1f)
+                .coerceIn(box.range.start, box.range.endInclusive)
+            val lo = if (circle) 1f else if (fill) box.range.start else own
+            val hi = if (circle) 1f else if (fill) box.range.endInclusive else own
+            DrawableShape(bmp != null, if (circle) 1f else own, lo, hi, 0f, 0f, box.maxWidth, box.maxHeight, greedy = true, crops = fill, ownMaxW = lim.maxWidth, ownMaxH = lim.maxHeight)
         }
         FlexBlockType.MODEL -> {
             val bmp = photoBitmap(c, b, ct)
@@ -1366,7 +1441,7 @@ object FlexPainter {
             val minH = (head + weeks * CAL_CELL_MIN + (weeks - 1) * CAL_GAP + 2 * pad) * k
             val natW = 7 * CAL_CELL + 6 * CAL_GAP + 2 * pad
             val natH = head + weeks * CAL_CELL + (weeks - 1) * CAL_GAP + 2 * pad
-            DrawableShape(cal != null && cal.days > 0, natW / natH, 0.7f, 2.2f, minW, minH, NO_CAP, max(CHART_MAX_H * 1.2f, minH), greedy = false, crops = false)
+            DrawableShape(cal != null && cal.days > 0, natW / natH, 0.8f, 1.4f, minW, minH, NO_CAP, max(CHART_MAX_H * 1.2f, minH), greedy = false, crops = false)
         }
         FlexBlockType.CHART -> {
             // A chart stretches to its cell (within a sensible range of shapes) instead of being fitted by text scaling;
@@ -1379,11 +1454,14 @@ object FlexPainter {
             val datesH = if (b.flag) CHART_DATES_H else 0f
             val minW = (max(axisW + CHART_PLOT_W, labelW) + 2 * pad) * k
             val minH = (kicker + CHART_PLOT_H + datesH + 2 * pad) * k
-            DrawableShape(ct.chart.isNotEmpty(), CHART_RATIO, 0.9f, 3.5f, minW, minH, NO_CAP, max(CHART_MAX_H, minH), greedy = false, crops = false)
+            DrawableShape(ct.chart.isNotEmpty(), CHART_RATIO, 0.9f, 5f, minW, minH, NO_CAP, max(CHART_MAX_H, minH), greedy = false, crops = false)
         }
         // Not a drawable: nothing to draw as one.
         else -> DrawableShape(false, 1f, 1f, 1f, 0f, 0f, NO_CAP, NO_CAP, greedy = false, crops = false)
     }
+
+    /** The crop of a photo block in free crop mode, made valid (the block may come from older or hand-made data). */
+    private fun freeCropOf(b: FlexBlock): FlexCropBox = FlexCrop.normalise(b.cropL, b.cropT, b.cropR, b.cropB)
 
     /** A drawable in its tile, [w] by [h] in the block's own units (its [FlexBlock.size] is applied around this). */
     private fun drawDrawable(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
@@ -1464,9 +1542,24 @@ object FlexPainter {
         var fillTo: Float = 0f
         /** The same in the block's own content units; taken by the first panel drawn. */
         var target: Float = 0f
+
+        /**
+         * Where the card's corner is in the units the canvas is drawing in now. A panel's pattern is anchored there, so
+         * the panels and the card's background are windows onto one sheet of pattern. Moved by [enter] wherever the
+         * canvas is translated or scaled for a block.
+         */
+        var fieldX: Float = 0f
+        var fieldY: Float = 0f
+
+        /** Call after translating the canvas by ([dx], [dy]) and then scaling it by [k]: the card's corner moves the other way. */
+        fun enter(dx: Float, dy: Float, k: Float) {
+            fieldX = (fieldX - dx) / k
+            fieldY = (fieldY - dy) / k
+        }
         val center: Boolean get() = align == FlexAlign.CENTER
         val right: Boolean get() = align == FlexAlign.END
         val limits: FlexPhotoLimit = st.photoLimit()
+        val fillLimits: FlexPhotoLimit = st.photoFillLimit()
 
         /** The x a line of text is anchored at inside [x], [w]: left, middle or right edge, to go with [paintAlign]. */
         fun alignX(x: Float, w: Float): Float = when (align) {
@@ -1604,7 +1697,7 @@ object FlexPainter {
                         fill.alpha = (st.panelAlpha * 255f).roundToInt().coerceIn(0, 255)
                         canvas.drawRoundRect(r, rad, rad, fill)
                     } else {
-                        FillRender.drawRoundRect(canvas, st.panelFill, st.panelColor, r, rad, PATTERN_DENSITY, st.panelAlpha)
+                        FillRender.drawRoundRect(canvas, st.panelFill, st.panelColor, r, rad, PATTERN_DENSITY, st.panelAlpha, fieldX, fieldY)
                     }
                 }
                 FlexPanel.OUTLINE -> if (st.panelBorderWidth <= 0 && st.panelBorderKind == BorderKind.OUTLINE) {
@@ -1658,22 +1751,29 @@ object FlexPainter {
 
         /**
          * Crops [bmp] to fill [dst], with rounded corners of [radius]. [zoom] 1 to 3 crops in further; [fx] and
-         * [fy] (0 to 1, 0.5 = centre) say where in the picture the crop sits.
+         * [fy] (0 to 1, 0.5 = centre) say where in the picture the crop sits. With a [crop] (free crop, fractions of the
+         * picture) zoom and the position are not used: the framed part is drawn, trimmed to [dst]'s shape around its middle.
          */
-        fun image(bmp: Bitmap, dst: RectF, radius: Float, zoom: Float = 1f, fx: Float = 0.5f, fy: Float = 0.5f) {
+        fun image(bmp: Bitmap, dst: RectF, radius: Float, zoom: Float = 1f, fx: Float = 0.5f, fy: Float = 0.5f, crop: FlexCropBox? = null) {
             if (dry || dst.width() <= 0f || dst.height() <= 0f) return
             val bw = bmp.width.toFloat()
             val bh = bmp.height.toFloat()
             val dstAspect = dst.width() / dst.height()
-            // The biggest crop of the picture with the shape of [dst], then zoomed in, then placed.
-            val fullW = if (bw / bh > dstAspect) bh * dstAspect else bw
-            val fullH = if (bw / bh > dstAspect) bh else bw / dstAspect
-            val z = zoom.coerceIn(1f, 3f)
-            val sw = fullW / z
-            val sh = fullH / z
-            val left = (bw - sw) * fx.coerceIn(0f, 1f)
-            val top = (bh - sh) * fy.coerceIn(0f, 1f)
-            val src = Rect(left.toInt(), top.toInt(), (left + sw).toInt(), (top + sh).toInt())
+            val src = if (crop != null) {
+                // Free crop: the framed part of the picture, trimmed to the tile's shape around its middle.
+                val s = FlexCrop.source(crop.l, crop.t, crop.r, crop.b, bw, bh, dstAspect)
+                Rect(s.l.toInt(), s.t.toInt(), s.r.toInt().coerceAtLeast(s.l.toInt() + 1), s.b.toInt().coerceAtLeast(s.t.toInt() + 1))
+            } else {
+                // The biggest crop of the picture with the shape of [dst], then zoomed in, then placed.
+                val fullW = if (bw / bh > dstAspect) bh * dstAspect else bw
+                val fullH = if (bw / bh > dstAspect) bh else bw / dstAspect
+                val z = zoom.coerceIn(1f, 3f)
+                val sw = fullW / z
+                val sh = fullH / z
+                val left = (bw - sw) * fx.coerceIn(0f, 1f)
+                val top = (bh - sh) * fy.coerceIn(0f, 1f)
+                Rect(left.toInt(), top.toInt(), (left + sw).toInt(), (top + sh).toInt())
+            }
             val save = canvas.save()
             if (radius > 0f) {
                 val clip = Path().apply { addRoundRect(dst, radius, radius, Path.Direction.CW) }
@@ -1824,13 +1924,22 @@ object FlexPainter {
         c.align = b.hAlign
         val canvas = c.canvas
         canvas.save()
+        val fieldX = c.fieldX
+        val fieldY = c.fieldY
         canvas.translate(left, top)
-        if (grow != 1f) canvas.scale(grow, grow)
+        c.enter(left, top, 1f)
+        if (grow != 1f) {
+            canvas.scale(grow, grow)
+            c.enter(0f, 0f, grow)
+        }
         canvas.clipRect(0f, 0f, box.width, box.height)
         if (b.type.blockClass == FlexBlockClass.DRAWABLE) {
             // The block's size scales what is drawn in the tile (a chart's labels), not the tile.
             val k = scaleOf(c, b)
-            if (k != 1f) canvas.scale(k, k)
+            if (k != 1f) {
+                canvas.scale(k, k)
+                c.enter(0f, 0f, k)
+            }
             drawDrawable(c, b, ct, box.width / k, box.height / k)
         } else {
             val room = box.height - box.inset
@@ -1841,6 +1950,7 @@ object FlexPainter {
             }.coerceAtLeast(0f)
             canvas.translate(0f, oy)
             canvas.scale(box.scale, box.scale)
+            c.enter(0f, oy, box.scale)
             c.columns = box.columns
             // A stretched tile: its panel is drawn as tall as the tile (see FlexBlockBox.stretched).
             c.fillTo = if (box.stretched) room / box.scale else 0f
@@ -1850,6 +1960,8 @@ object FlexPainter {
             c.columns = 0
         }
         canvas.restore()
+        c.fieldX = fieldX
+        c.fieldY = fieldY
     }
 
     /** A photo is its own tile: the image fills it. */
@@ -1860,7 +1972,8 @@ object FlexPainter {
             2 -> 0f
             else -> max(c.st.panelRadius.toFloat(), 24f)
         }
-        c.image(bmp, RectF(0f, 0f, w, h), radius, b.photoZoom, b.photoX, b.photoY)
+        val crop = if (b.photoRatio == FLEX_PHOTO_FREE) freeCropOf(b) else null
+        c.image(bmp, RectF(0f, 0f, w, h), radius, b.photoZoom, b.photoX, b.photoY, crop)
     }
 
     /** The 3D model's snapshot: cropped to fill its tile like a photo, or shown whole on a panel ("On a panel"). */
@@ -2010,7 +2123,12 @@ object FlexPainter {
         c.canvas.save()
         c.canvas.translate(x, y)
         c.canvas.scale(k, k)
+        val fieldX = c.fieldX
+        val fieldY = c.fieldY
+        c.enter(x, y, k)
         val h = blockContent(c, b, ct, 0f, 0f, w / k)
+        c.fieldX = fieldX
+        c.fieldY = fieldY
         c.canvas.restore()
         return h * k
     }

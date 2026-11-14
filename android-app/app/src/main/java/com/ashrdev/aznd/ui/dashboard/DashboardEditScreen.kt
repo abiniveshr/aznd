@@ -69,6 +69,8 @@ import com.ashrdev.aznd.ui.common.PrimaryAction
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.common.share.FLEX_DROP_HOVER_MS
+import com.ashrdev.aznd.ui.common.share.FLEX_LIFT_GROW
+import com.ashrdev.aznd.ui.common.share.FLEX_LIFT_SHADOW
 import com.ashrdev.aznd.ui.common.tiling.TileNode
 import com.ashrdev.aznd.ui.common.tiling.dropSpot
 import com.ashrdev.aznd.ui.components.AlertDialog
@@ -90,8 +92,8 @@ private val EditPages = listOf(
 )
 
 // The held tile, as Flex draws its held block (FlexPainter.drawHeld): a touch bigger, on a soft shadow.
-private const val LIFT_GROW = 0.04f
-private val LiftShadow = 14.dp
+private const val LIFT_GROW = FLEX_LIFT_GROW
+private val LiftShadow = FLEX_LIFT_SHADOW
 
 // Holding a tile this close to the top or bottom scrolls a tall page, up to EDGE_SPEED dp a frame;
 // at the page's end, holding it there FLIP_MS carries the tile to the page above or below.

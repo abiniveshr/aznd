@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -67,6 +66,7 @@ import com.ashrdev.aznd.ui.common.tiling.TileSnap
 import com.ashrdev.aznd.ui.common.tiling.TileSnapped
 import com.ashrdev.aznd.ui.common.tiling.TileTree
 import com.ashrdev.aznd.ui.common.tiling.dropSpot
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -148,39 +148,30 @@ internal fun FlexViewPage(
         if (made != null && spot === aimed) ghost = made
     }
 
-    val glide = remember { Animatable(1f) }
-    var shown by remember { mutableStateOf<Map<Int, Offset>>(emptyMap()) }
-    var glideFrom by remember { mutableStateOf<Map<Int, Offset>>(emptyMap()) }
+    // Every tile has its own glide, a spring on its place: a new target (the finger crossing into another zone) starts
+    // from where the tile is on screen, at the speed it has, so nothing jumps or stops. Read only when drawing.
+    val glides = remember { HashMap<Int, FlexGlide>() }
     var resizing by remember { mutableStateOf(false) }
-    var gliding by remember { mutableStateOf(false) }
-    fun glideAt(): Float = if (gliding) 0f else glide.value
     var letGo by remember { mutableStateOf<Pair<Int, Offset>?>(null) }
+    var released by remember { mutableStateOf<Int?>(null) }
     fun glideTo(target: FlexPlan) {
-        if (resizing) {
-            letGo = null
-            shown = target.boxes.associate { it.id to Offset(it.left, it.top) }
-            glideFrom = emptyMap()
-            gliding = false
-            return
-        }
-        val t = glideAt()
-        val from = HashMap<Int, Offset>()
+        val live = HashSet<Int>()
         for (b in target.boxes) {
             val at = Offset(b.left, b.top)
-            val was = shown[b.id]?.let { s -> s + (glideFrom[b.id] ?: Offset.Zero) * (1f - t) }
+            live.add(b.id)
             val fly = letGo?.takeIf { it.first == b.id }?.second
-            val start = fly ?: was ?: continue
-            if ((start - at).getDistance() > 0.5f) from[b.id] = start - at
+            val own = glides[b.id]
+            val glide = when {
+                resizing -> FlexGlide(at)
+                fly != null -> FlexGlide(fly)
+                own != null -> own
+                else -> FlexGlide(at)
+            }
+            glides[b.id] = glide
+            glide.flyTo(at, scope)
         }
+        glides.keys.retainAll(live)
         letGo = null
-        shown = target.boxes.associate { it.id to Offset(it.left, it.top) }
-        glideFrom = from
-        gliding = from.isNotEmpty()
-        if (from.isNotEmpty()) scope.launch {
-            glide.snapTo(0f)
-            gliding = false
-            glide.animateTo(1f, tween(FLEX_GLIDE_MS))
-        }
     }
 
     val current = ghost?.takeIf { dragging != null && it.base == spec && spot != null }
@@ -224,6 +215,8 @@ internal fun FlexViewPage(
         finger = at
         grab = at - Offset(hit.left, hit.top)
         clearAim()
+        letGo = null
+        released = null
         freeAt = if (modeNow == FlexLayoutMode.FREE) TileSnapped(hit.cellLeft, hit.cellTop, hit.cellWidth, hit.cellHeight, emptyList(), emptyList()) else null
         scope.launch { lift.animateTo(if (modeNow == FlexLayoutMode.FREE) 0.3f else 1f, spring(stiffness = Spring.StiffnessMedium)) }
     }
@@ -267,6 +260,7 @@ internal fun FlexViewPage(
         val tree = aimed?.tree
         val freed = freeAt
         letGo = id to (if (modeNow == FlexLayoutMode.FREE && freed != null) Offset(freed.x, freed.y) else finger - grab)
+        released = id
         dragging = null
         heldBox = null
         freeAt = null
@@ -287,7 +281,8 @@ internal fun FlexViewPage(
                 }
             }
         }
-        scope.launch { lift.snapTo(0f) }
+        // The tile settles as it travels: it shrinks back to its size and loses its shadow on the way to its cell.
+        scope.launch { lift.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) }
     }
 
     val gestures = Modifier
@@ -437,17 +432,44 @@ internal fun FlexViewPage(
                         veiled = veiled,
                         instantShape = resizing,
                         poses = {
-                            val t = glideAt()
-                            val offsets = if (t >= 1f) emptyMap() else glideFrom.mapValues { (_, d) -> FlexPose(d.x * (1f - t), d.y * (1f - t)) }
-                            val id = dragging
                             val free = freeAt
-                            val hx = if (mode == FlexLayoutMode.FREE && free != null) free.x else finger.x - grab.x
-                            val hy = if (mode == FlexLayoutMode.FREE && free != null) free.y else finger.y - grab.y
+                            val rid = released
+                            // A tile just let go is still held, over the others, until it has arrived and settled.
+                            val id = dragging ?: rid?.takeIf { lift.value > 0.005f || glides[it]?.moving == true }
+                            val dropping = dragging == null
+                            var moved: HashMap<Int, FlexPose>? = null
+                            for (b in drawnNow.boxes) {
+                                if (dropping && b.id == id) continue
+                                val g = glides[b.id] ?: continue
+                                val dx = g.x.value - b.left
+                                val dy = g.y.value - b.top
+                                if (abs(dx) > 0.01f || abs(dy) > 0.01f) {
+                                    val into = moved ?: HashMap<Int, FlexPose>()
+                                    into[b.id] = FlexPose(dx, dy)
+                                    moved = into
+                                }
+                            }
+                            val offsets: Map<Int, FlexPose> = moved ?: emptyMap()
+                            val flying = if (dropping && id != null) glides[id] else null
+                            val hx = when {
+                                flying != null -> flying.x.value
+                                mode == FlexLayoutMode.FREE && free != null -> free.x
+                                else -> finger.x - grab.x
+                            }
+                            val hy = when {
+                                flying != null -> flying.y.value
+                                mode == FlexLayoutMode.FREE && free != null -> free.y
+                                else -> finger.y - grab.y
+                            }
                             when {
                                 id != null -> FlexPoses(
                                     offsets, id, hx, hy, lift.value,
-                                    heldBox = heldBox,
-                                    landing = if (showing != null) FLEX_LANDING_ALPHA else 0f
+                                    heldBox = if (dropping) null else heldBox,
+                                    landing = when {
+                                        !dropping -> if (showing != null) FLEX_LANDING_ALPHA else 0f
+                                        mode == FlexLayoutMode.SPLIT -> FLEX_LANDING_ALPHA * lift.value.coerceIn(0f, 1f)
+                                        else -> 0f
+                                    }
                                 )
                                 offsets.isNotEmpty() -> FlexPoses(offsets)
                                 else -> null
@@ -627,6 +649,26 @@ internal fun DrawScope.dropIndicator(s: DropSpot, k: Float, color: Color, radius
         }
         DropKind.SIDE -> outlineArea(s.bar, k, color, 0.28f, radius)
         DropKind.SWAP -> outlineArea(s.bar, k, color, 0.18f, radius)
+    }
+}
+
+/**
+ * One tile's place while it glides: where it is on screen ([x], [y], in card pixels) and where it is going ([goal]).
+ * The goal is kept here, not read from the animations, so it is right before the coroutines that move them have run.
+ */
+private class FlexGlide(from: Offset) {
+    val x = Animatable(from.x)
+    val y = Animatable(from.y)
+    var goal = from
+        private set
+
+    val moving: Boolean get() = abs(x.value - goal.x) > 0.01f || abs(y.value - goal.y) > 0.01f
+
+    fun flyTo(target: Offset, scope: CoroutineScope) {
+        if (target == goal) return
+        goal = target
+        scope.launch { x.animateTo(target.x, flexGlide(FLEX_GLIDE_PIXEL)) }
+        scope.launch { y.animateTo(target.y, flexGlide(FLEX_GLIDE_PIXEL)) }
     }
 }
 

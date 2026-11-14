@@ -48,7 +48,9 @@ class TileSolved(
     val dividers: List<TileDivider>,
     val groupSizes: Map<List<Int>, List<Float>>,
     val levels: Map<Int, Float> = emptyMap(),
-    val zoom: Float = 1f
+    val zoom: Float = 1f,
+    /** The room spread as even margins and wider gaps (left, top, width, height), when the rules spread it; empty otherwise. */
+    val spread: List<FloatArray> = emptyList()
 )
 
 object TileTree {

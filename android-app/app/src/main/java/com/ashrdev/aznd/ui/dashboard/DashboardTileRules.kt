@@ -20,11 +20,12 @@ object DashboardTileRules : TileRules {
     override val splitLow = 0.25f
     override val splitHigh = 0.75f
     override val rowGrow = 1.25f
-    override val zoom = TileZoom(min = 0.8f, limit = 0.9f, max = 1.5f)
+    override val zoom = TileZoom(min = 0.8f, limit = 0.9f, max = 2.5f)
 
     override val textMinScale = 0.8f
     override val statMinScale = 0.8f
-    override val fillMax = 1.5f
+    override val fillMax = 2.5f
+    override val statFillShare = 0.6f
     override val fillTitle = 1.2f
 
     override val hugShare = 0.12f
@@ -44,7 +45,10 @@ object DashboardTileRules : TileRules {
     const val UNEVEN = 1.2
     const val RAGGED = 0.6
     const val EDGES = 1.2
-    const val REFLOW = 0.15
+    const val REFLOW = 0.03
+    /** What the room a statistic or a picture leaves empty in its cell costs, per share of the area: dead room is what the owner sees. */
+    const val STAT_WASTE = 6.0
+    const val PICTURE_WASTE = 5.0
     const val PICTURE = 1.4
     const val LEFT_OVER = 1.2
     const val SHRINK = 6.0
@@ -81,6 +85,9 @@ object DashboardTileRules : TileRules {
         TileKind.TEXT -> 1f
     }
 
+    /** Only a picture's cost can go below zero: its reward for the area it covers, at most [PICTURE] x 0.35 (see [tileCost]). */
+    override fun tileCostFloor(kind: TileKind): Double = if (kind == TileKind.DRAWABLE) -PICTURE * 0.35 else 0.0
+
     override fun groupCost(stacked: Boolean, sizes: FloatArray, used: FloatArray): Double {
         var c = GROUP
         if (stacked || sizes.size < 2) return c
@@ -97,13 +104,15 @@ object DashboardTileRules : TileRules {
 
     override fun tileCost(item: AlignItem, space: AlignSpace, cw: Float, ch: Float, fit: TileFit, top: Boolean, air: Boolean): Double {
         val area = (space.width * space.height).toDouble().coerceAtLeast(1.0)
-        val waste = (cw.toDouble() * ch - fit.w.toDouble() * fit.h) / area
+        val stat0 = item.stat
+        val coverW = if (item.kind == TileKind.STATISTIC && stat0 != null) min(fit.w.toDouble(), stat0.widths[stat0.columns.indexOf(fit.columns).coerceAtLeast(0)] * fit.scale.toDouble()) else fit.w.toDouble()
+        val waste = (cw.toDouble() * ch - coverW * fit.h) / area
         val s = min(1.0, fit.scale.toDouble())
         var c = if (fit.cut) CUT else 0.0
         when (item.kind) {
             TileKind.STATISTIC, TileKind.TEXT, TileKind.TITLE -> {
                 c += SHRINK * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
-                c += 1.0 * waste
+                c += STAT_WASTE * waste
                 c += GROWN * max(0.0, fit.scale - 1.0)
                 val designed = item.stat?.designed ?: 1
                 if (fit.columns in 1 until designed) c += REFLOW * (designed - fit.columns)
@@ -120,7 +129,7 @@ object DashboardTileRules : TileRules {
             }
             TileKind.DRAWABLE -> {
                 val frac = fit.w.toDouble() * fit.h / area
-                c += 1.4 * waste
+                c += PICTURE_WASTE * waste
                 c -= PICTURE * min(frac, 0.35)
                 if (frac < 0.1) c += SMALL * (0.1 - frac)
             }

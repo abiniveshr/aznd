@@ -37,7 +37,7 @@ enum class PatternKind(
     NOISE("Noise", false, 1f, 0.16f, seeded = true),
     CLOUDS("Clouds", true, 1f, 0.20f, seeded = true),
     SPECKLE("Speckle", true, 1f, 0.70f, seeded = true),
-    BRUSHED("Brushed", false, 1f, 0.16f, seeded = true),
+    BRUSHED("Brushed", false, 1f, 0.14f, seeded = true),
     CARBON("Carbon", false, 1f, 0.30f),
     DOTS("Dots", true, 1.2f, 0.12f),
     LINES("Lines", true, 1.2f, 0.10f),
@@ -56,7 +56,7 @@ data class GradientStop(val position: Float, val color: Int)
 
 /**
  * A multi-colour gradient. [angle] is in degrees: 0 runs left to right, 90 top to bottom (linear), and is
- * the start angle of a sweep. [centerX] / [centerY] (0..1 of the surface) place radial and sweep gradients;
+ * the start angle of a sweep. [centerX] / [centerY] (0..1 spans the surface; presets reach a little outside, so -0.5..1.5 is kept) place radial and sweep gradients;
  * [radius] is a share of the half-diagonal (1 reaches the corners).
  */
 @Immutable
@@ -259,8 +259,8 @@ fun gradientFromJson(o: JSONObject?, fallback: GradientSpec = GradientSpec()): G
     return GradientSpec(
         kind = enumOrDefault(o.optString("kind"), fallback.kind),
         angle = o.optInt("angle", fallback.angle),
-        centerX = o.optDouble("centerX", fallback.centerX.toDouble()).toFloat().coerceIn(0f, 1f),
-        centerY = o.optDouble("centerY", fallback.centerY.toDouble()).toFloat().coerceIn(0f, 1f),
+        centerX = o.optDouble("centerX", fallback.centerX.toDouble()).toFloat().coerceIn(-0.5f, 1.5f),
+        centerY = o.optDouble("centerY", fallback.centerY.toDouble()).toFloat().coerceIn(-0.5f, 1.5f),
         radius = o.optDouble("radius", fallback.radius.toDouble()).toFloat().coerceIn(0.1f, 3f),
         stops = if (stops.size >= 2) stops else fallback.stops
     )

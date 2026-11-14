@@ -29,26 +29,43 @@ object FlexTileRules : TileRules {
     override val swapShare = 0.18f
     override val snapReach = 14f
 
-    override val splitLow = 0.2f
-    override val splitHigh = 0.8f
-    override val rowGrow = 1.3f
-    override val zoom = TileZoom(min = 0.45f, limit = 0.8f, max = 1.8f)
-    const val TITLE_ZOOM_MAX = 1.4f
+    /**
+     * Side by side, how unequal the parts' widths may be chosen (a share of the row): a picture next to text is kept
+     * from being squeezed to the height of its neighbour's text, and [rowGrow] lets a row's content grow past the card's
+     * zoom by this much when its cell is taller than it needs.
+     */
+    override val splitLow = 0.28f
+    override val splitHigh = 0.72f
+    override val rowGrow = 2.0f
+    override val pictureFirstRows = true
+    override val pictureOverflow = 1.6f
+    override val pairsSmall = true
+    override val spreadGap = 0.05f
+    override val sparseBoost = 3.2f
+    override val zoom = TileZoom(min = 0.45f, limit = 0.8f, max = 3.2f)
+    const val TITLE_ZOOM_MAX = 2.6f
 
     /** Titles and text are never shrunk below this. Same as [FlexPainter.MIN_TILE_SCALE]. */
     override val textMinScale = 0.6f
 
-    /** Statistics have no wrapping to fall back on, so they may shrink further. */
-    override val statMinScale = 0.45f
+    /**
+     * The least scale the content budget lets a card's content be drawn at (the content keeps at least this of its
+     * size, less when its longest word needs it): the same as [textMinScale], so a card is refused only when it cannot
+     * be shown at the smallest text the rules allow.
+     */
+    const val BUDGET_SCALE = 0.6f
+
+    /** Statistics have no wrapping to fall back on, so they may shrink a little further than text, but not below what reads (about 12 px on a 1080 px card). */
+    override val statMinScale = 0.55f
 
     /**
      * A tile's content takes up its cell: it is drawn bigger than its size (the block's own and the module size) when
      * the cell has room, up to this. The size control of the block's menu sets where it starts.
      */
-    override val fillMax = 1.5f
+    override val fillMax = 2.6f
 
     /** A title grows less: past this it shouts. Its cell is never given more height than it takes at this. */
-    override val fillTitle = 1.25f
+    override val fillTitle = 1.6f
 
     /**
      * A picture hugs a side of its cell it nearly reaches: when the room left beside it (or above and below it) is at
@@ -56,7 +73,7 @@ object FlexTileRules : TileRules {
      * [hugSlack] past its range (a photo is re-cropped, a chart or calendar stretched). Further away, it sits in the
      * middle of the cell.
      */
-    override val hugShare = 0.12f
+    override val hugShare = 0.2f
     override val hugPx = 40f
     override val hugSlack = 1.3f
 
@@ -134,6 +151,9 @@ object FlexTileRules : TileRules {
         TileKind.TEXT -> 1f
     }
 
+    /** Only a picture's cost can go below zero: its reward for the area it covers, at most [PICTURE] x 0.5 (see [tileCost]). */
+    override fun tileCostFloor(kind: TileKind): Double = if (kind == TileKind.DRAWABLE) -PICTURE * 0.5 else 0.0
+
     /**
      * What a group costs beyond its tiles. [sizes] is what each part got along the split and [used] how far each
      * reaches across it (for side by side parts, how tall the tile or stack in it is).
@@ -163,7 +183,7 @@ object FlexTileRules : TileRules {
         when (item.kind) {
             TileKind.TEXT -> {
                 c += 5.0 * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
-                c += 1.2 * waste
+                c += 3.0 * waste
                 c += 4.0 * max(0.0, 0.30 - cw.toDouble() / space.width)
                 val at = fit.scale.coerceAtLeast(0.3f)
                 val full = item.height(space.width / at).toDouble().coerceAtLeast(1.0)
@@ -173,7 +193,7 @@ object FlexTileRules : TileRules {
             TileKind.STATISTIC -> {
                 // Shrunk as one unit: the same price as text, but nothing wraps, so fewer columns is the price instead.
                 c += 5.0 * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
-                c += 1.2 * waste
+                c += 3.0 * waste
                 c += 4.0 * max(0.0, 0.30 - cw.toDouble() / space.width)
                 val designed = item.stat?.designed ?: 1
                 if (fit.columns in 1 until designed) c += REFLOW * (designed - fit.columns)
@@ -192,7 +212,7 @@ object FlexTileRules : TileRules {
                 // A drawable is rewarded for every bit of the card it covers, up to about half of it: pictures are what a
                 // card is for, so a tiling that shows one bigger is worth a little shrinking elsewhere.
                 val frac = fit.w.toDouble() * fit.h / area
-                c += 1.6 * waste
+                c += 4.0 * waste
                 c -= PICTURE * min(frac, 0.5)
                 if (frac < 0.12) c += 3.0 * (0.12 - frac)
             }

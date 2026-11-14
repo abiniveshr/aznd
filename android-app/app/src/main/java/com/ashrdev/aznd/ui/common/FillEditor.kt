@@ -442,8 +442,8 @@ private fun GradientSection(
             ) { v -> onChange { it.copy(angle = v.roundToInt()) } }
         }
         if (g.kind != GradientKind.LINEAR) {
-            LabeledSlider("Centre across", "${(g.centerX * 100).roundToInt()}%", g.centerX, 0f..1f) { v -> onChange { it.copy(centerX = v) } }
-            LabeledSlider("Centre down", "${(g.centerY * 100).roundToInt()}%", g.centerY, 0f..1f) { v -> onChange { it.copy(centerY = v) } }
+            LabeledSlider("Centre across", "${(g.centerX * 100).roundToInt()}%", g.centerX, -0.5f..1.5f) { v -> onChange { it.copy(centerX = v) } }
+            LabeledSlider("Centre down", "${(g.centerY * 100).roundToInt()}%", g.centerY, -0.5f..1.5f) { v -> onChange { it.copy(centerY = v) } }
         }
         if (g.kind == GradientKind.RADIAL) {
             LabeledSlider("Reach", "${(g.radius * 100).roundToInt()}%", g.radius, 0.1f..2.5f) { v -> onChange { it.copy(radius = v) } }

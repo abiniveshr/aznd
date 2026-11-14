@@ -1,8 +1,9 @@
 package com.ashrdev.aznd.ui.dashboard
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -38,10 +40,13 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.ui.common.share.FLEX_GLIDE_MS
+import com.ashrdev.aznd.ui.common.share.FLEX_GLIDE_PIXEL
 import com.ashrdev.aznd.ui.common.share.FLEX_LANDING_ALPHA
+import com.ashrdev.aznd.ui.common.share.FLEX_LIFT_GROW
+import com.ashrdev.aznd.ui.common.share.FLEX_LIFT_SHADOW
 import com.ashrdev.aznd.ui.common.share.NO_ROOM_RED
 import com.ashrdev.aznd.ui.common.share.dropIndicator
+import com.ashrdev.aznd.ui.common.share.flexGlide
 import com.ashrdev.aznd.ui.common.share.outlineArea
 import com.ashrdev.aznd.ui.common.tiling.DropSpot
 import com.ashrdev.aznd.ui.common.tiling.TileNode
@@ -167,7 +172,7 @@ fun DashGrid(
 
     val content = max(drawn.height, 0f)
     // The page grows and shrinks on the tiles' glide, as Flex's Free-size card does.
-    val shownHeight = animateFloatAsState(content, tween(FLEX_GLIDE_MS), label = "dashHeight")
+    val shownHeight = animateFloatAsState(content, flexGlide(FLEX_GLIDE_PIXEL), label = "dashHeight")
     Box(
         modifier
             .fillMaxSize()
@@ -242,7 +247,8 @@ fun DashGrid(
 }
 
 /**
- * One tile, gliding to its cell on Flex's timing ([FLEX_GLIDE_MS]). Its position and size are
+ * One tile, gliding to its cell on Flex's spring ([flexGlide]), which keeps the tile's speed when its cell
+ * changes mid-glide. A tile just let go settles from its lift as it flies. Its position and size are
  * applied while laying out, so a glide redraws without recomposing the tile.
  */
 @Composable
@@ -257,6 +263,18 @@ private fun PlacedTile(
     val y = remember { Animatable(cell.y) }
     val w = remember { Animatable(cell.w) }
     val h = remember { Animatable(cell.h) }
+    val look = LocalDashLook.current
+    val tileShape = remember(look.tileRadius) { RoundedCornerShape(look.tileRadius.dp) }
+    // How much of its lift a tile let go still has: it shrinks back and loses its shadow as it lands.
+    val relax = remember { Animatable(0f) }
+    var settled by remember { mutableIntStateOf(letGo?.token ?: 0) }
+    LaunchedEffect(letGo?.token) {
+        val token = letGo?.token ?: return@LaunchedEffect
+        if (token == settled) return@LaunchedEffect
+        settled = token
+        relax.snapTo(1f)
+        relax.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+    }
     // A tile shown for the first time never flies in from an old drop.
     var flown by remember { mutableIntStateOf(letGo?.token ?: 0) }
     LaunchedEffect(cell.x, cell.y, letGo?.token) {
@@ -266,12 +284,12 @@ private fun PlacedTile(
             x.snapTo(from.from.x)
             y.snapTo(from.from.y)
         }
-        launch { x.animateTo(cell.x, tween(FLEX_GLIDE_MS)) }
-        launch { y.animateTo(cell.y, tween(FLEX_GLIDE_MS)) }
+        launch { x.animateTo(cell.x, flexGlide(FLEX_GLIDE_PIXEL)) }
+        launch { y.animateTo(cell.y, flexGlide(FLEX_GLIDE_PIXEL)) }
     }
     LaunchedEffect(cell.w, cell.h) {
-        launch { w.animateTo(cell.w, tween(FLEX_GLIDE_MS)) }
-        launch { h.animateTo(cell.h, tween(FLEX_GLIDE_MS)) }
+        launch { w.animateTo(cell.w, flexGlide(FLEX_GLIDE_PIXEL)) }
+        launch { h.animateTo(cell.h, flexGlide(FLEX_GLIDE_PIXEL)) }
     }
     DashTile(
         widget = widget,
@@ -288,7 +306,17 @@ private fun PlacedTile(
                 val p = m.measure(Constraints.fixed(pw, ph))
                 layout(pw, ph) { p.place(0, 0) }
             }
-            .graphicsLayer { alpha = opacity }
+            .graphicsLayer {
+                alpha = opacity
+                val l = relax.value
+                if (l > 0f) {
+                    scaleX = 1f + FLEX_LIFT_GROW * l
+                    scaleY = 1f + FLEX_LIFT_GROW * l
+                    shadowElevation = FLEX_LIFT_SHADOW.toPx() * l
+                    shape = tileShape
+                    clip = false
+                }
+            }
     )
 }
 

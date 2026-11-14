@@ -23,8 +23,22 @@ class DrawableShape(
     /** Asks for as much as its caps allow (a photo), instead of only its own shape (a chart). */
     val greedy: Boolean,
     /** Keeps the shape it was fitted to as its crop, so auto align stores it. */
-    val crops: Boolean
-)
+    val crops: Boolean,
+    /**
+     * The size it takes before spare room is spent on it, when that is less than [maxW] by [maxH] (a "fill" photo is
+     * cropped to whatever it is given, so only room nobody else can use goes to it; it is the first to give way).
+     */
+    val ownMaxW: Float = maxW,
+    val ownMaxH: Float = maxH
+) {
+    /**
+     * The shape the aligner plans a tiling with: the size it takes before spare room is spent on it. Growth past that
+     * is the solver's, from room nothing else needs, so a search never trades text for a photo's extra size.
+     */
+    fun planned(): DrawableShape =
+        if (ownMaxW >= maxW && ownMaxH >= maxH) this
+        else DrawableShape(hasContent, ratio, ratioMin, ratioMax, minW, minH, ownMaxW, ownMaxH, greedy, crops)
+}
 
 /**
  * A statistic's layouts, the one it is designed with first: layout k puts its cells in [columns]`[k]` columns, is
@@ -190,7 +204,7 @@ class TileFitter(val rules: TileRules) {
     fun drawable(shape: DrawableShape, cw: Float, ch: Float): TileFit {
         if (!shape.hasContent) return TileFit(cw, ch, 1f, false)
         var pw = min(cw, shape.maxW)
-        val maxH = min(ch, shape.maxH)
+        val maxH = min(ch, shape.maxH * rules.pictureOverflow)
         val ratio = (pw / maxH.coerceAtLeast(1f)).coerceIn(shape.ratioMin, shape.ratioMax)
         var ph = pw / ratio
         if (ph > maxH) {
@@ -227,7 +241,7 @@ class TileFitter(val rules: TileRules) {
      * [TileRules.reflowKeep] of that; then it shrinks as one unit, never below [minScale]. [fill] makes the tile as wide
      * as the cell; else it is as wide as its layout.
      */
-    fun statistic(shape: StatShape, cw: Float, ch: Float, fill: Boolean, minScale: Float = rules.statMinScale, maxScale: Float = 1f): TileFit {
+    fun statistic(shape: StatShape, cw: Float, ch: Float, fill: Boolean, minScale: Float = rules.statMinScale, maxScale: Float = 1f, beside: Boolean = false): TileFit {
         var best = 0
         var bestS = -1f
         for (k in shape.widths.indices) {
@@ -240,11 +254,39 @@ class TileFitter(val rules: TileRules) {
         // The layout is picked as for content at its size (reflowing only to keep from shrinking); then a layout with
         // room to spare grows into its cell, up to [maxScale].
         if (maxScale > 1f && bestS >= 1f) bestS = min(maxScale, min(cw / shape.widths[best], ch / shape.heights[best].coerceAtLeast(1f)))
+        if (beside && maxScale > 1f && rules.statFillShare > 0f && shape.widths.size > 1 && cw > 0f && ch > 0f) {
+            // A layout that leaves a hole in a tall cell gives way to one that grows to fill it (never one that shrinks more).
+            fun grown(k: Int): Float = min(maxScale, min(cw / shape.widths[k], ch / shape.heights[k].coerceAtLeast(1f)))
+            fun share(k: Int, s: Float): Float = s * s * shape.widths[k] * shape.heights[k] / (cw * ch)
+            val now = share(best, max(bestS, rules.statMinScale))
+            if (now < rules.statFillShare) {
+                var pick = best
+                var pickShare = now * STAT_FILL_GAIN
+                for (k in shape.widths.indices) {
+                    val s = grown(k)
+                    if (k == best || s < min(1f, bestS) || s < rules.statMinScale) continue
+                    val sh = share(k, s)
+                    if (sh > pickShare) {
+                        pick = k
+                        pickShare = sh
+                    }
+                }
+                if (pick != best) {
+                    best = pick
+                    bestS = grown(pick)
+                }
+            }
+        }
         val cut = bestS < minScale - 0.0005f
         val s = max(bestS, minScale)
         val th = min(shape.heights[best] * s, ch)
         val tw = if (fill || cut) cw else min(cw, shape.widths[best] * s)
         return TileFit(tw, th, s, cut, shape.columns[best])
+    }
+
+    private companion object {
+        /** A layout must cover this many times more of the cell than the one it replaces. */
+        const val STAT_FILL_GAIN = 1.2f
     }
 
     fun statAt(shape: StatShape, w: Float, h: Float, top: Float, floor: Float): TileAt {
@@ -265,11 +307,11 @@ class TileFitter(val rules: TileRules) {
     /**
      * [TileFitter] on the optimiser's numbers. Auto align sets every non-drawable block to fill its cell, so the tile is
      * as wide as the cell. [banner]: the tile runs across the top of the area (see [TileTree.banner]), so a title keeps
-     * its air.
+     * its air. [beside]: other tiles sit next to the cell (it is narrower than the area), where [TileRules.statFillShare] applies.
      */
-    fun of(item: AlignItem, cw: Float, ch: Float, banner: Boolean): TileFit = when (item.kind) {
+    fun of(item: AlignItem, cw: Float, ch: Float, banner: Boolean, beside: Boolean = false): TileFit = when (item.kind) {
         TileKind.DRAWABLE -> drawable(item.drawable!!, cw, ch)
-        TileKind.STATISTIC -> statistic(item.stat!!, cw, ch, true, maxScale = rules.fillMax)
+        TileKind.STATISTIC -> statistic(item.stat!!, cw, ch, true, maxScale = rules.fillMax, beside = beside)
         TileKind.TITLE -> title(cw, ch, item.need, if (banner) item.inset else 0f, { item.height(it) }, { _, _ -> cw }, rules.fillTitle)
         TileKind.TEXT -> text(cw, ch, item.need, { item.height(it) }, { _, _ -> cw }, maxScale = rules.fillMax)
     }

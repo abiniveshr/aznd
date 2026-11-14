@@ -92,18 +92,53 @@ class AlignCandidate(val tree: TileNode, val cost: Double)
 /** [used]: how tall the tiling is (a tile's own height; stacked, the sum; side by side, the tallest). */
 private class AlignSub(val cost: Double, val node: TileNode?, val floorW: Float, val used: Float = 0f)
 
+/**
+ * Work that searches over the same blocks can share: what each run of blocks asks for does not depend on the height
+ * of the area, so a caller that tries several heights (the dashboard growing its page) passes one of these to every
+ * [TileAligner] it makes and the later searches reuse what the earlier ones worked out. Only for aligners given the
+ * same items (the same list), area width, gap and ruleset; one that differs starts it afresh. Not thread-safe.
+ */
+class AlignShared {
+    private var items: List<AlignItem>? = null
+    private var width = 0f
+    private var gap = 0f
+    private var rules: TileRules? = null
+    private var drawableMin = 0f
+    private val parts = TileLongMap<FloatArray>()
+
+    /**
+     * The remembered parts for an aligner with these inputs: kept when they are the ones it was filled for (a part's
+     * floor reads the least picture size, which comes from the shorter side of the area, so that is part of the
+     * identity), emptied first when they are not.
+     */
+    internal fun partsFor(items: List<AlignItem>, width: Float, gap: Float, rules: TileRules, drawableMin: Float): TileLongMap<FloatArray> {
+        if (this.items !== items || this.rules !== rules || this.width != width || this.gap != gap || this.drawableMin != drawableMin) {
+            parts.clear()
+            this.items = items
+            this.rules = rules
+            this.width = width
+            this.gap = gap
+            this.drawableMin = drawableMin
+        }
+        return parts
+    }
+}
+
 class TileAligner(
     private val items: List<AlignItem>,
     private val space: AlignSpace,
     private val rules: TileRules,
-    effort: Int = FULL_EFFORT
+    effort: Int = FULL_EFFORT,
+    private val shared: AlignShared? = null
 ) {
 
     private val n = items.size
     private val gap = space.gap
     private val fit = TileFitter(rules)
-    private val memo = HashMap<Long, AlignSub>()
+    private val memo = TileLongMap<AlignSub>()
     private val none = AlignSub(Double.POSITIVE_INFINITY, null, 0f)
+    /** [floorSum] at k: the least the blocks before k can cost together ([TileRules.tileCostFloor]). */
+    private val floorSum = DoubleArray(n + 1).also { for (k in 0 until n) it[k + 1] = it[k] + rules.tileCostFloor(items[k].kind) }
     private var budget = effort
     private val segLimit = when {
         n <= 8 -> n
@@ -112,6 +147,9 @@ class TileAligner(
     }
     /** The least a drawable is planned at along either side: a picture smaller than this hardly reads. */
     private val drawableMin = max(rules.minTile * rules.drawableLeastTiles, rules.drawableLeastShare * min(space.width, space.height))
+
+    /** What each run of blocks asks for (see [part]): shared with other aligners over the same blocks when [shared] is given. */
+    private val parts = shared?.partsFor(items, space.width, gap, rules, drawableMin) ?: TileLongMap<FloatArray>()
 
     private fun minScale(item: AlignItem): Float = rules.minScale(item.kind)
 
@@ -145,7 +183,7 @@ class TileAligner(
         return sub.node?.let { AlignCandidate(it, sub.cost) }
     }
 
-    private val fixedMemo = HashMap<Long, AlignSub>()
+    private val fixedMemo = TileLongMap<AlignSub>()
 
     private fun fixed(node: TileNode, i: Int, j: Int, w: Float, h: Float, top: Int): AlignSub {
         if (node is TileLeaf) return leaf(i, w, h, top)
@@ -215,7 +253,7 @@ class TileAligner(
 
     private fun leaf(i: Int, w: Float, h: Float, top: Int): AlignSub {
         val item = items[i]
-        val f = fit.of(item, w, h, top == BANNER)
+        val f = fit.of(item, w, h, top == BANNER, w < space.width - 1f)
         val cost = rules.tileCost(item, space, w, h, f, top != NOT_TOP, top == BANNER)
         return AlignSub(cost, TileLeaf(item.id), floorOf(item), f.h)
     }
@@ -251,36 +289,58 @@ class TileAligner(
                 to[k] = j
                 val axis = total - gap * (m - 1)
                 if (axis <= 0f) continue
+                // Scratch for every candidate of this cut: each is priced to the end before the next starts.
+                val subs = arrayOfNulls<AlignSub>(m)
+                val used = FloatArray(m)
                 for (sizes in allocations(stacked, from, to, axis, cross)) {
                     budget--
-                    val sub = evaluate(stacked, from, to, sizes, cross, top)
-                    if (sub.cost < best.cost) best = sub
+                    val cost = evaluate(stacked, from, to, sizes, cross, top, best.cost, subs, used)
+                    if (cost < best.cost) best = build(stacked, sizes, cost, subs, used)
                 }
             }
         }
         return best
     }
 
-    private fun evaluate(stacked: Boolean, from: IntArray, to: IntArray, sizes: FloatArray, cross: Float, top: Int): AlignSub {
+    /**
+     * What a candidate split costs, or infinity when it is not a layout the search prices or cannot beat [bestCost]
+     * (parts are priced one by one and the rest of them cost at least their tiles' floors, so a candidate is dropped
+     * as soon as that sum reaches [bestCost]). The parts it priced are left in [subs] and [used].
+     */
+    private fun evaluate(
+        stacked: Boolean, from: IntArray, to: IntArray, sizes: FloatArray, cross: Float, top: Int,
+        bestCost: Double, subs: Array<AlignSub?>, used: FloatArray
+    ): Double {
         val m = sizes.size
+        val last = to[m - 1] + 1
         var cost = 0.0
-        val kids = ArrayList<TileNode>(m)
-        val used = FloatArray(m)
-        var floor = 0f
         for (k in 0 until m) {
+            // Rounding in the sums must never drop a candidate that would win by a hair: the bound keeps a margin.
+            if (cost + (floorSum[last] - floorSum[from[k]]) - PRUNE_MARGIN >= bestCost) return Double.POSITIVE_INFINITY
             val cw = if (stacked) cross else sizes[k]
             val ch = if (stacked) sizes[k] else cross
             val sub = solveSub(from[k], to[k], cw, ch, if (stacked) ROWS else COLUMNS, childTop(top, stacked, k))
-            val node = sub.node ?: return none
+            if (sub.node == null) return Double.POSITIVE_INFINITY
             // Side by side, the solver widens a tile to its own floor and takes it from the others: not a layout the search priced.
-            if (!stacked && sub.floorW > sizes[k] + 0.5f) return none
+            if (!stacked && sub.floorW > sizes[k] + 0.5f) return Double.POSITIVE_INFINITY
             cost += sub.cost
-            kids += node
+            subs[k] = sub
             used[k] = sub.used
+        }
+        return cost + rules.groupCost(stacked, sizes, used)
+    }
+
+    /** The tiling of a candidate that [evaluate] priced at [cost]. */
+    private fun build(stacked: Boolean, sizes: FloatArray, cost: Double, subs: Array<AlignSub?>, used: FloatArray): AlignSub {
+        val m = sizes.size
+        val kids = ArrayList<TileNode>(m)
+        var floor = 0f
+        for (k in 0 until m) {
+            val sub = subs[k]!!
+            kids += sub.node!!
             floor = if (stacked) max(floor, sub.floorW) else floor + sub.floorW
         }
         if (!stacked) floor += gap * (m - 1)
-        cost += rules.groupCost(stacked, sizes, used)
         val extent = if (stacked) used.sum() + gap * (m - 1) else (used.maxOrNull() ?: 0f)
         return AlignSub(cost, TileGroup(stacked, kids, sizes.toList()), floor, extent)
     }
@@ -390,29 +450,46 @@ class TileAligner(
     /**
      * The most the run may take along the split, [cross] across it: a drawable's size cap, and also what its shape range
      * allows at that cross size (a picture [cross] wide is never taller than its narrowest crop makes it), so a stack
-     * does not give a picture height it cannot fill.
+     * does not give a picture height it cannot fill. A run of several blocks is split again inside its part, so it is
+     * not held to its smallest picture: made only of drawables it may take what they can all use side by side or
+     * stacked, at most the sum of their caps; with any other block in it there is no cap.
      */
-    private fun capOf(from: Int, to: Int, stacked: Boolean, cross: Float): Float {
-        var cap = BIG
+    private fun capOf(from: Int, to: Int, stacked: Boolean, cross: Float, relaxed: Boolean): Float {
+        if (!relaxed) {
+            var cap = BIG
+            for (k in from..to) {
+                val shape = items[k].drawable ?: continue
+                cap = min(cap, drawableCap(shape, stacked, cross))
+            }
+            return cap
+        }
+        if (from == to) {
+            val shape = items[from].drawable ?: return BIG
+            return drawableCap(shape, stacked, cross)
+        }
+        var cap = 0f
         for (k in from..to) {
-            val shape = items[k].drawable ?: continue
-            cap = min(cap, drawableCap(shape, stacked, cross))
+            val shape = items[k].drawable ?: return BIG
+            cap += drawableCap(shape, stacked, cross)
         }
         return cap
     }
-
-    private val parts = HashMap<Long, FloatArray>()
 
     /**
      * What the run [from]..[to] asks for as one part of a group that splits [stacked] (one under the other) or side by
      * side, [cross] across it: its floor, its cap and what it wants along the split, and its priority and appetite.
      * Every way of cutting a run asks this of the same parts again, so it is remembered.
      */
+    private fun partKey(from: Int, to: Int, stacked: Boolean, cross: Float): Long =
+        (((from * 16L + to) * 2 + (if (stacked) 1 else 0)) shl 32) or (cross.toRawBits().toLong() and 0xFFFFFFFFL)
+
     private fun part(from: Int, to: Int, stacked: Boolean, cross: Float): FloatArray {
-        val key = (((from * 16L + to) * 2 + (if (stacked) 1 else 0)) shl 32) or (cross.toRawBits().toLong() and 0xFFFFFFFFL)
-        return parts.getOrPut(key) {
+        val key = partKey(from, to, stacked, cross)
+        parts[key]?.let { return it }
+        return run {
             val floor = if (stacked) floorHeight(from, to, cross) else floorWidth(from, to)
-            val cap = capOf(from, to, stacked, cross)
+            val cap = capOf(from, to, stacked, cross, false)
+            val loose = capOf(from, to, stacked, cross, true)
             var prio = 0f
             var hunger = 0f
             for (b in from..to) {
@@ -420,7 +497,9 @@ class TileAligner(
                 hunger += rules.appetite(items[b].kind)
             }
             val ask = if (stacked) wantsHeight(from, to, cross) else wantsWidth(from, to, cross)
-            floatArrayOf(floor, cap, ask.coerceAtLeast(1f).coerceIn(floor, max(floor, cap)), prio, hunger)
+            val out = floatArrayOf(floor, cap, ask.coerceAtLeast(1f).coerceIn(floor, max(floor, cap)), prio, hunger, loose)
+            parts[key] = out
+            out
         }
     }
 
@@ -444,6 +523,8 @@ class TileAligner(
             prio[k] = part[3]
             hunger[k] = part[4]
         }
+        // A run that is split again inside its part is not held to its smallest picture: only when the caps leave no way to fill the axis.
+        if (caps.sum() < axis - 0.5f) for (k in 0 until m) caps[k] = parts[partKey(from[k], to[k], stacked, cross)]!![5]
         val out = ArrayList<FloatArray>(8)
         fun add(v: FloatArray?) {
             if (v == null) return
@@ -516,6 +597,7 @@ class TileAligner(
         const val QUICK_EFFORT = 40_000
         private const val BIG = 1e9f
         private const val MEMO_STEP = 12f
+        private const val PRUNE_MARGIN = 1e-6
         private const val ROWS = 1      // a group that stacks its parts: one under the other
         private const val COLUMNS = 2   // a group that puts its parts side by side
 

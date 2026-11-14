@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
 /**
  * The high contrast theme: every surface (screen, cards, bars) pitch black, white text, and everything else a shade of
  * one base colour the person picks. Buttons and accents are the base colour itself; highlight cards and outlines are
- * shades of it, made one of two ways ([ContrastShade]), as the person chooses:
+ * shades of it (outlines strong enough to be seen on the black), made one of two ways ([ContrastShade]), as the person chooses:
  *  - opacity: the base colour at less opacity over black, so the shades are darker versions of it;
  *  - saturation: the base colour with less saturation at its own brightness, so the shades are paler and greyer.
  * Black cards on a black screen are told apart by their outlines, so borders are on. The light and the dark palette
@@ -20,6 +20,9 @@ object HighContrast {
     /** How strong each shade is: a share of the opacity, or of the saturation, of the base colour. */
     const val HIGHLIGHT = 0.32f
     const val OUTLINE = 0.55f
+
+    /** What an outline needs on black to be seen (WCAG 3:1), and the little extra that keeps it clear of the line. */
+    private const val OUTLINE_CONTRAST = 3.1f
 
     /** A shade of [base] at [k] (0..1) by its own way of shading. */
     fun shade(base: ContrastBase, k: Float): Color {
@@ -33,6 +36,30 @@ object HighContrast {
         }
     }
 
+    /**
+     * The outline shade of [base]: [OUTLINE] strong, or as much stronger as it takes to reach 3:1 on black, up to the
+     * base colour itself. A dark base (deep blue, purple) would otherwise draw outlines that vanish on the black.
+     */
+    fun outline(base: ContrastBase): Color {
+        var k = OUTLINE
+        while (k < 1f) {
+            val c = shade(base, k)
+            if (contrastOnBlack(c) >= OUTLINE_CONTRAST) return c
+            k = (k + 0.01f).coerceAtMost(1f)
+        }
+        return shade(base, 1f)
+    }
+
+    private fun contrastOnBlack(c: Color): Float {
+        val a = c.toArgb()
+        fun lin(v: Int): Float {
+            val x = v / 255f
+            return if (x <= 0.04045f) x / 12.92f else Math.pow(((x + 0.055f) / 1.055f).toDouble(), 2.4).toFloat()
+        }
+        val l = 0.2126f * lin((a shr 16) and 0xFF) + 0.7152f * lin((a shr 8) and 0xFF) + 0.0722f * lin(a and 0xFF)
+        return (l + 0.05f) / 0.05f
+    }
+
     /** The palette [base] makes (the same for light and dark). */
     fun palette(base: ContrastBase): Palette {
         val black = Color(0xFF000000.toInt())
@@ -43,7 +70,7 @@ object HighContrast {
             text = Color(0xFFFFFFFF.toInt()),
             button = Color(base.color.toArgb() or (0xFF shl 24)),
             highlight = shade(base, HIGHLIGHT),
-            outline = shade(base, OUTLINE),
+            outline = outline(base),
             bottomBar = black
         )
     }

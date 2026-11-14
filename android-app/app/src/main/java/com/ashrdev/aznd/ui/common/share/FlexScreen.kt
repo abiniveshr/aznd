@@ -93,6 +93,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.BarPage
@@ -139,8 +141,15 @@ private const val PAGE_FLEX = 1
 
 private const val FIT_DELAY_MS = 600L
 
-private fun fitBlockOf(b: FlexBlock): FlexBlock =
-    b.copy(photoZoom = 1f, photoX = 0.5f, photoY = 0.5f, freeX = 0f, freeY = 0f, freeW = 0f, freeH = 0f)
+/**
+ * The block as far as the layout fit cares: zoom, move and the box in free mode do not change a tile's shape, so they
+ * are left out. A free crop does change it (the tile takes the crop's shape), so its crop counts while the block is in
+ * free crop mode and is left out (reset to the whole photo) in every other mode, where it has no effect.
+ */
+private fun fitBlockOf(b: FlexBlock): FlexBlock {
+    val plain = b.copy(photoZoom = 1f, photoX = 0.5f, photoY = 0.5f, freeX = 0f, freeY = 0f, freeW = 0f, freeH = 0f)
+    return if (b.photoRatio == FLEX_PHOTO_FREE) plain else plain.copy(cropL = 0f, cropT = 0f, cropR = 1f, cropB = 1f)
+}
 
 private fun fitKeyOf(spec: FlexSpec): Any {
     val st = spec.style
@@ -315,7 +324,7 @@ fun FlexScreen(
         scope.launch {
             val run = veil.Run(this)
             val result = try {
-                withContext(Dispatchers.Default) { runCatching { FlexPainter.autoAlign(sp, ct, snapshot) }.getOrNull() }
+                withContext(Dispatchers.Default) { runCatching { FlexPainter.autoAlign(sp, ct, snapshot, rescale = !quiet) }.getOrNull() }
             } finally {
                 aligning = false
             }
@@ -607,12 +616,12 @@ fun FlexPreview(
 ) {
     // The height is what changes (Free size follows its content), so the height is eased, on the tiles' timing: the
     // card's edge then moves in step with the tiles gliding inside it (easing the width / height ratio would not).
-    val tall by animateFloatAsState(
+    // It is read while laying out (below), so the glide re-measures the card without recomposing this function.
+    val tall = animateFloatAsState(
         targetValue = plan.height / plan.width,
-        animationSpec = if (instantShape) snap() else tween(FLEX_GLIDE_MS),
+        animationSpec = if (instantShape) snap() else flexGlide(FLEX_GLIDE_RATIO),
         label = "flexTall"
     )
-    val ratio = 1f / tall
     // Into the blur smoothly, out of it at a snap.
     val veil by animateFloatAsState(
         targetValue = if (veiled) 1f else 0f,
@@ -623,11 +632,14 @@ fun FlexPreview(
         modifier = modifier.height(boxHeight),
         contentAlignment = Alignment.Center
     ) {
-        val width = minOf(maxWidth, boxHeight * ratio)
         Box(
-            modifier = Modifier
-                .width(width)
-                .aspectRatio(ratio),
+            modifier = Modifier.layout { m, c ->
+                val t = tall.value
+                val w = minOf(c.maxWidth.toFloat(), boxHeight.roundToPx() / t).roundToInt()
+                val h = (w * t).roundToInt()
+                val p = m.measure(Constraints.fixed(w, h))
+                layout(w, h) { p.place(0, 0) }
+            },
             contentAlignment = Alignment.Center
         ) {
             Canvas(
@@ -728,7 +740,7 @@ internal class FlexVeil {
     }
 }
 
-/** How long tiles glide to new places, and the card's shape with them. */
+/** About how long tiles glide to new places, and the card's shape with them (see [flexGlide], a spring that settles in this time). */
 internal const val FLEX_GLIDE_MS = 260
 
 /** The veil: how long it takes to come in, the least it stays up, how quickly it snaps away, and how blurred. */

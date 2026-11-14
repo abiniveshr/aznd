@@ -51,6 +51,9 @@ const val FLEX_MODULE_SCALE = 0.8f
 const val FLEX_MODULE_MIN = 0.6f
 const val FLEX_MODULE_MAX = 1.5f
 
+/** The Module size a card starts with: while the slider is still here, best fit may choose a size of its own. */
+const val FLEX_MODULE_DEFAULT = 1f
+
 /**
  * Card sizes, in card pixels. How much a size holds is its content budget (see [FlexPainter.load]): every module
  * costs the room it needs at its least, and a module that would take the card past its budget is not added (the
@@ -65,6 +68,9 @@ enum class FlexAspect(val label: String, val width: Int, val height: Int) {
     FREE("Free size (fits content)", FLEX_CARD_SHORT, 0)
 }
 
+/** [FlexBlock.photoRatio] of a photo the person crops by hand (see [FlexCrop]); 0 is "fill its tile", -1 "original shape". */
+const val FLEX_PHOTO_FREE = -2f
+
 /** The photo shapes offered in a photo block's crop menu (those inside the card's [photoLimit]). */
 enum class FlexPhotoRatio(val label: String, val ratio: Float) {
     AUTO("Fill its tile", 0f),
@@ -78,10 +84,12 @@ enum class FlexPhotoRatio(val label: String, val ratio: Float) {
     R4_5("4:5", 4f / 5f),
     R16_9("16:9", 16f / 9f),
     R9_16("9:16", 9f / 16f),
-    R21_9("21:9", 21f / 9f);
+    R21_9("21:9", 21f / 9f),
+    FREE("Free crop", FLEX_PHOTO_FREE);
 
     fun allowedOn(limit: FlexPhotoLimit): Boolean {
-        if (this == AUTO || this == ORIGINAL) return true
+        // Free crop is always on offer: its shape is the person's, clamped into the limit when the card is laid out.
+        if (this == AUTO || this == ORIGINAL || this == FREE) return true
         return ratio >= limit.range.start - 0.005f && ratio <= limit.range.endInclusive + 0.005f
     }
 }
@@ -112,6 +120,18 @@ fun FlexStyle.photoLimit(): FlexPhotoLimit {
     val maxH = if (useTop) h / 2f else h
     val shape = maxW / maxH
     return FlexPhotoLimit(maxW, maxH, max(0.5f, shape * 0.75f)..min(2.4f, shape * 4f / 3f))
+}
+
+/**
+ * What a "Fill its tile" photo may take: the whole content area of the card, in any shape from 1:2 to 18:5. A photo
+ * is cropped to its tile, so it can use room no other block can, where a fixed or free shape keeps [photoLimit].
+ */
+fun FlexStyle.photoFillLimit(): FlexPhotoLimit {
+    val footer = if (watermark && watermarkText.isNotBlank()) FLEX_FOOTER else 0f
+    val w = (aspect.width - 2 * padding.toFloat()).coerceAtLeast(100f)
+    val cardH = if (aspect.height > 0) aspect.height else FlexAspect.PORTRAIT.height
+    val h = (cardH - 2 * paddingV.toFloat() - footer).coerceAtLeast(100f)
+    return FlexPhotoLimit(w, h, 0.5f..3.6f)
 }
 
 /**
@@ -255,7 +275,7 @@ data class FlexStyle(
     /** Where the watermark sits along the bottom of the card. */
     val watermarkAlign: FlexAlign = FlexAlign.START,
     /** Module size, the person's: every block's content is drawn at this on top of [FLEX_MODULE_SCALE] and its own size. */
-    val moduleScale: Float = 1f,
+    val moduleScale: Float = FLEX_MODULE_DEFAULT,
     val layoutMode: FlexLayoutMode = FlexLayoutMode.SPLIT
 ) {
     /**
@@ -358,6 +378,14 @@ data class FlexBlock(
     /** PHOTO: where the crop sits, 0 to 1 from left to right and from top to bottom (0.5 = centre). */
     val photoX: Float = 0.5f,
     val photoY: Float = 0.5f,
+    /**
+     * PHOTO with [photoRatio] [FLEX_PHOTO_FREE]: the part of the photo that is shown, as fractions of its width and
+     * height (left, top, right, bottom; 0 to 1). Zoom and move do not apply then.
+     */
+    val cropL: Float = 0f,
+    val cropT: Float = 0f,
+    val cropR: Float = 1f,
+    val cropB: Float = 1f,
     /**
      * Free mode ([FlexLayoutMode.FREE]): the block's box on the card, in card pixels from the card's top left corner.
      * [freeW] 0 or less: not placed yet (it is put below the others).

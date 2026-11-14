@@ -138,7 +138,7 @@ fun dropSpot(area: TileArea, dragged: Int, x: Float, y: Float, rules: TileRules)
     }
     if (bestDist < Float.MAX_VALUE) return if (homeGap) null else bestGap
 
-    val under = area.cells.firstOrNull { it.cellContains(x, y) } ?: return null
+    val under = area.cells.firstOrNull { it.cellContains(x, y) } ?: return nearestSide(area, dragged, x, y, ::spot)
     if (under.id == dragged) return null
     val t = under
     val dx = x - (t.cellLeft + t.cellWidth / 2f)
@@ -154,6 +154,47 @@ fun dropSpot(area: TileArea, dragged: Int, x: Float, y: Float, rules: TileRules)
     } else {
         if (dy < 0f) DropZone.TOP else DropZone.BOTTOM
     }
+    val half = when (zone) {
+        DropZone.LEFT -> floatArrayOf(cell[0], cell[1], cell[2] / 2f, cell[3])
+        DropZone.RIGHT -> floatArrayOf(cell[0] + cell[2] / 2f, cell[1], cell[2] / 2f, cell[3])
+        DropZone.TOP -> floatArrayOf(cell[0], cell[1], cell[2], cell[3] / 2f)
+        else -> floatArrayOf(cell[0], cell[1] + cell[3] / 2f, cell[2], cell[3] / 2f)
+    }
+    return spot(t.id, zone, setOf(t.id), DropKind.SIDE, half)
+}
+
+/**
+ * A point inside the content area but over no tile (room under a short tile in a row, or beside a column that ends
+ * early): the tile goes to the side of the nearest tile that faces the point, so there is no dead patch. Over the
+ * dragged tile's own room it stays home.
+ */
+private fun nearestSide(
+    area: TileArea,
+    dragged: Int,
+    x: Float,
+    y: Float,
+    spot: (Int, DropZone, Set<Int>, DropKind, FloatArray) -> DropSpot?
+): DropSpot? {
+    var best: TileCell? = null
+    var bestDx = 0f
+    var bestDy = 0f
+    var bestDist = Float.MAX_VALUE
+    for (c in area.cells) {
+        val dx = if (x < c.cellLeft) x - c.cellLeft else if (x > c.cellLeft + c.cellWidth) x - (c.cellLeft + c.cellWidth) else 0f
+        val dy = if (y < c.cellTop) y - c.cellTop else if (y > c.cellTop + c.cellHeight) y - (c.cellTop + c.cellHeight) else 0f
+        val d = dx * dx + dy * dy
+        if (d < bestDist) {
+            bestDist = d; best = c; bestDx = dx; bestDy = dy
+        }
+    }
+    val t = best ?: return null
+    if (t.id == dragged) return null
+    val zone = if (abs(bestDy) >= abs(bestDx)) {
+        if (bestDy < 0f) DropZone.TOP else DropZone.BOTTOM
+    } else {
+        if (bestDx < 0f) DropZone.LEFT else DropZone.RIGHT
+    }
+    val cell = floatArrayOf(t.cellLeft, t.cellTop, t.cellWidth, t.cellHeight)
     val half = when (zone) {
         DropZone.LEFT -> floatArrayOf(cell[0], cell[1], cell[2] / 2f, cell[3])
         DropZone.RIGHT -> floatArrayOf(cell[0] + cell[2] / 2f, cell[1], cell[2] / 2f, cell[3])

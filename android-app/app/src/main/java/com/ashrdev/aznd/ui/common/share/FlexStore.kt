@@ -104,6 +104,10 @@ private fun specToJson(spec: FlexSpec): JSONObject {
                 .put("photoZoom", b.photoZoom.toDouble())
                 .put("photoX", b.photoX.toDouble())
                 .put("photoY", b.photoY.toDouble())
+                .put("cropL", b.cropL.toDouble())
+                .put("cropT", b.cropT.toDouble())
+                .put("cropR", b.cropR.toDouble())
+                .put("cropB", b.cropB.toDouble())
                 .put("freeX", b.freeX.toDouble())
                 .put("freeY", b.freeY.toDouble())
                 .put("freeW", b.freeW.toDouble())
@@ -220,6 +224,10 @@ private fun specFromJson(o: JSONObject): FlexSpec {
             val k = b.getJSONArray("keys")
             List(k.length()) { idx -> k.getString(idx) }
         } else null
+        val crop = FlexCrop.normalise(
+            b.optDouble("cropL", 0.0).toFloat(), b.optDouble("cropT", 0.0).toFloat(),
+            b.optDouble("cropR", 1.0).toFloat(), b.optDouble("cropB", 1.0).toFloat()
+        )
         blocks += FlexBlock(
             id = b.optInt("id", i + 1),
             type = type,
@@ -232,10 +240,14 @@ private fun specFromJson(o: JSONObject): FlexSpec {
             size = b.optDouble("size", 1.0).toFloat().coerceIn(0.5f, 2f),
             hAlign = enumOr(b.optString("hAlign"), oldAlign),
             vAlign = enumOr(b.optString("vAlign"), oldVAlign),
-            photoRatio = if (legacy) 0f else b.optDouble("photoRatio", 0.0).toFloat().let { if (it.isNaN()) 0f else if (it < 0f) -1f else it.coerceAtMost(4f) },
+            photoRatio = if (legacy) 0f else b.optDouble("photoRatio", 0.0).toFloat().let { if (it.isNaN()) 0f else if (it == FLEX_PHOTO_FREE) FLEX_PHOTO_FREE else if (it < 0f) -1f else it.coerceAtMost(4f) },
             photoZoom = b.optDouble("photoZoom", 1.0).toFloat().coerceIn(1f, 3f),
             photoX = b.optDouble("photoX", 0.5).toFloat().coerceIn(0f, 1f),
             photoY = b.optDouble("photoY", 0.5).toFloat().coerceIn(0f, 1f),
+            cropL = crop.l,
+            cropT = crop.t,
+            cropR = crop.r,
+            cropB = crop.b,
             freeX = b.optDouble("freeX", 0.0).toFloat(),
             freeY = b.optDouble("freeY", 0.0).toFloat(),
             freeW = b.optDouble("freeW", 0.0).toFloat().coerceAtLeast(0f),

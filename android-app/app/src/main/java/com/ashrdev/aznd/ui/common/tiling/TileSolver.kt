@@ -76,7 +76,19 @@ class TileSolver(
     private val byContent: Boolean = false,
     private val strict: Boolean = false
 ) {
-    private val zoomScale = rules.zoom
+    /** Raised by [solve] when the card is sparse (see [TileRules.sparseBoost]); the solver then answers [leaf] with the raised caps too. */
+    private var boost = 1f
+    private val zoomScale: TileZoom get() = if (boost <= 1f) rules.zoom else TileZoom(rules.zoom.min, rules.zoom.limit, rules.zoom.max * boost)
+
+    /**
+     * The most scale a tile may take at width [w]: its own cap, times the boost on a sparse card. A boosted title or
+     * text never grows past the scale at which its text no longer fits one line of [w] (growth must not cause wrapping).
+     */
+    private fun capOf(it: TileItem, w: Float): Float = when {
+        boost <= 1f || it.kind == TileKind.DRAWABLE -> it.cap
+        it.kind == TileKind.TITLE && it.hug > 0f -> min(it.cap * boost, max(it.cap, w / it.hug))
+        else -> it.cap * boost
+    }
     private val fit = TileFitter(rules)
     private val hasPictures = HashMap<TileNode, Boolean>()
     private var frozenAt = -1f
@@ -107,14 +119,14 @@ class TileSolver(
             TileKind.DRAWABLE -> picAt(it, w, zoomScale.pOf(q))
             TileKind.STATISTIC -> {
                 val shape = it.stat ?: return TileAt(1f, 0f)
-                fit.statAt(shape, w, BIG, zoomScale.zOf(q).coerceIn(it.floor, it.cap), it.floor)
+                fit.statAt(shape, w, BIG, zoomScale.zOf(q).coerceIn(it.floor, capOf(it, w)), it.floor)
             }
             TileKind.TITLE, TileKind.TEXT -> textAt(it, w, zoomScale.zOf(q))
         }
     }
 
     private fun textAt(it: TileItem, w: Float, z: Float): TileAt {
-        val top = z.coerceIn(it.floor, it.cap)
+        val top = z.coerceIn(it.floor, capOf(it, w))
         var s = top
         if (it.need > 0f && it.need * s > w) s = max(it.floor, w / it.need)
         val narrow = it.need * s > w + 0.5f
@@ -132,8 +144,9 @@ class TileSolver(
         val reach = min(wm, most * sh.ratioMax) * most
         val narrow = w < sh.minW - 0.5f || leastRaw > most + 0.5f || reach < 0.9f * it.picArea
         val least = min(leastRaw, most)
-        val own = (wm / sh.ratio).coerceIn(least, most)
-        val h = if (p <= 0f) own + (least - own) * (-p) else own + (most - own) * p
+        val own = (min(wm, sh.ownMaxW) / sh.ratio).coerceAtMost(sh.ownMaxH).coerceIn(least, most)
+        val soft = min(sh.maxH * rules.pictureOverflow, wm / sh.ratioMin).coerceAtLeast(most)
+        val h = if (p <= 0f) own + (least - own) * (-p) else own + (soft - own) * p
         return TileAt(1f, h, 0, narrow)
     }
 
@@ -183,8 +196,8 @@ class TileSolver(
                     val sh = it.pic
                     if (sh == null || !sh.hasContent) 0f else max(sh.minW, sqrt(it.picArea * sh.ratioMin))
                 }
-                it.kind == TileKind.STATISTIC -> (it.stat?.hug ?: 0f) * zoomScale.zOf(q).coerceIn(it.floor, it.cap)
-                else -> it.need * zoomScale.zOf(q).coerceIn(it.floor, it.cap)
+                it.kind == TileKind.STATISTIC -> (it.stat?.hug ?: 0f) * zoomScale.zOf(q).coerceIn(it.floor, capOf(it, BIG))
+                else -> it.need * zoomScale.zOf(q).coerceIn(it.floor, capOf(it, BIG))
             }
         }
         is TileGroup -> if (n.vertical) n.children.maxOf { needWidth(it, q) }
@@ -302,7 +315,7 @@ class TileSolver(
     private fun keepWidth(n: TileNode, q: Float): Float = when (n) {
         is TileLeaf -> {
             val it = items[n.id]
-            if (it != null && it.kind == TileKind.TITLE) max(needWidth(n, q), it.hug * zoomScale.zOf(q).coerceIn(it.floor, it.cap))
+            if (it != null && it.kind == TileKind.TITLE) max(needWidth(n, q), it.hug * zoomScale.zOf(q).coerceIn(it.floor, capOf(it, BIG)))
             else needWidth(n, q)
         }
         is TileGroup -> if (n.vertical) n.children.maxOf { keepWidth(it, q) }
@@ -330,7 +343,7 @@ class TileSolver(
                     out[i] = lo
                 }
             } else {
-                var lo = min(room, max(floorWidth(c), keepWidth(c, q)))
+                var lo = min(room, max(floorWidth(c), if (rules.pictureFirstRows) needWidth(c, q) else keepWidth(c, q)))
                 var hi = room
                 if (height(c, lo, q) <= h + 0.5f) {
                     out[i] = lo
@@ -343,10 +356,32 @@ class TileSolver(
                 }
             }
         }
-        val used = out.sum()
+        var used = out.sum()
+        if (used > room + 0.5f && rules.pictureFirstRows) {
+            // The pictures give back what the others need: they are only as wide as the row has left.
+            val picIdx = (0 until n).filter { pics[it] }
+            val picW = picIdx.sumOf { out[it].toDouble() }.toFloat()
+            val allowed = room - (used - picW)
+            val floors = picIdx.sumOf { floorWidth(g.children[it]).toDouble() }.toFloat()
+            if (picIdx.isEmpty() || allowed < max(floors, rules.minTile * picIdx.size) || picW <= 0f) return null
+            for (i in picIdx) out[i] = max(floorWidth(g.children[i]), out[i] * allowed / picW)
+            used = out.sum()
+        }
         if (used > room + 0.5f) return null
         val texts = (0 until n).filter { !pics[it] }
-        val spare = room - used
+        var spare = room - used
+        // Room no other part can use goes to the pictures first: a picture covers all of a cell its shape allows,
+        // where text beside it would only sit in a wider cell.
+        if (spare > 0.5f && texts.isNotEmpty()) {
+            for (i in 0 until n) {
+                if (!pics[i] || spare <= 0.5f) continue
+                val sh = items[(g.children[i] as TileLeaf).id]?.pic ?: continue
+                if (!sh.hasContent) continue
+                val more = (min(sh.maxW, h * sh.ratioMax) - out[i]).coerceIn(0f, spare)
+                out[i] += more
+                spare -= more
+            }
+        }
         val base = texts.sumOf { out[it].toDouble() }.toFloat()
         if (base > 0f) for (i in texts) out[i] += spare * out[i] / base
         return out
@@ -370,17 +405,70 @@ class TileSolver(
         return lo
     }
 
+    /**
+     * The tiling laid out in [w] by [h]. On a card whose content, at its usual caps, leaves more than
+     * [TileRules.sparseMargin] of the room as spread margin, the caps are raised by [TileRules.sparseBoost] (titles,
+     * text and statistics grow together) and the card laid out again; the raised layout is kept when it leaves less.
+     */
     fun solve(root: TileNode?, x: Float, y: Float, w: Float, h: Float): TileSolved {
+        boost = 1f
+        val plain = solveAt(root, x, y, w, h)
+        if (rules.sparseBoost <= 1f || byContent || root == null || marginOf(plain, w, h) <= rules.sparseMargin) return plain
+        boost = rules.sparseBoost
+        val raised = solveAt(root, x, y, w, h)
+        if (marginOf(raised, w, h) < marginOf(plain, w, h) - 0.01f) return raised
+        boost = 1f
+        return plain
+    }
+
+    private fun marginOf(s: TileSolved, w: Float, h: Float): Float =
+        (s.spread.sumOf { it[2].toDouble() * it[3] } / (w.toDouble() * h).coerceAtLeast(1.0)).toFloat()
+
+    private fun solveAt(root: TileNode?, x: Float, y: Float, w: Float, h: Float): TileSolved {
         val rects = LinkedHashMap<Int, FloatArray>()
         val levels = HashMap<Int, Float>()
         val dividers = ArrayList<TileDivider>()
         val groupSizes = HashMap<List<Int>, List<Float>>()
+        val spread = ArrayList<FloatArray>()
         if (root == null) return TileSolved(rects, dividers, groupSizes, levels, 1f)
         val q = if (byContent) TileZoom.Q_NATURAL else zoom(root, w, h)
+        // Only a tiling the solver sizes itself is spread: a person's own shares stay as they dragged them.
+        fun autoOnly(n: TileNode): Boolean = n is TileLeaf || (n is TileGroup && n.isAuto && n.children.all { autoOnly(it) })
+        val spreading = rules.spreadGap > 0f && !byContent && autoOnly(root)
 
         fun place(n: TileNode, px: Float, py: Float, pw: Float, ph: Float, level: Float, nested: Boolean, path: List<Int>) {
             if (n is TileLeaf) {
-                rects[n.id] = floatArrayOf(px, py, pw, ph)
+                var ry = py
+                var rh = ph
+                val item = items[n.id]
+                // Content that is shorter than the room it was given sits in the middle of it, the rest an even margin
+                // above and below (a picture fills its cell, and a panel stretches to it, so they keep it whole).
+                if (spreading && item != null && item.kind != TileKind.DRAWABLE && !item.stretchy) {
+                    val own = leaf(n.id, pw, level).height + SPREAD_SLACK + item.air
+                    if (own < ph - 1f) {
+                        rh = own
+                        ry = py + (ph - own) / 2f
+                        spread.add(floatArrayOf(px, py, pw, ry - py))
+                        spread.add(floatArrayOf(px, ry + rh, pw, py + ph - ry - rh))
+                    }
+                }
+                var rx = px
+                var rw = pw
+                // A picture its shape cannot fill the cell with (a calendar in a wide cell, a photo past its widest crop)
+                // is centred in a cell of its own size: the side room is an even margin, not a hole beside it.
+                val shape = item?.pic
+                if (spreading && shape != null && shape.hasContent) {
+                    val f = fit.drawable(shape, pw, ph)
+                    if (!f.cut && (f.w < pw - 1f || f.h < ph - 1f)) {
+                        rw = min(pw, f.w)
+                        rh = min(ph, f.h)
+                        rx = px + (pw - rw) / 2f
+                        ry = py + (ph - rh) / 2f
+                        if (rx > px + 0.5f) { spread.add(floatArrayOf(px, py, rx - px, ph)); spread.add(floatArrayOf(rx + rw, py, px + pw - rx - rw, ph)) }
+                        if (ry > py + 0.5f) { spread.add(floatArrayOf(rx, py, rw, ry - py)); spread.add(floatArrayOf(rx, ry + rh, rw, py + ph - ry - rh)) }
+                    }
+                }
+                rects[n.id] = floatArrayOf(rx, ry, rw, rh)
                 levels[n.id] = level
                 return
             }
@@ -388,6 +476,8 @@ class TileSolver(
             val count = g.children.size
             val gaps = gap * (count - 1)
             var sizes: FloatArray
+            var startOff = 0f
+            var gapExtra = 0f
             val qs = FloatArray(count) { level }
             if (g.vertical) {
                 val axis = (ph - gaps).coerceAtLeast(0f)
@@ -403,11 +493,24 @@ class TileSolver(
                     if (left < -0.5f) {
                         val floors = g.children.map { height(it, pw, 0f) }
                         sizes = distribute(axis, sizes.toList(), sizes.toList(), floors).toFloatArray()
-                    } else if (left > 0.5f && nested) {
-                        val pull = FloatArray(count) { if (stretchy(g.children[it])) sizes[it] else 0f }
-                        if (pull.sum() <= 0f) for (i in 0 until count) if (pictured(g.children[i])) pull[i] = sizes[i]
-                        val total = pull.sum()
-                        if (total > 0f) for (i in 0 until count) sizes[i] += left * pull[i] / total
+                    } else if (left > 0.5f) {
+                        var total = 0f
+                        if (nested) {
+                            val pull = FloatArray(count) { if (stretchy(g.children[it])) sizes[it] else 0f }
+                            if (pull.sum() <= 0f) for (i in 0 until count) if (pictured(g.children[i])) pull[i] = sizes[i]
+                            total = pull.sum()
+                            if (total > 0f) for (i in 0 until count) sizes[i] += left * pull[i] / total
+                        }
+                        // Room nothing can grow into: half of it (at most [TileRules.spreadGap] of the height per gap)
+                        // widens the gaps, the rest is an equal margin above and below.
+                        if (total <= 0f && spreading) {
+                            val between = count - 1
+                            gapExtra = if (between > 0) min(left * 0.5f / between, rules.spreadGap * ph) else 0f
+                            val margin = (left - gapExtra * between) / 2f
+                            startOff = margin
+                            spread.add(floatArrayOf(px, py, pw, margin))
+                            spread.add(floatArrayOf(px, py + ph - margin, pw, margin))
+                        }
                     }
                 }
             } else {
@@ -418,14 +521,14 @@ class TileSolver(
                     val natural = g.children.indices.maxOf { height(g.children[it], sizes[it], level) }
                     if (natural < ph - 0.5f) withSplitsAt(level) { fillWidths(g, pw, ph, level) }?.let { sizes = it }
                 }
-                val cap = zoomScale.zOf(level) * rules.rowGrow
+                val cap = max(zoomScale.zOf(level) * rules.rowGrow, zoomScale.max)
                 for (i in 0 until count) {
                     val child = g.children[i]
                     if (height(child, sizes[i], level) < ph - 0.5f) qs[i] = grow(child, sizes[i], ph, level, cap)
                 }
             }
             groupSizes[path] = sizes.toList()
-            var off = 0f
+            var off = startOff
             g.children.forEachIndexed { i, child ->
                 if (g.vertical) place(child, px, py + off, pw, sizes[i], qs[i], nested, path + i)
                 else place(child, px + off, py, sizes[i], ph, qs[i], true, path + i)
@@ -438,17 +541,19 @@ class TileSolver(
                         else TileDivider(path, i, false, px + mid, py + ph / 2f, sizes.toList(), adjacent, ph)
                     )
                 }
-                off += gap
+                if (i < count - 1 && gapExtra > 0f) spread.add(floatArrayOf(px, py + off + gap / 2f, pw, gapExtra))
+                off += gap + gapExtra
             }
         }
 
         val height = if (byContent) height(root, w, q) else h
         place(root, x, y, w, height, q, false, emptyList())
-        return TileSolved(rects, dividers, groupSizes, levels, zoomScale.zOf(q))
+        return TileSolved(rects, dividers, groupSizes, levels, zoomScale.zOf(q), spread)
     }
 
     companion object {
         const val TOO_NARROW = 1e6f
+        private const val SPREAD_SLACK = 2f
         private const val ZOOM_STEPS = 16
         private const val ZOOM_ROUNDS = 3
     }
