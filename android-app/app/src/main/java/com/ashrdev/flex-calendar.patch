@@ -1,0 +1,1306 @@
+diff -ruN --strip-trailing-cr a/aznd/ui/calendar/CalendarDates.kt b/aznd/ui/calendar/CalendarDates.kt
+--- a/aznd/ui/calendar/CalendarDates.kt	2026-11-14 18:49:40.404887203 +0000
++++ b/aznd/ui/calendar/CalendarDates.kt	2026-11-14 18:49:40.411146940 +0000
+@@ -12,6 +12,7 @@
+ private val longDayFormat = SimpleDateFormat("EEE d MMM yyyy", Locale.getDefault())
+ private val monthTitleFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+ private val monthShortFormat = SimpleDateFormat("MMM", Locale.getDefault())
++private val monthNameFormat = SimpleDateFormat("MMMM", Locale.getDefault())
+ 
+ /** A calendar month. [month] is 1..12. */
+ data class MonthKey(val year: Int, val month: Int) : Comparable<MonthKey> {
+@@ -29,6 +30,9 @@
+ 
+     fun title(): String = monthTitleFormat.format(firstOfMonth().time)
+     fun shortName(): String = monthShortFormat.format(firstOfMonth().time)
++
++    /** The month's own name without the year ("March"), for pickers. */
++    fun name(): String = monthNameFormat.format(firstOfMonth().time)
+     fun daysInMonth(): Int = firstOfMonth().getActualMaximum(Calendar.DAY_OF_MONTH)
+ 
+     /** Weekday of the 1st, as a Calendar constant (Calendar.SUNDAY..Calendar.SATURDAY). */
+diff -ruN --strip-trailing-cr a/aznd/ui/calendar/CalendarGrid.kt b/aznd/ui/calendar/CalendarGrid.kt
+--- a/aznd/ui/calendar/CalendarGrid.kt	2026-11-14 18:49:40.405225045 +0000
++++ b/aznd/ui/calendar/CalendarGrid.kt	2026-11-14 18:49:40.411203119 +0000
+@@ -44,8 +44,6 @@
+ import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+ import kotlin.math.roundToInt
+ 
+-internal val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
+-
+ internal val WeekdayLabelWidth = 16.dp
+ internal val MonthLabelHeight = 14.dp
+ internal val BandGap = 10.dp
+@@ -55,78 +53,6 @@
+ private val ReferenceButtonHeight = 48.dp
+ private const val MAX_BUTTON_CORNER_DP = 50f
+ 
+-internal class YearLayout(val year: Int, firstDayOfWeek: Int) {
+-    val dayKeys: List<String> = (1..12).flatMap { m ->
+-        val month = MonthKey(year, m)
+-        (1..month.daysInMonth()).map { month.dayKey(it) }
+-    }
+-
+-    val leading: Int = (MonthKey(year, 1).firstWeekday() - firstDayOfWeek + 7) % 7
+-
+-    val weeks: Int = (leading + dayKeys.size + 6) / 7
+-
+-    val monthStartWeek: List<Int> = run {
+-        var ordinal = 0
+-        (1..12).map { m ->
+-            ((leading + ordinal) / 7).also { ordinal += MonthKey(year, m).daysInMonth() }
+-        }
+-    }
+-
+-    fun dayKeyAt(week: Int, row: Int): String? = dayKeys.getOrNull(week * 7 + row - leading)
+-
+-    fun weekOf(dayKey: String): Int? =
+-        dayKeys.indexOf(dayKey).takeIf { it >= 0 }?.let { (leading + it) / 7 }
+-
+-    fun monthEndWeek(month: Int): Int =
+-        weekOf(MonthKey(year, month).let { it.dayKey(it.daysInMonth()) }) ?: (weeks - 1)
+-}
+-
+-internal class YearBand(val months: IntRange, val startWeek: Int, val endWeek: Int) {
+-    val weekCount: Int get() = endWeek - startWeek + 1
+-
+-    fun dayKeyAt(layout: YearLayout, week: Int, row: Int): String? =
+-        layout.dayKeyAt(week, row)?.takeIf { monthKeyOf(it).month in months }
+-}
+-
+-internal data class CalendarView(val zoom: CalendarZoom, val year: Int, val index: Int) {
+-    val monthRanges: List<IntRange>
+-        get() = when (zoom) {
+-            CalendarZoom.YEAR -> listOf(1..4, 5..8, 9..12)
+-            CalendarZoom.QUADRANT -> {
+-                val start = index * 4 + 1
+-                listOf(start..start + 1, start + 2..start + 3)
+-            }
+-            CalendarZoom.MONTH -> listOf(index..index)
+-        }
+-
+-    val columns: Int
+-        get() = when (zoom) {
+-            CalendarZoom.YEAR -> 19
+-            CalendarZoom.QUADRANT -> 10
+-            CalendarZoom.MONTH -> 6
+-        }
+-
+-    val months: List<MonthKey>
+-        get() = monthRanges.flatMap { range -> range.map { MonthKey(year, it) } }
+-
+-    companion object {
+-        fun of(zoom: CalendarZoom, month: MonthKey): CalendarView = CalendarView(
+-            zoom,
+-            month.year,
+-            when (zoom) {
+-                CalendarZoom.YEAR -> 0
+-                CalendarZoom.QUADRANT -> (month.month - 1) / 4
+-                CalendarZoom.MONTH -> month.month
+-            }
+-        )
+-    }
+-}
+-
+-internal fun YearLayout.bandsFor(view: CalendarView): List<YearBand> =
+-    view.monthRanges.map { range ->
+-        YearBand(range, monthStartWeek[range.first - 1], monthEndWeek(range.last))
+-    }
+-
+ internal fun cellSizeFor(view: CalendarView, width: Dp, height: Dp): Dp {
+     val rows = view.monthRanges.size
+     val byWidth = (width - WeekdayLabelWidth) / view.columns
+diff -ruN --strip-trailing-cr a/aznd/ui/calendar/CalendarLayout.kt b/aznd/ui/calendar/CalendarLayout.kt
+--- a/aznd/ui/calendar/CalendarLayout.kt	1970-01-01 00:00:00.000000000 +0000
++++ b/aznd/ui/calendar/CalendarLayout.kt	2026-11-14 18:49:40.411116967 +0000
+@@ -0,0 +1,197 @@
++package com.ashrdev.aznd.ui.calendar
++
++// The geometry of the calendar, with nothing from Android or Compose in it: which months a view holds, how the weeks
++// are laid out, where each day sits, and the arithmetic for stepping between periods. The menu calendar (CalendarGrid,
++// ZoomCalendar) and the Flex card's calendar block both draw from it, so they cannot disagree about a layout. It is
++// compiled by the tiling harness, which checks it.
++
++/** How much of the year a calendar shows: all of it, a third of it (four months), or one month. */
++enum class CalendarZoom { YEAR, QUADRANT, MONTH }
++
++internal val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
++
++internal class YearLayout(val year: Int, firstDayOfWeek: Int) {
++    val dayKeys: List<String> = (1..12).flatMap { m ->
++        val month = MonthKey(year, m)
++        (1..month.daysInMonth()).map { month.dayKey(it) }
++    }
++
++    val leading: Int = (MonthKey(year, 1).firstWeekday() - firstDayOfWeek + 7) % 7
++
++    val weeks: Int = (leading + dayKeys.size + 6) / 7
++
++    val monthStartWeek: List<Int> = run {
++        var ordinal = 0
++        (1..12).map { m ->
++            ((leading + ordinal) / 7).also { ordinal += MonthKey(year, m).daysInMonth() }
++        }
++    }
++
++    fun dayKeyAt(week: Int, row: Int): String? = dayKeys.getOrNull(week * 7 + row - leading)
++
++    fun weekOf(dayKey: String): Int? =
++        dayKeys.indexOf(dayKey).takeIf { it >= 0 }?.let { (leading + it) / 7 }
++
++    fun monthEndWeek(month: Int): Int =
++        weekOf(MonthKey(year, month).let { it.dayKey(it.daysInMonth()) }) ?: (weeks - 1)
++}
++
++internal class YearBand(val months: IntRange, val startWeek: Int, val endWeek: Int) {
++    val weekCount: Int get() = endWeek - startWeek + 1
++
++    fun dayKeyAt(layout: YearLayout, week: Int, row: Int): String? =
++        layout.dayKeyAt(week, row)?.takeIf { monthKeyOf(it).month in months }
++}
++
++internal data class CalendarView(val zoom: CalendarZoom, val year: Int, val index: Int) {
++    val monthRanges: List<IntRange>
++        get() = when (zoom) {
++            CalendarZoom.YEAR -> listOf(1..4, 5..8, 9..12)
++            CalendarZoom.QUADRANT -> {
++                val start = index * 4 + 1
++                listOf(start..start + 1, start + 2..start + 3)
++            }
++            CalendarZoom.MONTH -> listOf(index..index)
++        }
++
++    val columns: Int
++        get() = when (zoom) {
++            CalendarZoom.YEAR -> 19
++            CalendarZoom.QUADRANT -> 10
++            CalendarZoom.MONTH -> 6
++        }
++
++    val months: List<MonthKey>
++        get() = monthRanges.flatMap { range -> range.map { MonthKey(year, it) } }
++
++    companion object {
++        fun of(zoom: CalendarZoom, month: MonthKey): CalendarView = CalendarView(
++            zoom,
++            month.year,
++            when (zoom) {
++                CalendarZoom.YEAR -> 0
++                CalendarZoom.QUADRANT -> (month.month - 1) / 4
++                CalendarZoom.MONTH -> month.month
++            }
++        )
++    }
++}
++
++internal fun YearLayout.bandsFor(view: CalendarView): List<YearBand> =
++    view.monthRanges.map { range ->
++        YearBand(range, monthStartWeek[range.first - 1], monthEndWeek(range.last))
++    }
++
++internal fun CalendarView.firstMonth(): MonthKey = MonthKey(year, monthRanges.first().first)
++
++internal fun CalendarView.lastMonth(): MonthKey = MonthKey(year, monthRanges.last().last)
++
++internal fun CalendarView.title(): String = when (zoom) {
++    CalendarZoom.YEAR -> year.toString()
++    CalendarZoom.QUADRANT -> "${firstMonth().shortName()} – ${lastMonth().shortName()} $year"
++    CalendarZoom.MONTH -> MonthKey(year, index).title()
++}
++
++internal fun CalendarView.step(direction: Int, first: MonthKey, last: MonthKey): MonthKey? {
++    val target = when (zoom) {
++        CalendarZoom.YEAR -> CalendarView(zoom, year + direction, 0)
++        CalendarZoom.QUADRANT -> {
++            val raw = index + direction
++            CalendarView(zoom, year + Math.floorDiv(raw, 3), Math.floorMod(raw, 3))
++        }
++        CalendarZoom.MONTH -> CalendarView.of(zoom, MonthKey(year, index).let { if (direction < 0) it.previous() else it.next() })
++    }
++    val start = maxOf(target.firstMonth(), first)
++    val end = minOf(target.lastMonth(), last)
++    return if (start <= end) start else null
++}
++
++/** One day of a view placed in its grid: [band] counts from the top, [col] is the week within the band, [row] the weekday row. */
++internal class CalendarSlot(val dayKey: String, val month: Int, val dayOfMonth: Int, val band: Int, val col: Int, val row: Int)
++
++/** A month name that sits above [col] of [band]: the week the month's first day is in. */
++internal class CalendarMonthLabel(val band: Int, val col: Int, val month: Int)
++
++/**
++ * A view laid out as the menu calendar draws it: weeks run across in columns, the weekdays down in seven rows, and the
++ * view's months are stacked in [bands] (one band for a month, two for a quadrant, three for the year). Every day of the
++ * view is in [slots] exactly once.
++ */
++internal class CalendarGridPlan(val view: CalendarView, val firstDayOfWeek: Int) {
++    private val layout = YearLayout(view.year, firstDayOfWeek)
++    val bands: List<YearBand> = layout.bandsFor(view)
++
++    /** Weeks (columns) in each band. */
++    val weekCounts: List<Int> = bands.map { it.weekCount }
++
++    val slots: List<CalendarSlot> = buildList {
++        bands.forEachIndexed { bandIndex, band ->
++            for (week in band.startWeek..band.endWeek) {
++                for (row in 0 until 7) {
++                    val key = band.dayKeyAt(layout, week, row) ?: continue
++                    add(CalendarSlot(key, monthKeyOf(key).month, dayOfMonthOf(key), bandIndex, week - band.startWeek, row))
++                }
++            }
++        }
++    }
++
++    val labels: List<CalendarMonthLabel> = buildList {
++        bands.forEachIndexed { bandIndex, band ->
++            for (week in band.startWeek..band.endWeek) {
++                val month = band.months.firstOrNull { layout.monthStartWeek[it - 1] == week } ?: continue
++                add(CalendarMonthLabel(bandIndex, week - band.startWeek, month))
++            }
++        }
++    }
++
++    /** The weekday letter of [row], for the column down the left. */
++    fun weekdayLetter(row: Int): String = weekdayLetters[(firstDayOfWeek - 1 + row) % 7]
++}
++
++/** The side of a day cell when the view's grid is fitted into [width] by [height] (the same rule as [cellSizeFor], in plain numbers). */
++internal fun calendarCellSide(view: CalendarView, width: Float, height: Float, weekdayWidth: Float, labelHeight: Float, bandGap: Float): Float {
++    val rows = view.monthRanges.size
++    val byWidth = (width - weekdayWidth) / view.columns
++    val byHeight = (height - labelHeight * rows - bandGap * (rows - 1)) / (7 * rows)
++    return minOf(byWidth, byHeight).coerceAtLeast(4f)
++}
++
++/** The same view with its year and index made valid: a year 0, a quadrant 0 to 2, a month 1 to 12. */
++internal fun CalendarView.valid(): CalendarView = CalendarView(
++    zoom,
++    year.coerceIn(1, 9999),
++    when (zoom) {
++        CalendarZoom.YEAR -> 0
++        CalendarZoom.QUADRANT -> index.coerceIn(0, 2)
++        CalendarZoom.MONTH -> index.coerceIn(1, 12)
++    }
++)
++
++/** The view of [zoom] that holds this view's first month (a month's quadrant, a quadrant's first month, ...). */
++internal fun CalendarView.inZoom(zoom: CalendarZoom): CalendarView = CalendarView.of(zoom, firstMonth())
++
++/** The view after this one ([direction] 1) or before it (-1) at the same zoom, with no bounds. */
++internal fun CalendarView.shifted(direction: Int): CalendarView = when (zoom) {
++    CalendarZoom.YEAR -> CalendarView(zoom, year + direction, 0)
++    CalendarZoom.QUADRANT -> {
++        val raw = index + direction
++        CalendarView(zoom, year + Math.floorDiv(raw, 3), Math.floorMod(raw, 3))
++    }
++    CalendarZoom.MONTH -> CalendarView.of(zoom, MonthKey(year, index).let { if (direction < 0) it.previous() else it.next() })
++}
++
++/** Every view of [zoom] that holds at least one month from [first] to [last], oldest first. */
++internal fun calendarViews(zoom: CalendarZoom, first: MonthKey, last: MonthKey): List<CalendarView> {
++    if (first > last) return emptyList()
++    val out = ArrayList<CalendarView>()
++    var cursor = CalendarView.of(zoom, first)
++    while (cursor.firstMonth() <= last) {
++        out += cursor
++        cursor = cursor.shifted(1)
++    }
++    return out
++}
++
++/** The names of a year's three quadrants, as the menu calendar titles them ("Jan – Apr 2026"). */
++internal fun quadrantTitles(year: Int): List<String> =
++    (0..2).map { CalendarView(CalendarZoom.QUADRANT, year, it).title() }
+diff -ruN --strip-trailing-cr a/aznd/ui/calendar/CalendarModel.kt b/aznd/ui/calendar/CalendarModel.kt
+--- a/aznd/ui/calendar/CalendarModel.kt	2026-11-14 18:49:40.405146998 +0000
++++ b/aznd/ui/calendar/CalendarModel.kt	2026-11-14 18:49:40.411191311 +0000
+@@ -127,8 +127,6 @@
+     }
+ }
+ 
+-enum class CalendarZoom { YEAR, QUADRANT, MONTH }
+-
+ @Stable
+ class CalendarState(
+     initialMonth: MonthKey,
+diff -ruN --strip-trailing-cr a/aznd/ui/calendar/ZoomCalendar.kt b/aznd/ui/calendar/ZoomCalendar.kt
+--- a/aznd/ui/calendar/ZoomCalendar.kt	2026-11-14 18:49:40.405065839 +0000
++++ b/aznd/ui/calendar/ZoomCalendar.kt	2026-11-14 18:49:40.411179223 +0000
+@@ -185,30 +185,6 @@
+     CalendarZoom.QUADRANT, CalendarZoom.YEAR -> CalendarZoom.YEAR
+ }
+ 
+-private fun CalendarView.firstMonth(): MonthKey = MonthKey(year, monthRanges.first().first)
+-
+-private fun CalendarView.lastMonth(): MonthKey = MonthKey(year, monthRanges.last().last)
+-
+-private fun CalendarView.title(): String = when (zoom) {
+-    CalendarZoom.YEAR -> year.toString()
+-    CalendarZoom.QUADRANT -> "${firstMonth().shortName()} – ${lastMonth().shortName()} $year"
+-    CalendarZoom.MONTH -> MonthKey(year, index).title()
+-}
+-
+-private fun CalendarView.step(direction: Int, first: MonthKey, last: MonthKey): MonthKey? {
+-    val target = when (zoom) {
+-        CalendarZoom.YEAR -> CalendarView(zoom, year + direction, 0)
+-        CalendarZoom.QUADRANT -> {
+-            val raw = index + direction
+-            CalendarView(zoom, year + Math.floorDiv(raw, 3), Math.floorMod(raw, 3))
+-        }
+-        CalendarZoom.MONTH -> CalendarView.of(zoom, MonthKey(year, index).let { if (direction < 0) it.previous() else it.next() })
+-    }
+-    val start = maxOf(target.firstMonth(), first)
+-    val end = minOf(target.lastMonth(), last)
+-    return if (start <= end) start else null
+-}
+-
+ @Composable
+ private fun CalendarHeader(
+     title: String,
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexBlockList.kt b/aznd/ui/common/share/FlexBlockList.kt
+--- a/aznd/ui/common/share/FlexBlockList.kt	2026-11-14 18:49:40.213903594 +0000
++++ b/aznd/ui/common/share/FlexBlockList.kt	2026-11-14 18:49:40.409545700 +0000
+@@ -37,6 +37,7 @@
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import com.ashrdev.aznd.ui.common.ReorderableItem
+ import com.ashrdev.aznd.ui.common.dragReorderHandle
+@@ -138,6 +139,19 @@
+                                 onSelect(newId)
+                             }
+                         )
++                    }
++                    // The screen's other pictures that are not on the card yet, one entry each.
++                    val onCard = spec.blocks.mapNotNull { if (it.type == FlexBlockType.PHOTO) it.keys?.firstOrNull() else null }.toSet()
++                    content.photos.filter { it.uri !in onCard }.forEach { photo ->
++                        DropdownMenuItem(
++                            text = { Text("Photo: ${photo.label}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
++                            onClick = {
++                                menu = false
++                                val newId = spec.nextBlockId()
++                                update { sp -> sp.withPhotoBlock(photo.uri) }
++                                onSelect(newId)
++                            }
++                        )
+                     }
+                 }
+             }
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexCalendarModel.kt b/aznd/ui/common/share/FlexCalendarModel.kt
+--- a/aznd/ui/common/share/FlexCalendarModel.kt	1970-01-01 00:00:00.000000000 +0000
++++ b/aznd/ui/common/share/FlexCalendarModel.kt	2026-11-14 18:49:40.409384067 +0000
+@@ -0,0 +1,151 @@
++package com.ashrdev.aznd.ui.common.share
++
++import com.ashrdev.aznd.ui.calendar.CalendarView
++import com.ashrdev.aznd.ui.calendar.CalendarZoom
++import com.ashrdev.aznd.ui.calendar.MonthKey
++import com.ashrdev.aznd.ui.calendar.calendarViews
++import com.ashrdev.aznd.ui.calendar.currentMonth
++import com.ashrdev.aznd.ui.calendar.monthKeyOf
++import com.ashrdev.aznd.ui.calendar.valid
++import java.util.Calendar
++
++// What the Flex calendar block is made of and how its shape follows its view. Nothing here touches Android, so the
++// tiling harness compiles and checks it; the painter (FlexPainter) and the edit page (FlexEditPage) use it.
++
++/** How a highlighted day is marked: a filled shape (the menu calendar's highlight) or a ring around the day. */
++enum class FlexDayMark { FILL, OUTLINE }
++
++/**
++ * One highlighted day of a calendar source. [alpha] (0 to 1) is how strongly the highlight is drawn, 1 for a plain
++ * highlight; a score-based source sets it per day. [color] is an ARGB colour for the mark, 0 for the card's accent.
++ */
++data class FlexDay(
++    val mark: FlexDayMark = FlexDayMark.FILL,
++    val alpha: Float = 1f,
++    val color: Int = 0
++) {
++    /** [alpha] as the painter uses it: from 0 to 1, a broken value counting as 1. */
++    val strength: Float get() = if (alpha.isNaN()) 1f else alpha.coerceIn(0f, 1f)
++}
++
++/**
++ * Which days a calendar highlights: what a screen offers the Calendar block to show (a streak's kept days, the days
++ * trained). [key] identifies it in a saved card, [days] maps a day key ("yyyy-MM-dd") to how it is marked, [firstDay]
++ * is the earliest day it has (the first month a person can pick), "" when it has none.
++ */
++data class FlexCalendarSource(
++    val key: String,
++    val label: String,
++    val days: Map<String, FlexDay>,
++    val firstDay: String = ""
++)
++
++/**
++ * What a Calendar block shows. A block always shows one period: [zoom] says whether it is a month, a quadrant (four
++ * months) or a year, [year] and [index] which one (index: 0 for a year, 0 to 2 for a quadrant, 1 to 12 for a month).
++ * [year] 0 means "the screen's own month": the period at this zoom that holds it, so a card saved before periods could
++ * be picked keeps showing the month it showed. [source] is a [FlexCalendarSource.key], "" for the first the screen
++ * offers. [weekStart] is a java.util.Calendar weekday constant.
++ */
++data class FlexCalendarSpec(
++    val zoom: CalendarZoom = CalendarZoom.MONTH,
++    val year: Int = 0,
++    val index: Int = 0,
++    val source: String = "",
++    val weekStart: Int = Calendar.SUNDAY
++)
++
++/** The period of this spec; [anchor] is the month the screen is about, used while [FlexCalendarSpec.year] is 0. */
++internal fun FlexCalendarSpec.view(anchor: MonthKey): CalendarView =
++    if (year <= 0) CalendarView.of(zoom, anchor) else CalendarView(zoom, year, index).valid()
++
++/** The source [key] names, or the first when it names none (a streak that was deleted since the card was saved). */
++fun List<FlexCalendarSource>.sourceFor(key: String): FlexCalendarSource? = firstOrNull { it.key == key } ?: firstOrNull()
++
++/** The month a screen is about: that of [day] when it is a day key, else that of [today], else this month. */
++fun flexCalendarAnchor(day: String, today: String): MonthKey =
++    monthOfOrNull(day) ?: monthOfOrNull(today) ?: currentMonth()
++
++private fun monthOfOrNull(dayKey: String): MonthKey? {
++    if (dayKey.length < 10) return null
++    val month = runCatching { monthKeyOf(dayKey) }.getOrNull() ?: return null
++    return month.takeIf { it.month in 1..12 && it.year > 0 }
++}
++
++/** The first and last month a person can pick for [source]: from its first day (or [today]'s month) to [today]'s month. */
++fun flexCalendarRange(source: FlexCalendarSource?, today: MonthKey): Pair<MonthKey, MonthKey> {
++    val first = source?.firstDay?.let { monthOfOrNull(it) } ?: today
++    return if (first <= today) first to today else today to today
++}
++
++/** The years offered in the year dropdown: [first] to [last] (at most the 30 latest), always including [shown], newest first. */
++fun flexCalendarYears(first: MonthKey, last: MonthKey, shown: Int): List<Int> {
++    val from = maxOf(first.year, last.year - 29)
++    return ((from..last.year).toSet() + shown).sortedDescending()
++}
++
++/** The views of [zoom] a person can add for [first] to [last], newest first, without the [taken] ones, at most [max]. */
++internal fun flexCalendarChoices(zoom: CalendarZoom, first: MonthKey, last: MonthKey, taken: Set<CalendarView>, max: Int = 36): List<CalendarView> =
++    calendarViews(zoom, first, last).asReversed().filter { it !in taken }.take(max)
++
++/**
++ * The size a Calendar block asks for, from the view it shows. The numbers are in the block's own units (before its
++ * size and the module size), the same way the chart's are. The day cells are square, so the shape follows the view's
++ * columns (weeks) and rows (weekdays times bands): a month is nearly square, a quadrant a little taller, a year taller still.
++ */
++object FlexCalendarShape {
++    /** The column of weekday letters, a month name's line, and the gap between two bands of months. */
++    const val WEEKDAY_W = 24f
++    const val LABEL_H = 28f
++    const val BAND_GAP = 18f
++
++    /** A day cell wider than this has its number written in it (below, it is a plain shape). */
++    const val NUMBER_MIN = 32f
++
++    /** A day cell at its natural size and the least it reads at, per zoom. */
++    fun naturalCell(zoom: CalendarZoom): Float = when (zoom) {
++        CalendarZoom.MONTH -> 64f
++        CalendarZoom.QUADRANT -> 50f
++        CalendarZoom.YEAR -> 40f
++    }
++
++    fun leastCell(zoom: CalendarZoom): Float = when (zoom) {
++        CalendarZoom.MONTH -> 38f
++        CalendarZoom.QUADRANT -> 30f
++        CalendarZoom.YEAR -> 22f
++    }
++
++    class Size(
++        val naturalW: Float,
++        val naturalH: Float,
++        val minW: Float,
++        val minH: Float,
++        val ratioMin: Float,
++        val ratioMax: Float
++    ) {
++        val ratio: Float get() = naturalW / naturalH
++    }
++
++    /** Width and height of a grid of [cell] sided days for [zoom] (without the block's padding and head). */
++    fun grid(zoom: CalendarZoom, cell: Float, weekdays: Boolean): Pair<Float, Float> {
++        val view = CalendarView(zoom, 2000, if (zoom == CalendarZoom.MONTH) 1 else 0)
++        val bands = view.monthRanges.size
++        val w = (if (weekdays) WEEKDAY_W else 0f) + view.columns * cell
++        val h = bands * (LABEL_H + 7 * cell) + (bands - 1) * BAND_GAP
++        return w to h
++    }
++
++    /**
++     * The size of a block that shows [zoom]: [pad] is the panel padding, [head] the height of the lines above the grid
++     * (source name and title), [weekdays] whether the weekday letters are shown, [k] the scale the block is drawn at
++     * (it multiplies the least size, as a chart's does).
++     */
++    fun of(zoom: CalendarZoom, pad: Float, head: Float, weekdays: Boolean, k: Float): Size {
++        val (nw, nh) = grid(zoom, naturalCell(zoom), weekdays)
++        val (lw, lh) = grid(zoom, leastCell(zoom), weekdays)
++        val natW = nw + 2 * pad
++        val natH = head + nh + 2 * pad
++        val ratio = natW / natH
++        return Size(natW, natH, (lw + 2 * pad) * k, (head + lh + 2 * pad) * k, ratio * 0.7f, ratio * 1.6f)
++    }
++}
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexEditPage.kt b/aznd/ui/common/share/FlexEditPage.kt
+--- a/aznd/ui/common/share/FlexEditPage.kt	2026-11-14 18:49:40.400396618 +0000
++++ b/aznd/ui/common/share/FlexEditPage.kt	2026-11-14 18:49:40.409653704 +0000
+@@ -21,11 +21,14 @@
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.filled.Redo
+ import androidx.compose.material.icons.automirrored.filled.Undo
++import androidx.compose.material.icons.filled.Add
+ import androidx.compose.material.icons.filled.AutoFixHigh
+ import androidx.compose.material.icons.filled.Check
+ import androidx.compose.material.icons.filled.Close
+ import androidx.compose.material.icons.filled.Delete
+ import androidx.compose.material.icons.filled.PhotoCamera
++import androidx.compose.material3.DropdownMenu
++import androidx.compose.material3.DropdownMenuItem
+ import androidx.compose.material3.ExperimentalMaterial3Api
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+@@ -54,6 +57,11 @@
+ import androidx.compose.ui.graphics.drawscope.Stroke
+ import androidx.compose.ui.input.pointer.pointerInput
+ import androidx.compose.ui.unit.dp
++import com.ashrdev.aznd.ui.calendar.CalendarZoom
++import com.ashrdev.aznd.ui.calendar.MonthKey
++import com.ashrdev.aznd.ui.calendar.inZoom
++import com.ashrdev.aznd.ui.calendar.quadrantTitles
++import com.ashrdev.aznd.ui.calendar.title
+ import com.ashrdev.aznd.ui.common.ScreenScaffold
+ import com.ashrdev.aznd.ui.common.rememberImagePicker
+ import com.ashrdev.aznd.ui.components.AlertDialog
+@@ -63,6 +71,7 @@
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
++import java.util.Calendar
+ import kotlin.math.abs
+ import kotlin.math.roundToInt
+ 
+@@ -153,7 +162,7 @@
+     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
+         val uriText = uri.toString()
+         change { sp ->
+-            sp.copy(blocks = sp.blocks.map { if (it.id == blockId) it.copy(keys = listOf(uriText)) else it })
++            sp.copy(blocks = sp.blocks.map { if (it.id == blockId) it.copy(keys = listOf(uriText), text = if (it.text == FLEX_SCREEN_PHOTO) "" else it.text) else it })
+         }
+     }
+ 
+@@ -185,6 +194,21 @@
+         }
+     }
+ 
++    /**
++     * A calendar block shows one period, so a second period is a block of its own: this one's copy (look, size, source)
++     * for [cal], put right after it, through the same [change] every edit goes through (so the content budget holds and
++     * Undo takes it back). The editor then moves to the new block.
++     */
++    fun addCalendar(from: FlexBlock, cal: FlexCalendarSpec) {
++        val newId = history.current.nextBlockId()
++        change { sp ->
++            val at = sp.blocks.indexOfFirst { it.id == from.id }
++            val added = from.copy(id = newId, cal = cal, freeX = 0f, freeY = 0f, freeW = 0f, freeH = 0f)
++            sp.copy(blocks = sp.blocks.toMutableList().also { it.add(if (at < 0) it.size else at + 1, added) })
++        }
++        if (history.current.blocks.any { it.id == newId }) blockId = newId
++    }
++
+     ScreenScaffold(
+         title = "Edit block",
+         subtitle = block?.type?.label,
+@@ -325,7 +349,8 @@
+                             content = content,
+                             photo = (block.keys?.firstOrNull() ?: content.photoUri)?.let { assets.images[it] },
+                             onChange = { changed, continuous -> onChange(changed, continuous) },
+-                            onPickPhoto = { picker.launch() }
++                            onPickPhoto = { picker.launch() },
++                            onAddCalendar = { addCalendar(block, it) }
+                         )
+ 
+                         TextButton(onClick = { confirmRemove = true }) {
+@@ -379,7 +404,8 @@
+     /** The photo block's picture, as the card draws it (null while it loads or when there is none). */
+     photo: Bitmap?,
+     onChange: (changed: FlexBlock, continuous: Boolean) -> Unit,
+-    onPickPhoto: () -> Unit
++    onPickPhoto: () -> Unit,
++    onAddCalendar: (FlexCalendarSpec) -> Unit
+ ) {
+     val type = block.type
+     val hasOptions = type.variants.size > 1 || type.listy || type.flagLabel != null ||
+@@ -395,6 +421,7 @@
+                 onSelect = { onChange(block.copy(variant = it), false) }
+             )
+         }
++        if (type == FlexBlockType.CALENDAR) CalendarOptions(block, spec, content, onChange, onAddCalendar)
+         if (type.listy) {
+             val choices = content.choices(type)
+             if (choices.isNotEmpty()) {
+@@ -461,4 +488,106 @@
+             }
+         }
+     }
++}
++
++private fun zoomName(zoom: CalendarZoom): String = when (zoom) {
++    CalendarZoom.MONTH -> "Month"
++    CalendarZoom.QUADRANT -> "Quadrant"
++    CalendarZoom.YEAR -> "Year"
++}
++
++/**
++ * What a Calendar block shows: which days (the source), how much of the year (month, quadrant or year), which one
++ * (dropdowns for the year and the month or quadrant), and where its weeks start. Picking a period here changes this
++ * block; "Add another" puts a second block on the card for a different period.
++ */
++@Composable
++private fun CalendarOptions(
++    block: FlexBlock,
++    spec: FlexSpec,
++    content: FlexContent,
++    onChange: (changed: FlexBlock, continuous: Boolean) -> Unit,
++    onAdd: (FlexCalendarSpec) -> Unit
++) {
++    val cal = block.cal
++    val anchor = flexCalendarAnchor(content.calendarDay, content.calendarToday)
++    val view = cal.view(anchor)
++    val source = content.calendars.sourceFor(cal.source)
++    val (first, last) = flexCalendarRange(source, flexCalendarAnchor("", content.calendarToday))
++
++    if (content.calendars.size > 1 && source != null) {
++        DropdownField(
++            label = "Days shown",
++            options = content.calendars,
++            selected = source,
++            optionLabel = { it.label }
++        ) { onChange(block.copy(cal = cal.copy(source = it.key)), false) }
++    }
++    DropdownField(
++        label = "Mode",
++        options = listOf(CalendarZoom.MONTH, CalendarZoom.QUADRANT, CalendarZoom.YEAR),
++        selected = view.zoom,
++        optionLabel = { zoomName(it) }
++    ) { zoom ->
++        // A card on the screen's own month keeps following it; a picked period moves to the one of the new mode that holds it.
++        val next = if (cal.year <= 0) cal.copy(zoom = zoom) else {
++            val moved = view.inZoom(zoom)
++            cal.copy(zoom = zoom, year = moved.year, index = moved.index)
++        }
++        onChange(block.copy(cal = next), false)
++    }
++    DropdownField(
++        label = "Year",
++        options = flexCalendarYears(first, last, view.year),
++        selected = view.year,
++        optionLabel = { it.toString() }
++    ) { onChange(block.copy(cal = cal.copy(year = it, index = view.index)), false) }
++    when (view.zoom) {
++        CalendarZoom.MONTH -> DropdownField(
++            label = "Month",
++            options = (1..12).toList(),
++            selected = view.index,
++            optionLabel = { MonthKey(view.year, it).name() }
++        ) { onChange(block.copy(cal = cal.copy(year = view.year, index = it)), false) }
++        CalendarZoom.QUADRANT -> DropdownField(
++            label = "Quadrant",
++            options = (0..2).toList(),
++            selected = view.index,
++            optionLabel = { quadrantTitles(view.year)[it] }
++        ) { onChange(block.copy(cal = cal.copy(year = view.year, index = it)), false) }
++        CalendarZoom.YEAR -> Unit
++    }
++    Text("Week starts on", style = MaterialTheme.typography.labelMedium)
++    ChipChoice(
++        options = listOf(Calendar.SUNDAY, Calendar.MONDAY),
++        selected = cal.weekStart,
++        label = { if (it == Calendar.SUNDAY) "Sunday" else "Monday" },
++        onSelect = { onChange(block.copy(cal = cal.copy(weekStart = it)), false) }
++    )
++
++    // Periods of this mode that no calendar block of the same days shows yet.
++    val taken = spec.blocks
++        .filter { it.type == FlexBlockType.CALENDAR && content.calendars.sourceFor(it.cal.source)?.key == source?.key }
++        .map { it.cal.view(anchor) }
++        .toSet()
++    val choices = flexCalendarChoices(view.zoom, first, last, taken)
++    var menu by remember { mutableStateOf(false) }
++    Box {
++        OutlinedButton(onClick = { menu = true }, enabled = choices.isNotEmpty()) {
++            Icon(Icons.Default.Add, contentDescription = null)
++            Spacer(modifier = Modifier.width(8.dp))
++            Text("Add another ${zoomName(view.zoom).lowercase()}")
++        }
++        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
++            choices.forEach { period ->
++                DropdownMenuItem(
++                    text = { Text(period.title()) },
++                    onClick = {
++                        menu = false
++                        onAdd(cal.copy(year = period.year, index = period.index))
++                    }
++                )
++            }
++        }
++    }
+ }
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexModel.kt b/aznd/ui/common/share/FlexModel.kt
+--- a/aznd/ui/common/share/FlexModel.kt	2026-11-14 18:49:40.214232022 +0000
++++ b/aznd/ui/common/share/FlexModel.kt	2026-11-14 18:49:40.409636831 +0000
+@@ -347,7 +347,7 @@
+     DAY_NOTE("Day note", listOf("Quote", "Plain"), "Show date", false, FlexBlockClass.TEXT),
+     PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false, FlexBlockClass.DRAWABLE),
+     TEXT("Text", listOf("Plain", "Quote", "Big"), null, false, FlexBlockClass.TEXT),
+-    CALENDAR("Calendar", listOf("Month", "Dots"), "Show weekdays", false, FlexBlockClass.DRAWABLE),
++    CALENDAR("Calendar", listOf("Numbers", "Dots"), "Show weekdays", false, FlexBlockClass.DRAWABLE),
+     MODEL("3D model", listOf("Plain", "On a panel"), null, false, FlexBlockClass.DRAWABLE)
+ }
+ 
+@@ -393,7 +393,9 @@
+     val freeX: Float = 0f,
+     val freeY: Float = 0f,
+     val freeW: Float = 0f,
+-    val freeH: Float = 0f
++    val freeH: Float = 0f,
++    /** CALENDAR: the period it shows, where its highlights come from and how its weeks run. */
++    val cal: FlexCalendarSpec = FlexCalendarSpec()
+ ) {
+     /** Free mode: whether the block has a box of its own yet. */
+     val placed: Boolean get() = freeW > 0f && freeH > 0f
+@@ -454,22 +456,8 @@
+ 
+ data class FlexChartPoint(val timeMs: Long, val value: Double)
+ 
+-/**
+- * A month for the Calendar block: [days] days, the first a [firstWeekday] (0 = Monday ... 6 = Sunday), the [marked]
+- * ones (days of the month, 1 based) highlighted, [today] ringed (0 = not this month). [label] is the line above it,
+- * e.g. the streak's name.
+- */
+-data class FlexCalendar(
+-    val title: String,
+-    val days: Int,
+-    val firstWeekday: Int,
+-    val marked: Set<Int>,
+-    val today: Int = 0,
+-    val label: String = ""
+-) {
+-    /** How many week rows the month takes. */
+-    val weeks: Int get() = (firstWeekday + days + 6) / 7
+-}
++/** A picture a screen offers a card besides its own photo: [label] says where it is from (a workout and day, a saved day). */
++data class FlexPhoto(val uri: String, val label: String)
+ 
+ data class FlexContent(
+     /** Small accent line above the title, e.g. "WORKOUT". */
+@@ -488,8 +476,20 @@
+     val dayNote: String = "",
+     /** The share's own photo (workout photo, saved-day photo). */
+     val photoUri: String? = null,
+-    /** The month the Calendar block shows (kept days of a streak, days trained). */
+-    val calendar: FlexCalendar? = null,
++    /**
++     * What the Calendar blocks can show: the days of a streak that were kept, the days trained. Each Calendar block
++     * picks one by key and shows one period of it.
++     */
++    val calendars: List<FlexCalendarSource> = emptyList(),
++    /** The day the screen is about (a day key, "" for none) and today: a Calendar block that has no period of its own shows the month of the first, else of today. */
++    val calendarDay: String = "",
++    val calendarToday: String = "",
++    /**
++     * Pictures the screen can put on the card as photo blocks besides [photoUri] (which an ordinary photo block shows
++     * by itself): the other days' photos of a streak, the photos of recent workouts. Those that fit are on the card by
++     * default; the rest can be added from the block list.
++     */
++    val photos: List<FlexPhoto> = emptyList(),
+     /** A snapshot of the 3D body model, as an image uri (the 3D model block). */
+     val modelUri: String? = null
+ ) {
+@@ -503,7 +503,7 @@
+         FlexBlockType.ROUTINE -> routine.isNotEmpty()
+         FlexBlockType.CHART -> chart.isNotEmpty()
+         FlexBlockType.DAY_NOTE -> dayNote.isNotBlank()
+-        FlexBlockType.CALENDAR -> calendar != null && calendar.days > 0
++        FlexBlockType.CALENDAR -> calendars.isNotEmpty()
+         FlexBlockType.MODEL -> modelUri != null
+     }
+ 
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexPainter.kt b/aznd/ui/common/share/FlexPainter.kt
+--- a/aznd/ui/common/share/FlexPainter.kt	2026-11-14 18:49:40.402635593 +0000
++++ b/aznd/ui/common/share/FlexPainter.kt	2026-11-14 18:49:40.409571783 +0000
+@@ -15,6 +15,11 @@
+ import android.text.StaticLayout
+ import android.text.TextPaint
+ import com.ashrdev.aznd.domain.workout.formatWeight
++import com.ashrdev.aznd.ui.calendar.CalendarGridPlan
++import com.ashrdev.aznd.ui.calendar.CalendarView
++import com.ashrdev.aznd.ui.calendar.MonthKey
++import com.ashrdev.aznd.ui.calendar.calendarCellSide
++import com.ashrdev.aznd.ui.calendar.title
+ import com.ashrdev.aznd.ui.theme.BorderKind
+ import com.ashrdev.aznd.ui.theme.FillRender
+ import com.ashrdev.aznd.ui.common.tiling.AlignItem
+@@ -1389,11 +1394,6 @@
+         else -> (b.keys?.firstOrNull() ?: ct.photoUri)?.let { c.assets.images[it] }
+     }
+ 
+-    /** A calendar's day cell at its natural size, and the least it reads at (the block's own units, before its size). */
+-    private const val CAL_CELL = 66f
+-    private const val CAL_CELL_MIN = 40f
+-    private const val CAL_GAP = 6f
+-
+     /**
+      * How a drawable block takes its cell. Adding a kind of drawable (a 3D snapshot, say) is a branch here and one
+      * in [drawDrawable]. [free]: a cropping drawable (a photo) may take any crop within its range, else it keeps
+@@ -1430,18 +1430,10 @@
+             DrawableShape(bmp != null, own, lo, hi, 0f, 0f, lim.maxWidth, lim.maxHeight, greedy = true, crops = fill && !panel)
+         }
+         FlexBlockType.CALENDAR -> {
+-            // A month: seven columns of day cells under its title; the cells stretch to the tile (within a sensible range
+-            // of shapes), the numbers keep their size, so it has a least size at which they still read.
+-            val cal = ct.calendar
+-            val k = scaleOf(c, b)
+-            val pad = c.panelPad()
+-            val weeks = cal?.weeks ?: 5
+-            val head = calendarHead(c, b, ct)
+-            val minW = (7 * CAL_CELL_MIN + 6 * CAL_GAP + 2 * pad) * k
+-            val minH = (head + weeks * CAL_CELL_MIN + (weeks - 1) * CAL_GAP + 2 * pad) * k
+-            val natW = 7 * CAL_CELL + 6 * CAL_GAP + 2 * pad
+-            val natH = head + weeks * CAL_CELL + (weeks - 1) * CAL_GAP + 2 * pad
+-            DrawableShape(cal != null && cal.days > 0, natW / natH, 0.8f, 1.4f, minW, minH, NO_CAP, max(CHART_MAX_H * 1.2f, minH), greedy = false, crops = false)
++            // The menu calendar's grid: square day cells, weeks across and weekdays down, so its shape follows its view (a
++            // month, a quadrant or a year) and its numbers keep their size: it has a least size at which they still read.
++            val sz = FlexCalendarShape.of(calendarView(ct, b).zoom, c.panelPad(), calendarHead(c, b, ct), b.flag, scaleOf(c, b))
++            DrawableShape(ct.calendars.isNotEmpty(), sz.ratio, sz.ratioMin, sz.ratioMax, sz.minW, sz.minH, NO_CAP, max(max(CHART_MAX_H * 1.2f, sz.naturalH * 1.3f), sz.minH), greedy = false, crops = false)
+         }
+         FlexBlockType.CHART -> {
+             // A chart stretches to its cell (within a sensible range of shapes) instead of being fitted by text scaling;
+@@ -1998,78 +1990,130 @@
+ 
+     // ---- Calendar ----
+ 
+-    /** How tall a calendar's lines above its days are (label, month, weekdays), in the block's own units. */
++    /** The period a Calendar block shows (the month of the screen's day while it has none of its own). */
++    private fun calendarView(ct: FlexContent, b: FlexBlock): CalendarView =
++        b.cal.view(flexCalendarAnchor(ct.calendarDay, ct.calendarToday))
++
++    /** How tall a calendar's lines above its grid are (the source's name and the period's title), in the block's own units. */
+     private fun calendarHead(c: Ctx, b: FlexBlock, ct: FlexContent): Float {
+-        val cal = ct.calendar ?: return 0f
++        val src = ct.calendars.sourceFor(b.cal.source) ?: return 0f
+         var h = 0f
+-        if (cal.label.isNotBlank()) h += c.lineH(c.kicker()) + 10f
++        if (src.label.isNotBlank()) h += c.lineH(c.kicker()) + 10f
+         h += c.lineH(c.ink(44f, true, c.st.textColor)) + 14f
+-        if (b.flag) h += c.lineH(c.ink(22f, true, c.st.textColor, 0.6f)) + 8f
+         return h
+     }
+ 
+     /**
+-     * A month in its whole tile, [w] by [h] (block units): the label and month above, the weekdays, then the days in seven
+-     * columns. "Month": every day numbered, the marked ones on an accent disc, today ringed. "Dots": a dot per day, the
+-     * marked ones in the accent colour, like a habit heatmap.
++     * A period in its whole tile, [w] by [h] (block units), laid out as the menu calendar lays it out (CalendarGridPlan):
++     * the source's name and the period's title above, then the month names over the weeks, which run across in columns,
++     * and the weekday letters down the left. A month is one band of weeks, a quadrant two, a year three. A highlighted
++     * day is filled (or ringed) in the accent colour at its own strength, today is underlined. "Numbers": every day is a
++     * rounded cell with its number once the cells are big enough; "Dots": a dot per day, like a habit heatmap.
+      */
+     private fun calendar(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
+-        val cal = ct.calendar ?: return
++        val src = ct.calendars.sourceFor(b.cal.source) ?: return
+         if (c.dry) return
+         // A picture sits in the middle of its tile unless set to the right (as its tile does in its cell).
+         if (c.align == FlexAlign.START) c.align = FlexAlign.CENTER
+         val st = c.st
++        val view = calendarView(ct, b)
++        val plan = CalendarGridPlan(view, b.cal.weekStart)
++        val reach = flexCalendarRange(src, flexCalendarAnchor("", ct.calendarToday))
+         val pad = c.panelPad()
+         c.panelRect(0f, 0f, w, h)
+         val ix = pad
+         val iw = w - 2 * pad
+         var top = pad
+-        if (cal.label.isNotBlank()) top += aligned(c, cal.label.uppercase(), c.kicker(), ix, iw, top) + 10f
+-        top += aligned(c, cal.title, c.ink(44f, true, st.textColor), ix, iw, top) + 14f
+-        val gx = CAL_GAP
+-        val weeks = cal.weeks
+-        val weekdays = if (b.flag) c.ink(22f, true, st.textColor, 0.6f) else null
+-        val gridTop = top + (weekdays?.let { c.lineH(it) + 8f } ?: 0f)
+-        val cellH = ((h - pad - gridTop - (weeks - 1) * gx) / weeks).coerceAtLeast(1f)
+-        // Day cells no wider than they are tall by much: a wide tile puts the month in its middle instead of
+-        // stretching the days apart.
+-        val cellW = min(((iw - 6 * gx) / 7f).coerceAtLeast(1f), cellH * 1.5f)
+-        val gridX = c.alignBox(ix, iw, 7 * cellW + 6 * gx)
+-        if (weekdays != null) {
+-            val names = listOf("M", "T", "W", "T", "F", "S", "S")
+-            for (i in 0 until 7) c.line(names[i], weekdays, gridX + i * (cellW + gx) + cellW / 2f, top, Paint.Align.CENTER)
+-        }
+-        top = gridTop
+-        val dot = min(cellW, cellH)
+-        val numP = c.ink((dot * 0.42f).coerceIn(14f, 40f), true, st.textColor)
+-        val onP = c.ink((dot * 0.42f).coerceIn(14f, 40f), true, st.bgA)
+-        for (d in 1..cal.days) {
+-            val slot = cal.firstWeekday + d - 1
+-            val col = slot % 7
+-            val row = slot / 7
+-            val cx = gridX + col * (cellW + gx) + cellW / 2f
+-            val cy = top + row * (cellH + gx) + cellH / 2f
+-            val marked = d in cal.marked
+-            if (b.variant == 1) {
+-                val r = dot * 0.34f
+-                c.fill.color = if (marked) st.accent else st.textColor
+-                c.fill.alpha = if (marked) 255 else 40
++        if (src.label.isNotBlank()) top += aligned(c, src.label.uppercase(), c.kicker(), ix, iw, top) + 10f
++        top += aligned(c, view.title(), c.ink(44f, true, st.textColor), ix, iw, top) + 14f
++
++        val weekdayW = if (b.flag) FlexCalendarShape.WEEKDAY_W else 0f
++        val labelH = FlexCalendarShape.LABEL_H
++        val bandGap = FlexCalendarShape.BAND_GAP
++        val cell = calendarCellSide(view, iw, h - pad - top, weekdayW, labelH, bandGap)
++        val widest = plan.weekCounts.maxOrNull() ?: view.columns
++        val gridX = c.alignBox(ix, iw, weekdayW + widest * cell)
++        val daysX = gridX + weekdayW
++        val gap = (cell * 0.06f).coerceIn(2f, 6f)
++        // The cells' corners follow the card's panels, from square to round (the menu's follow the buttons').
++        val corner = (st.panelRadius / 48f).coerceIn(0f, 0.5f) * (cell - 2 * gap)
++        val bandH = labelH + 7 * cell
++        val dots = b.variant == 1
++        val showNumbers = !dots && cell >= FlexCalendarShape.NUMBER_MIN
++        val small = c.ink(20f, true, st.textColor, 0.6f)
++        val numSize = (cell * 0.38f).coerceAtMost(40f)
++
++        plan.labels.forEach { label ->
++            val y = top + label.band * (bandH + bandGap)
++            c.line(MonthKey(view.year, label.month).shortName(), small, daysX + label.col * cell, y + (labelH - c.lineH(small)) / 2f, Paint.Align.LEFT)
++        }
++        if (b.flag) {
++            for (band in plan.bands.indices) for (row in 0 until 7) {
++                if (cell < 30f && row % 2 == 0) continue
++                val y = top + band * (bandH + bandGap) + labelH + row * cell
++                c.line(plan.weekdayLetter(row), small, gridX + weekdayW / 2f, y + (cell - c.lineH(small)) / 2f, Paint.Align.CENTER)
++            }
++        }
++
++        for (slot in plan.slots) {
++            val x = daysX + slot.col * cell
++            val y = top + slot.band * (bandH + bandGap) + labelH + slot.row * cell
++            val rect = RectF(x + gap, y + gap, x + cell - gap, y + cell - gap)
++            val cx = rect.centerX()
++            val cy = rect.centerY()
++            val reachable = MonthKey(view.year, slot.month) in reach.first..reach.second
++            val day = src.days[slot.dayKey]
++            val markColor = day?.color?.takeIf { it != 0 } ?: st.accent
++            val strength = day?.strength ?: 0f
++            val filled = day != null && day.mark == FlexDayMark.FILL
++            val ringed = day != null && day.mark == FlexDayMark.OUTLINE
++            val isToday = slot.dayKey == ct.calendarToday
++            if (dots) {
++                val r = cell * 0.34f
++                c.fill.color = if (filled) markColor else st.textColor
++                c.fill.alpha = if (filled) (strength * 255f).roundToInt() else if (reachable) 40 else 16
+                 c.canvas.drawCircle(cx, cy, r, c.fill)
++                if (ringed) {
++                    c.stroke.color = markColor
++                    c.stroke.alpha = (strength * 255f).roundToInt()
++                    c.stroke.strokeWidth = 2.5f
++                    c.canvas.drawCircle(cx, cy, r, c.stroke)
++                }
+             } else {
+-                val r = dot * 0.46f
+-                if (marked) {
+-                    c.fill.color = st.accent
+-                    c.fill.alpha = 255
+-                    c.canvas.drawCircle(cx, cy, r, c.fill)
++                c.fill.color = st.textColor
++                c.fill.alpha = if (reachable) 20 else 8
++                c.canvas.drawRoundRect(rect, corner, corner, c.fill)
++                if (filled) {
++                    c.fill.color = markColor
++                    c.fill.alpha = (strength * 255f).roundToInt()
++                    c.canvas.drawRoundRect(rect, corner, corner, c.fill)
++                }
++                if (ringed) {
++                    c.stroke.color = markColor
++                    c.stroke.alpha = (strength * 255f).roundToInt()
++                    c.stroke.strokeWidth = if (cell < 32f) 1.5f else 2.5f
++                    c.canvas.drawRoundRect(rect, corner, corner, c.stroke)
++                }
++            }
++            if (showNumbers) {
++                val onMark = filled && strength >= 0.5f
++                // Today is bold and underlined; days of months before the source began are faded.
++                val p = c.ink(numSize, isToday, if (onMark) st.bgA else st.textColor, if (reachable) 1f else 0.4f)
++                val label = slot.dayOfMonth.toString()
++                c.line(label, p, cx, cy - c.lineH(p) / 2f, Paint.Align.CENTER)
++                if (isToday) {
++                    val half = p.measureText(label) / 2f
++                    val under = cy + c.lineH(p) / 2f - 2f
++                    c.stroke.color = p.color
++                    c.stroke.alpha = 230
++                    c.stroke.strokeWidth = 2.5f
++                    c.canvas.drawLine(cx - half, under, cx + half, under, c.stroke)
+                 }
+-                val p = if (marked) onP else numP
+-                c.line(d.toString(), p, cx, cy - c.lineH(p) / 2f, Paint.Align.CENTER)
+-            }
+-            if (d == cal.today) {
++            } else if (isToday) {
+                 c.stroke.color = st.textColor
+-                c.stroke.alpha = 200
+-                c.stroke.strokeWidth = 3f
+-                c.canvas.drawCircle(cx, cy, dot * 0.5f - 1.5f, c.stroke)
++                c.stroke.alpha = 160
++                c.stroke.strokeWidth = 2f
++                if (dots) c.canvas.drawCircle(cx, cy, cell * 0.34f + 3f, c.stroke) else c.canvas.drawRoundRect(rect, corner, corner, c.stroke)
+             }
+         }
+     }
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexPresets.kt b/aznd/ui/common/share/FlexPresets.kt
+--- a/aznd/ui/common/share/FlexPresets.kt	2026-11-14 18:49:40.213670727 +0000
++++ b/aznd/ui/common/share/FlexPresets.kt	2026-11-14 18:49:40.409455201 +0000
+@@ -1,15 +1,16 @@
+ package com.ashrdev.aznd.ui.common.share
+ 
+ import android.net.Uri
++import com.ashrdev.aznd.data.workout.SessionWithSets
+ import com.ashrdev.aznd.data.workout.SetMode
+ import com.ashrdev.aznd.domain.workout.ExerciseType
+ import com.ashrdev.aznd.domain.workout.SetKind
+ import com.ashrdev.aznd.domain.workout.targetLabel
+ import com.ashrdev.aznd.ui.navigation.Destination
+ import com.ashrdev.aznd.ui.streaks.StreakViewModel
++import com.ashrdev.aznd.domain.streaks.dayKeysBetween
+ import com.ashrdev.aznd.domain.streaks.displayDate
+-import com.ashrdev.aznd.ui.calendar.dayOfMonthOf
+-import com.ashrdev.aznd.ui.calendar.monthKeyOf
++import com.ashrdev.aznd.ui.calendar.dayKeyOf
+ import com.ashrdev.aznd.ui.calendar.todayDayKey
+ import com.ashrdev.aznd.ui.workout.TopExerciseStat
+ import com.ashrdev.aznd.ui.workout.WorkoutViewModel
+@@ -17,6 +18,7 @@
+ import com.ashrdev.aznd.ui.workout.formatDuration
+ import com.ashrdev.aznd.ui.workout.stats.loadExerciseStats
+ import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.withTimeoutOrNull
+ import java.text.SimpleDateFormat
+ import java.util.Date
+ import java.util.Locale
+@@ -59,8 +61,60 @@
+     text: String = ""
+ ) = FlexBlock(id = id, type = type, enabled = enabled, variant = variant, keys = null, limit = limit, text = text, flag = flag)
+ 
+-/** The card a preset starts with, before the person changes anything. */
+-fun FlexPreset.defaultSpec(content: FlexContent): FlexSpec = when (this) {
++/**
++ * The card a preset starts with, before the person changes anything. A workout or a streak day that has pictures
++ * starts with them as photo blocks, as many as the card's content budget holds (see [withPhotosThatFit]).
++ */
++fun FlexPreset.defaultSpec(content: FlexContent): FlexSpec {
++    val base = baseSpec(content)
++    return when (this) {
++        FlexPreset.WORKOUT, FlexPreset.STREAK_DAY -> base.withPhotosThatFit(content)
++        else -> base
++    }
++}
++
++/** Marks a photo block that shows one of the screen's own pictures ([FlexContent.photos]) in [FlexBlock.text]. */
++const val FLEX_SCREEN_PHOTO = "screen"
++
++/** The most pictures a card starts with besides the screen's own photo. */
++private const val MAX_DEFAULT_PHOTOS = 8
++
++/** This card with a photo block for the picture at [uri], after the others. */
++fun FlexSpec.withPhotoBlock(uri: String): FlexSpec =
++    copy(blocks = blocks + FlexBlock(id = nextBlockId(), type = FlexBlockType.PHOTO, keys = listOf(uri), text = FLEX_SCREEN_PHOTO))
++
++/**
++ * The card with the screen's own photo block turned on (when the screen has a photo) and a photo block added for each
++ * of its other pictures in order, as long as the card's content budget holds them: the first one that would take the card
++ * past it ends the list, and the rest stay available in the block list.
++ */
++private fun FlexSpec.withPhotosThatFit(content: FlexContent): FlexSpec {
++    val assets = FlexAssets()
++    var spec = this
++    val own = spec.blocks.firstOrNull { it.type == FlexBlockType.PHOTO && it.keys == null }
++    if (content.photoUri != null && own != null && !own.enabled) {
++        val on = spec.copy(blocks = spec.blocks.map { if (it.id == own.id) it.copy(enabled = true) else it })
++        if (!FlexPainter.refuses(spec, on, content, assets)) spec = on
++    }
++    for (photo in content.photos.distinctBy { it.uri }.take(MAX_DEFAULT_PHOTOS)) {
++        val next = spec.withPhotoBlock(photo.uri)
++        if (FlexPainter.refuses(spec, next, content, assets)) break
++        spec = next
++    }
++    return spec
++}
++
++/**
++ * A saved card without the screen-picture blocks of another screen's pictures: those a different workout or streak day
++ * put on it. What the person kept of their own is untouched, and nothing is added (a saved card is the person's).
++ */
++fun FlexSpec.withoutStalePhotos(content: FlexContent): FlexSpec {
++    val here = content.photos.map { it.uri }.toSet()
++    val kept = blocks.filter { b -> !(b.type == FlexBlockType.PHOTO && b.text == FLEX_SCREEN_PHOTO && b.keys?.firstOrNull() !in here) }
++    return if (kept.size == blocks.size) this else copy(blocks = kept)
++}
++
++private fun FlexPreset.baseSpec(content: FlexContent): FlexSpec = when (this) {
+     FlexPreset.HOME -> FlexSpec(
+         flexStyleOf(FlexPalettes.Midnight, FlexAspect.PORTRAIT),
+         listOf(
+@@ -162,37 +216,57 @@
+                 FlexLiftItem(it.exerciseName, p.topSetWeight, p.topSetReps, p.topSetRpe, p.e1rm, p.startedAt)
+             }
+ 
++    /** How long the home card waits for the history to arrive (it is a hot flow that starts empty). */
++    private const val SESSIONS_WAIT_MS = 600L
++
++    /** Photos of recent workouts the home card can offer. */
++    private const val HOME_PHOTOS = 12
++
++    private suspend fun allSessions(workout: WorkoutViewModel): List<SessionWithSets> =
++        withTimeoutOrNull(SESSIONS_WAIT_MS) { workout.allSessions.first { it.isNotEmpty() } } ?: workout.allSessions.value
++
+     private suspend fun home(workout: WorkoutViewModel, streaks: StreakViewModel): FlexContent {
+         val snapshots = streaks.streakSnapshots().sortedByDescending { it.current }
+         val streakItems = snapshots.map { FlexStreakItem(it.streak.id, it.streak.name, it.current, it.longest, it.streak.photoUri) }
+-        // The Calendar block shows this month of the longest running streak.
+-        val top = snapshots.firstOrNull()
++        val today = todayDayKey()
++        val sessions = allSessions(workout)
++        // The Calendar block can show any streak (the longest running one first, as it always did) or the days trained.
++        val sources = buildList {
++            snapshots.forEach { snap ->
++                runCatching { streakSource(streaks, snap.streak.id, snap.streak.name, snap.streak.startDate, today) }.getOrNull()?.let { add(it) }
++            }
++            workoutDays(sessions)?.let { add(it) }
++        }
++        val photos = sessions.filter { it.session.photoUri != null }.take(HOME_PHOTOS).map {
++            FlexPhoto(it.session.photoUri.orEmpty(), "${it.session.workoutName} · ${date(it.session.startedAt)}")
++        }
+         return FlexContent(
+             kicker = "",
+             title = "My progress",
+             dateText = date(System.currentTimeMillis()),
+             streaks = streakItems,
+             lifts = liftsFrom(workout.getTopExercises(40)),
+-            calendar = top?.let { runCatching { streakMonth(streaks, it.streak.id, it.streak.name, it.streak.startDate, todayDayKey()) }.getOrNull() }
++            calendars = sources,
++            calendarToday = today,
++            photos = photos
+         )
+     }
+ 
+     /**
+-     * The month of [dayKey] as the Calendar block shows it: the streak's kept days marked (from its start to today,
+-     * its slips left out), today ringed.
++     * A streak's kept days as a Calendar source: every day from its start to today except its slips, as the card has
++     * always marked them.
+      */
+-    private suspend fun streakMonth(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, dayKey: String): FlexCalendar {
+-        val month = monthKeyOf(dayKey)
+-        val today = todayDayKey()
++    private suspend fun streakSource(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, today: String): FlexCalendarSource {
+         val breaks = streaks.breaksForStreak(streakId).first().toSet()
+-        val marked = (1..month.daysInMonth()).filter { d ->
+-            val key = month.dayKey(d)
+-            key >= startDate && key <= today && key !in breaks
+-        }.toSet()
+-        // java.util.Calendar counts Sunday as 1 and Monday as 2; the block starts its weeks on Monday.
+-        val first = (month.firstWeekday() + 5) % 7
+-        val todayDay = if (monthKeyOf(today) == month) dayOfMonthOf(today) else 0
+-        return FlexCalendar(month.title(), month.daysInMonth(), first, marked, todayDay, name)
++        val kept = dayKeysBetween(startDate, today).filter { it !in breaks }
++        return FlexCalendarSource("streak:$streakId", name, kept.associateWith { FlexDay() }, startDate)
++    }
++
++    /** The days a workout was done, as a Calendar source; null when none was. */
++    private fun workoutDays(sessions: List<SessionWithSets>): FlexCalendarSource? {
++        val days = sessions.map { dayKeyOf(it.session.startedAt) }.toSortedSet()
++        if (days.isEmpty()) return null
++        return FlexCalendarSource("workouts", "Workout days", days.associateWith { FlexDay() }, days.first())
+     }
+ 
+     private suspend fun workoutSession(workout: WorkoutViewModel, sessionId: Long): FlexContent {
+@@ -288,6 +362,12 @@
+         val streak = streaks.getStreak(streakId) ?: return FlexContent(kicker = "Streak", title = "Streak")
+         val day = streaks.getSavedDay(streakId, dateKey)
+         val count = day?.streakCountAtSave ?: 0
++        val others = streaks.savedDaysForStreak(streakId).first()
++            .filter { it.photoUri != null && it.date != dateKey && it.photoUri != day?.photoUri }
++            .sortedByDescending { it.date }
++            .map { FlexPhoto(it.photoUri.orEmpty(), displayDate(it.date)) }
++        val today = todayDayKey()
++        val source = runCatching { streakSource(streaks, streak.id, streak.name, streak.startDate, today) }.getOrNull()
+         return FlexContent(
+             kicker = streak.name,
+             title = "Day $count",
+@@ -295,7 +375,10 @@
+             streaks = listOf(FlexStreakItem(streak.id, streak.name, count, count, streak.photoUri)),
+             dayNote = day?.remark.orEmpty(),
+             photoUri = day?.photoUri,
+-            calendar = runCatching { streakMonth(streaks, streak.id, streak.name, streak.startDate, dateKey) }.getOrNull()
++            calendars = listOfNotNull(source),
++            calendarDay = dateKey,
++            calendarToday = today,
++            photos = others
+         )
+     }
+ }
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexScreen.kt b/aznd/ui/common/share/FlexScreen.kt
+--- a/aznd/ui/common/share/FlexScreen.kt	2026-11-14 18:49:40.213187977 +0000
++++ b/aznd/ui/common/share/FlexScreen.kt	2026-11-14 18:49:40.409419513 +0000
+@@ -191,7 +191,7 @@
+     var spec by remember(preset) { mutableStateOf<FlexSpec?>(null) }
+     LaunchedEffect(content) {
+         val c = content ?: return@LaunchedEffect
+-        if (spec == null) spec = store.load(preset)?.reconciled() ?: preset.defaultSpec(c)
++        if (spec == null) spec = store.load(preset)?.reconciled()?.withoutStalePhotos(c) ?: preset.defaultSpec(c)
+     }
+ 
+     // Edits are kept per preset. A card still equal to the preset's default is not stored, so a later
+diff -ruN --strip-trailing-cr a/aznd/ui/common/share/FlexStore.kt b/aznd/ui/common/share/FlexStore.kt
+--- a/aznd/ui/common/share/FlexStore.kt	2026-11-14 18:49:40.213474553 +0000
++++ b/aznd/ui/common/share/FlexStore.kt	2026-11-14 18:49:40.409441092 +0000
+@@ -13,6 +13,8 @@
+ import com.ashrdev.aznd.ui.common.tiling.TileNode
+ import com.ashrdev.aznd.ui.common.tiling.TileTreeJson
+ import com.ashrdev.aznd.ui.common.tiling.TileTree
++import com.ashrdev.aznd.ui.calendar.CalendarZoom
++import java.util.Calendar
+ import org.json.JSONArray
+ import org.json.JSONObject
+ 
+@@ -112,6 +114,11 @@
+                 .put("freeY", b.freeY.toDouble())
+                 .put("freeW", b.freeW.toDouble())
+                 .put("freeH", b.freeH.toDouble())
++                .put("calZoom", b.cal.zoom.name)
++                .put("calYear", b.cal.year)
++                .put("calIndex", b.cal.index)
++                .put("calSource", b.cal.source)
++                .put("calWeek", b.cal.weekStart)
+         )
+     }
+     val out = JSONObject().put("v", STORE_VERSION).put("style", style).put("blocks", blocks)
+@@ -251,7 +258,16 @@
+             freeX = b.optDouble("freeX", 0.0).toFloat(),
+             freeY = b.optDouble("freeY", 0.0).toFloat(),
+             freeW = b.optDouble("freeW", 0.0).toFloat().coerceAtLeast(0f),
+-            freeH = b.optDouble("freeH", 0.0).toFloat().coerceAtLeast(0f)
++            freeH = b.optDouble("freeH", 0.0).toFloat().coerceAtLeast(0f),
++            // A calendar saved before periods could be picked has none of these: it shows the screen's own month,
++            // from the first source, with its weeks starting on Monday as they did.
++            cal = FlexCalendarSpec(
++                zoom = enumOr(b.optString("calZoom"), CalendarZoom.MONTH),
++                year = b.optInt("calYear", 0).coerceIn(0, 9999),
++                index = b.optInt("calIndex", 0).coerceIn(0, 12),
++                source = b.optString("calSource", ""),
++                weekStart = b.optInt("calWeek", Calendar.MONDAY).let { if (it == Calendar.SUNDAY) Calendar.SUNDAY else Calendar.MONDAY }
++            )
+         )
+     }
+     val layout = distinctLeaves(o.optJSONObject("layout")?.let { nodeFromJson(it) } ?: legacyLayout(arr, blocks))

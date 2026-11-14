@@ -347,7 +347,7 @@ enum class FlexBlockType(
     DAY_NOTE("Day note", listOf("Quote", "Plain"), "Show date", false, FlexBlockClass.TEXT),
     PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false, FlexBlockClass.DRAWABLE),
     TEXT("Text", listOf("Plain", "Quote", "Big"), null, false, FlexBlockClass.TEXT),
-    CALENDAR("Calendar", listOf("Month", "Dots"), "Show weekdays", false, FlexBlockClass.DRAWABLE),
+    CALENDAR("Calendar", listOf("Numbers", "Dots"), "Show weekdays", false, FlexBlockClass.DRAWABLE),
     MODEL("3D model", listOf("Plain", "On a panel"), null, false, FlexBlockClass.DRAWABLE)
 }
 
@@ -393,7 +393,9 @@ data class FlexBlock(
     val freeX: Float = 0f,
     val freeY: Float = 0f,
     val freeW: Float = 0f,
-    val freeH: Float = 0f
+    val freeH: Float = 0f,
+    /** CALENDAR: the period it shows, where its highlights come from and how its weeks run. */
+    val cal: FlexCalendarSpec = FlexCalendarSpec()
 ) {
     /** Free mode: whether the block has a box of its own yet. */
     val placed: Boolean get() = freeW > 0f && freeH > 0f
@@ -454,22 +456,8 @@ data class FlexStat(val label: String, val value: String)
 
 data class FlexChartPoint(val timeMs: Long, val value: Double)
 
-/**
- * A month for the Calendar block: [days] days, the first a [firstWeekday] (0 = Monday ... 6 = Sunday), the [marked]
- * ones (days of the month, 1 based) highlighted, [today] ringed (0 = not this month). [label] is the line above it,
- * e.g. the streak's name.
- */
-data class FlexCalendar(
-    val title: String,
-    val days: Int,
-    val firstWeekday: Int,
-    val marked: Set<Int>,
-    val today: Int = 0,
-    val label: String = ""
-) {
-    /** How many week rows the month takes. */
-    val weeks: Int get() = (firstWeekday + days + 6) / 7
-}
+/** A picture a screen offers a card besides its own photo: [label] says where it is from (a workout and day, a saved day). */
+data class FlexPhoto(val uri: String, val label: String)
 
 data class FlexContent(
     /** Small accent line above the title, e.g. "WORKOUT". */
@@ -488,8 +476,20 @@ data class FlexContent(
     val dayNote: String = "",
     /** The share's own photo (workout photo, saved-day photo). */
     val photoUri: String? = null,
-    /** The month the Calendar block shows (kept days of a streak, days trained). */
-    val calendar: FlexCalendar? = null,
+    /**
+     * What the Calendar blocks can show: the days of a streak that were kept, the days trained. Each Calendar block
+     * picks one by key and shows one period of it.
+     */
+    val calendars: List<FlexCalendarSource> = emptyList(),
+    /** The day the screen is about (a day key, "" for none) and today: a Calendar block that has no period of its own shows the month of the first, else of today. */
+    val calendarDay: String = "",
+    val calendarToday: String = "",
+    /**
+     * Pictures the screen can put on the card as photo blocks besides [photoUri] (which an ordinary photo block shows
+     * by itself): the other days' photos of a streak, the photos of recent workouts. Those that fit are on the card by
+     * default; the rest can be added from the block list.
+     */
+    val photos: List<FlexPhoto> = emptyList(),
     /** A snapshot of the 3D body model, as an image uri (the 3D model block). */
     val modelUri: String? = null
 ) {
@@ -503,7 +503,7 @@ data class FlexContent(
         FlexBlockType.ROUTINE -> routine.isNotEmpty()
         FlexBlockType.CHART -> chart.isNotEmpty()
         FlexBlockType.DAY_NOTE -> dayNote.isNotBlank()
-        FlexBlockType.CALENDAR -> calendar != null && calendar.days > 0
+        FlexBlockType.CALENDAR -> calendars.isNotEmpty()
         FlexBlockType.MODEL -> modelUri != null
     }
 

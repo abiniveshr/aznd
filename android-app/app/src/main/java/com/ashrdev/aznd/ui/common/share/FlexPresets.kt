@@ -1,15 +1,16 @@
 package com.ashrdev.aznd.ui.common.share
 
 import android.net.Uri
+import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.SetMode
 import com.ashrdev.aznd.domain.workout.ExerciseType
 import com.ashrdev.aznd.domain.workout.SetKind
 import com.ashrdev.aznd.domain.workout.targetLabel
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
+import com.ashrdev.aznd.domain.streaks.dayKeysBetween
 import com.ashrdev.aznd.domain.streaks.displayDate
-import com.ashrdev.aznd.ui.calendar.dayOfMonthOf
-import com.ashrdev.aznd.ui.calendar.monthKeyOf
+import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.calendar.todayDayKey
 import com.ashrdev.aznd.ui.workout.TopExerciseStat
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
@@ -17,6 +18,7 @@ import com.ashrdev.aznd.ui.workout.stats.estimatedOneRepMax
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.workout.stats.loadExerciseStats
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -59,8 +61,60 @@ private fun block(
     text: String = ""
 ) = FlexBlock(id = id, type = type, enabled = enabled, variant = variant, keys = null, limit = limit, text = text, flag = flag)
 
-/** The card a preset starts with, before the person changes anything. */
-fun FlexPreset.defaultSpec(content: FlexContent): FlexSpec = when (this) {
+/**
+ * The card a preset starts with, before the person changes anything. A workout or a streak day that has pictures
+ * starts with them as photo blocks, as many as the card's content budget holds (see [withPhotosThatFit]).
+ */
+fun FlexPreset.defaultSpec(content: FlexContent): FlexSpec {
+    val base = baseSpec(content)
+    return when (this) {
+        FlexPreset.WORKOUT, FlexPreset.STREAK_DAY -> base.withPhotosThatFit(content)
+        else -> base
+    }
+}
+
+/** Marks a photo block that shows one of the screen's own pictures ([FlexContent.photos]) in [FlexBlock.text]. */
+const val FLEX_SCREEN_PHOTO = "screen"
+
+/** The most pictures a card starts with besides the screen's own photo. */
+private const val MAX_DEFAULT_PHOTOS = 8
+
+/** This card with a photo block for the picture at [uri], after the others. */
+fun FlexSpec.withPhotoBlock(uri: String): FlexSpec =
+    copy(blocks = blocks + FlexBlock(id = nextBlockId(), type = FlexBlockType.PHOTO, keys = listOf(uri), text = FLEX_SCREEN_PHOTO))
+
+/**
+ * The card with the screen's own photo block turned on (when the screen has a photo) and a photo block added for each
+ * of its other pictures in order, as long as the card's content budget holds them: the first one that would take the card
+ * past it ends the list, and the rest stay available in the block list.
+ */
+private fun FlexSpec.withPhotosThatFit(content: FlexContent): FlexSpec {
+    val assets = FlexAssets()
+    var spec = this
+    val own = spec.blocks.firstOrNull { it.type == FlexBlockType.PHOTO && it.keys == null }
+    if (content.photoUri != null && own != null && !own.enabled) {
+        val on = spec.copy(blocks = spec.blocks.map { if (it.id == own.id) it.copy(enabled = true) else it })
+        if (!FlexPainter.refuses(spec, on, content, assets)) spec = on
+    }
+    for (photo in content.photos.distinctBy { it.uri }.take(MAX_DEFAULT_PHOTOS)) {
+        val next = spec.withPhotoBlock(photo.uri)
+        if (FlexPainter.refuses(spec, next, content, assets)) break
+        spec = next
+    }
+    return spec
+}
+
+/**
+ * A saved card without the screen-picture blocks of another screen's pictures: those a different workout or streak day
+ * put on it. What the person kept of their own is untouched, and nothing is added (a saved card is the person's).
+ */
+fun FlexSpec.withoutStalePhotos(content: FlexContent): FlexSpec {
+    val here = content.photos.map { it.uri }.toSet()
+    val kept = blocks.filter { b -> !(b.type == FlexBlockType.PHOTO && b.text == FLEX_SCREEN_PHOTO && b.keys?.firstOrNull() !in here) }
+    return if (kept.size == blocks.size) this else copy(blocks = kept)
+}
+
+private fun FlexPreset.baseSpec(content: FlexContent): FlexSpec = when (this) {
     FlexPreset.HOME -> FlexSpec(
         flexStyleOf(FlexPalettes.Midnight, FlexAspect.PORTRAIT),
         listOf(
@@ -162,37 +216,57 @@ object FlexContentLoader {
                 FlexLiftItem(it.exerciseName, p.topSetWeight, p.topSetReps, p.topSetRpe, p.e1rm, p.startedAt)
             }
 
+    /** How long the home card waits for the history to arrive (it is a hot flow that starts empty). */
+    private const val SESSIONS_WAIT_MS = 600L
+
+    /** Photos of recent workouts the home card can offer. */
+    private const val HOME_PHOTOS = 12
+
+    private suspend fun allSessions(workout: WorkoutViewModel): List<SessionWithSets> =
+        withTimeoutOrNull(SESSIONS_WAIT_MS) { workout.allSessions.first { it.isNotEmpty() } } ?: workout.allSessions.value
+
     private suspend fun home(workout: WorkoutViewModel, streaks: StreakViewModel): FlexContent {
         val snapshots = streaks.streakSnapshots().sortedByDescending { it.current }
         val streakItems = snapshots.map { FlexStreakItem(it.streak.id, it.streak.name, it.current, it.longest, it.streak.photoUri) }
-        // The Calendar block shows this month of the longest running streak.
-        val top = snapshots.firstOrNull()
+        val today = todayDayKey()
+        val sessions = allSessions(workout)
+        // The Calendar block can show any streak (the longest running one first, as it always did) or the days trained.
+        val sources = buildList {
+            snapshots.forEach { snap ->
+                runCatching { streakSource(streaks, snap.streak.id, snap.streak.name, snap.streak.startDate, today) }.getOrNull()?.let { add(it) }
+            }
+            workoutDays(sessions)?.let { add(it) }
+        }
+        val photos = sessions.filter { it.session.photoUri != null }.take(HOME_PHOTOS).map {
+            FlexPhoto(it.session.photoUri.orEmpty(), "${it.session.workoutName} · ${date(it.session.startedAt)}")
+        }
         return FlexContent(
             kicker = "",
             title = "My progress",
             dateText = date(System.currentTimeMillis()),
             streaks = streakItems,
             lifts = liftsFrom(workout.getTopExercises(40)),
-            calendar = top?.let { runCatching { streakMonth(streaks, it.streak.id, it.streak.name, it.streak.startDate, todayDayKey()) }.getOrNull() }
+            calendars = sources,
+            calendarToday = today,
+            photos = photos
         )
     }
 
     /**
-     * The month of [dayKey] as the Calendar block shows it: the streak's kept days marked (from its start to today,
-     * its slips left out), today ringed.
+     * A streak's kept days as a Calendar source: every day from its start to today except its slips, as the card has
+     * always marked them.
      */
-    private suspend fun streakMonth(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, dayKey: String): FlexCalendar {
-        val month = monthKeyOf(dayKey)
-        val today = todayDayKey()
+    private suspend fun streakSource(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, today: String): FlexCalendarSource {
         val breaks = streaks.breaksForStreak(streakId).first().toSet()
-        val marked = (1..month.daysInMonth()).filter { d ->
-            val key = month.dayKey(d)
-            key >= startDate && key <= today && key !in breaks
-        }.toSet()
-        // java.util.Calendar counts Sunday as 1 and Monday as 2; the block starts its weeks on Monday.
-        val first = (month.firstWeekday() + 5) % 7
-        val todayDay = if (monthKeyOf(today) == month) dayOfMonthOf(today) else 0
-        return FlexCalendar(month.title(), month.daysInMonth(), first, marked, todayDay, name)
+        val kept = dayKeysBetween(startDate, today).filter { it !in breaks }
+        return FlexCalendarSource("streak:$streakId", name, kept.associateWith { FlexDay() }, startDate)
+    }
+
+    /** The days a workout was done, as a Calendar source; null when none was. */
+    private fun workoutDays(sessions: List<SessionWithSets>): FlexCalendarSource? {
+        val days = sessions.map { dayKeyOf(it.session.startedAt) }.toSortedSet()
+        if (days.isEmpty()) return null
+        return FlexCalendarSource("workouts", "Workout days", days.associateWith { FlexDay() }, days.first())
     }
 
     private suspend fun workoutSession(workout: WorkoutViewModel, sessionId: Long): FlexContent {
@@ -288,6 +362,12 @@ object FlexContentLoader {
         val streak = streaks.getStreak(streakId) ?: return FlexContent(kicker = "Streak", title = "Streak")
         val day = streaks.getSavedDay(streakId, dateKey)
         val count = day?.streakCountAtSave ?: 0
+        val others = streaks.savedDaysForStreak(streakId).first()
+            .filter { it.photoUri != null && it.date != dateKey && it.photoUri != day?.photoUri }
+            .sortedByDescending { it.date }
+            .map { FlexPhoto(it.photoUri.orEmpty(), displayDate(it.date)) }
+        val today = todayDayKey()
+        val source = runCatching { streakSource(streaks, streak.id, streak.name, streak.startDate, today) }.getOrNull()
         return FlexContent(
             kicker = streak.name,
             title = "Day $count",
@@ -295,7 +375,10 @@ object FlexContentLoader {
             streaks = listOf(FlexStreakItem(streak.id, streak.name, count, count, streak.photoUri)),
             dayNote = day?.remark.orEmpty(),
             photoUri = day?.photoUri,
-            calendar = runCatching { streakMonth(streaks, streak.id, streak.name, streak.startDate, dateKey) }.getOrNull()
+            calendars = listOfNotNull(source),
+            calendarDay = dateKey,
+            calendarToday = today,
+            photos = others
         )
     }
 }

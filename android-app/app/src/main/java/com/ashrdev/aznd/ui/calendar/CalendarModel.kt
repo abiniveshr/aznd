@@ -127,8 +127,6 @@ internal fun DayFill.defaultTextColor(): Color {
     }
 }
 
-enum class CalendarZoom { YEAR, QUADRANT, MONTH }
-
 @Stable
 class CalendarState(
     initialMonth: MonthKey,

@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ReorderableItem
 import com.ashrdev.aznd.ui.common.dragReorderHandle
@@ -135,6 +136,19 @@ internal fun BlockListPanel(
                                         )
                                     )
                                 }
+                                onSelect(newId)
+                            }
+                        )
+                    }
+                    // The screen's other pictures that are not on the card yet, one entry each.
+                    val onCard = spec.blocks.mapNotNull { if (it.type == FlexBlockType.PHOTO) it.keys?.firstOrNull() else null }.toSet()
+                    content.photos.filter { it.uri !in onCard }.forEach { photo ->
+                        DropdownMenuItem(
+                            text = { Text("Photo: ${photo.label}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            onClick = {
+                                menu = false
+                                val newId = spec.nextBlockId()
+                                update { sp -> sp.withPhotoBlock(photo.uri) }
                                 onSelect(newId)
                             }
                         )

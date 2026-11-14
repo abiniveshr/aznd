@@ -13,6 +13,8 @@ import com.ashrdev.aznd.ui.common.tiling.TileLeaf
 import com.ashrdev.aznd.ui.common.tiling.TileNode
 import com.ashrdev.aznd.ui.common.tiling.TileTreeJson
 import com.ashrdev.aznd.ui.common.tiling.TileTree
+import com.ashrdev.aznd.ui.calendar.CalendarZoom
+import java.util.Calendar
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -112,6 +114,11 @@ private fun specToJson(spec: FlexSpec): JSONObject {
                 .put("freeY", b.freeY.toDouble())
                 .put("freeW", b.freeW.toDouble())
                 .put("freeH", b.freeH.toDouble())
+                .put("calZoom", b.cal.zoom.name)
+                .put("calYear", b.cal.year)
+                .put("calIndex", b.cal.index)
+                .put("calSource", b.cal.source)
+                .put("calWeek", b.cal.weekStart)
         )
     }
     val out = JSONObject().put("v", STORE_VERSION).put("style", style).put("blocks", blocks)
@@ -251,7 +258,16 @@ private fun specFromJson(o: JSONObject): FlexSpec {
             freeX = b.optDouble("freeX", 0.0).toFloat(),
             freeY = b.optDouble("freeY", 0.0).toFloat(),
             freeW = b.optDouble("freeW", 0.0).toFloat().coerceAtLeast(0f),
-            freeH = b.optDouble("freeH", 0.0).toFloat().coerceAtLeast(0f)
+            freeH = b.optDouble("freeH", 0.0).toFloat().coerceAtLeast(0f),
+            // A calendar saved before periods could be picked has none of these: it shows the screen's own month,
+            // from the first source, with its weeks starting on Monday as they did.
+            cal = FlexCalendarSpec(
+                zoom = enumOr(b.optString("calZoom"), CalendarZoom.MONTH),
+                year = b.optInt("calYear", 0).coerceIn(0, 9999),
+                index = b.optInt("calIndex", 0).coerceIn(0, 12),
+                source = b.optString("calSource", ""),
+                weekStart = b.optInt("calWeek", Calendar.MONDAY).let { if (it == Calendar.SUNDAY) Calendar.SUNDAY else Calendar.MONDAY }
+            )
         )
     }
     val layout = distinctLeaves(o.optJSONObject("layout")?.let { nodeFromJson(it) } ?: legacyLayout(arr, blocks))

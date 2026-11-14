@@ -44,8 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import kotlin.math.roundToInt
 
-internal val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
-
 internal val WeekdayLabelWidth = 16.dp
 internal val MonthLabelHeight = 14.dp
 internal val BandGap = 10.dp
@@ -54,78 +52,6 @@ private val BadgeMinCell = 30.dp
 private val InnerRingMinCell = 24.dp
 private val ReferenceButtonHeight = 48.dp
 private const val MAX_BUTTON_CORNER_DP = 50f
-
-internal class YearLayout(val year: Int, firstDayOfWeek: Int) {
-    val dayKeys: List<String> = (1..12).flatMap { m ->
-        val month = MonthKey(year, m)
-        (1..month.daysInMonth()).map { month.dayKey(it) }
-    }
-
-    val leading: Int = (MonthKey(year, 1).firstWeekday() - firstDayOfWeek + 7) % 7
-
-    val weeks: Int = (leading + dayKeys.size + 6) / 7
-
-    val monthStartWeek: List<Int> = run {
-        var ordinal = 0
-        (1..12).map { m ->
-            ((leading + ordinal) / 7).also { ordinal += MonthKey(year, m).daysInMonth() }
-        }
-    }
-
-    fun dayKeyAt(week: Int, row: Int): String? = dayKeys.getOrNull(week * 7 + row - leading)
-
-    fun weekOf(dayKey: String): Int? =
-        dayKeys.indexOf(dayKey).takeIf { it >= 0 }?.let { (leading + it) / 7 }
-
-    fun monthEndWeek(month: Int): Int =
-        weekOf(MonthKey(year, month).let { it.dayKey(it.daysInMonth()) }) ?: (weeks - 1)
-}
-
-internal class YearBand(val months: IntRange, val startWeek: Int, val endWeek: Int) {
-    val weekCount: Int get() = endWeek - startWeek + 1
-
-    fun dayKeyAt(layout: YearLayout, week: Int, row: Int): String? =
-        layout.dayKeyAt(week, row)?.takeIf { monthKeyOf(it).month in months }
-}
-
-internal data class CalendarView(val zoom: CalendarZoom, val year: Int, val index: Int) {
-    val monthRanges: List<IntRange>
-        get() = when (zoom) {
-            CalendarZoom.YEAR -> listOf(1..4, 5..8, 9..12)
-            CalendarZoom.QUADRANT -> {
-                val start = index * 4 + 1
-                listOf(start..start + 1, start + 2..start + 3)
-            }
-            CalendarZoom.MONTH -> listOf(index..index)
-        }
-
-    val columns: Int
-        get() = when (zoom) {
-            CalendarZoom.YEAR -> 19
-            CalendarZoom.QUADRANT -> 10
-            CalendarZoom.MONTH -> 6
-        }
-
-    val months: List<MonthKey>
-        get() = monthRanges.flatMap { range -> range.map { MonthKey(year, it) } }
-
-    companion object {
-        fun of(zoom: CalendarZoom, month: MonthKey): CalendarView = CalendarView(
-            zoom,
-            month.year,
-            when (zoom) {
-                CalendarZoom.YEAR -> 0
-                CalendarZoom.QUADRANT -> (month.month - 1) / 4
-                CalendarZoom.MONTH -> month.month
-            }
-        )
-    }
-}
-
-internal fun YearLayout.bandsFor(view: CalendarView): List<YearBand> =
-    view.monthRanges.map { range ->
-        YearBand(range, monthStartWeek[range.first - 1], monthEndWeek(range.last))
-    }
 
 internal fun cellSizeFor(view: CalendarView, width: Dp, height: Dp): Dp {
     val rows = view.monthRanges.size

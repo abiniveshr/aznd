@@ -191,7 +191,7 @@ fun FlexScreen(
     var spec by remember(preset) { mutableStateOf<FlexSpec?>(null) }
     LaunchedEffect(content) {
         val c = content ?: return@LaunchedEffect
-        if (spec == null) spec = store.load(preset)?.reconciled() ?: preset.defaultSpec(c)
+        if (spec == null) spec = store.load(preset)?.reconciled()?.withoutStalePhotos(c) ?: preset.defaultSpec(c)
     }
 
     // Edits are kept per preset. A card still equal to the preset's default is not stored, so a later

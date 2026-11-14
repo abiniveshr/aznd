@@ -15,6 +15,11 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.ashrdev.aznd.domain.workout.formatWeight
+import com.ashrdev.aznd.ui.calendar.CalendarGridPlan
+import com.ashrdev.aznd.ui.calendar.CalendarView
+import com.ashrdev.aznd.ui.calendar.MonthKey
+import com.ashrdev.aznd.ui.calendar.calendarCellSide
+import com.ashrdev.aznd.ui.calendar.title
 import com.ashrdev.aznd.ui.theme.BorderKind
 import com.ashrdev.aznd.ui.theme.FillRender
 import com.ashrdev.aznd.ui.common.tiling.AlignItem
@@ -1389,11 +1394,6 @@ object FlexPainter {
         else -> (b.keys?.firstOrNull() ?: ct.photoUri)?.let { c.assets.images[it] }
     }
 
-    /** A calendar's day cell at its natural size, and the least it reads at (the block's own units, before its size). */
-    private const val CAL_CELL = 66f
-    private const val CAL_CELL_MIN = 40f
-    private const val CAL_GAP = 6f
-
     /**
      * How a drawable block takes its cell. Adding a kind of drawable (a 3D snapshot, say) is a branch here and one
      * in [drawDrawable]. [free]: a cropping drawable (a photo) may take any crop within its range, else it keeps
@@ -1430,18 +1430,10 @@ object FlexPainter {
             DrawableShape(bmp != null, own, lo, hi, 0f, 0f, lim.maxWidth, lim.maxHeight, greedy = true, crops = fill && !panel)
         }
         FlexBlockType.CALENDAR -> {
-            // A month: seven columns of day cells under its title; the cells stretch to the tile (within a sensible range
-            // of shapes), the numbers keep their size, so it has a least size at which they still read.
-            val cal = ct.calendar
-            val k = scaleOf(c, b)
-            val pad = c.panelPad()
-            val weeks = cal?.weeks ?: 5
-            val head = calendarHead(c, b, ct)
-            val minW = (7 * CAL_CELL_MIN + 6 * CAL_GAP + 2 * pad) * k
-            val minH = (head + weeks * CAL_CELL_MIN + (weeks - 1) * CAL_GAP + 2 * pad) * k
-            val natW = 7 * CAL_CELL + 6 * CAL_GAP + 2 * pad
-            val natH = head + weeks * CAL_CELL + (weeks - 1) * CAL_GAP + 2 * pad
-            DrawableShape(cal != null && cal.days > 0, natW / natH, 0.8f, 1.4f, minW, minH, NO_CAP, max(CHART_MAX_H * 1.2f, minH), greedy = false, crops = false)
+            // The menu calendar's grid: square day cells, weeks across and weekdays down, so its shape follows its view (a
+            // month, a quadrant or a year) and its numbers keep their size: it has a least size at which they still read.
+            val sz = FlexCalendarShape.of(calendarView(ct, b).zoom, c.panelPad(), calendarHead(c, b, ct), b.flag, scaleOf(c, b))
+            DrawableShape(ct.calendars.isNotEmpty(), sz.ratio, sz.ratioMin, sz.ratioMax, sz.minW, sz.minH, NO_CAP, max(max(CHART_MAX_H * 1.2f, sz.naturalH * 1.3f), sz.minH), greedy = false, crops = false)
         }
         FlexBlockType.CHART -> {
             // A chart stretches to its cell (within a sensible range of shapes) instead of being fitted by text scaling;
@@ -1998,78 +1990,130 @@ object FlexPainter {
 
     // ---- Calendar ----
 
-    /** How tall a calendar's lines above its days are (label, month, weekdays), in the block's own units. */
+    /** The period a Calendar block shows (the month of the screen's day while it has none of its own). */
+    private fun calendarView(ct: FlexContent, b: FlexBlock): CalendarView =
+        b.cal.view(flexCalendarAnchor(ct.calendarDay, ct.calendarToday))
+
+    /** How tall a calendar's lines above its grid are (the source's name and the period's title), in the block's own units. */
     private fun calendarHead(c: Ctx, b: FlexBlock, ct: FlexContent): Float {
-        val cal = ct.calendar ?: return 0f
+        val src = ct.calendars.sourceFor(b.cal.source) ?: return 0f
         var h = 0f
-        if (cal.label.isNotBlank()) h += c.lineH(c.kicker()) + 10f
+        if (src.label.isNotBlank()) h += c.lineH(c.kicker()) + 10f
         h += c.lineH(c.ink(44f, true, c.st.textColor)) + 14f
-        if (b.flag) h += c.lineH(c.ink(22f, true, c.st.textColor, 0.6f)) + 8f
         return h
     }
 
     /**
-     * A month in its whole tile, [w] by [h] (block units): the label and month above, the weekdays, then the days in seven
-     * columns. "Month": every day numbered, the marked ones on an accent disc, today ringed. "Dots": a dot per day, the
-     * marked ones in the accent colour, like a habit heatmap.
+     * A period in its whole tile, [w] by [h] (block units), laid out as the menu calendar lays it out (CalendarGridPlan):
+     * the source's name and the period's title above, then the month names over the weeks, which run across in columns,
+     * and the weekday letters down the left. A month is one band of weeks, a quadrant two, a year three. A highlighted
+     * day is filled (or ringed) in the accent colour at its own strength, today is underlined. "Numbers": every day is a
+     * rounded cell with its number once the cells are big enough; "Dots": a dot per day, like a habit heatmap.
      */
     private fun calendar(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
-        val cal = ct.calendar ?: return
+        val src = ct.calendars.sourceFor(b.cal.source) ?: return
         if (c.dry) return
         // A picture sits in the middle of its tile unless set to the right (as its tile does in its cell).
         if (c.align == FlexAlign.START) c.align = FlexAlign.CENTER
         val st = c.st
+        val view = calendarView(ct, b)
+        val plan = CalendarGridPlan(view, b.cal.weekStart)
+        val reach = flexCalendarRange(src, flexCalendarAnchor("", ct.calendarToday))
         val pad = c.panelPad()
         c.panelRect(0f, 0f, w, h)
         val ix = pad
         val iw = w - 2 * pad
         var top = pad
-        if (cal.label.isNotBlank()) top += aligned(c, cal.label.uppercase(), c.kicker(), ix, iw, top) + 10f
-        top += aligned(c, cal.title, c.ink(44f, true, st.textColor), ix, iw, top) + 14f
-        val gx = CAL_GAP
-        val weeks = cal.weeks
-        val weekdays = if (b.flag) c.ink(22f, true, st.textColor, 0.6f) else null
-        val gridTop = top + (weekdays?.let { c.lineH(it) + 8f } ?: 0f)
-        val cellH = ((h - pad - gridTop - (weeks - 1) * gx) / weeks).coerceAtLeast(1f)
-        // Day cells no wider than they are tall by much: a wide tile puts the month in its middle instead of
-        // stretching the days apart.
-        val cellW = min(((iw - 6 * gx) / 7f).coerceAtLeast(1f), cellH * 1.5f)
-        val gridX = c.alignBox(ix, iw, 7 * cellW + 6 * gx)
-        if (weekdays != null) {
-            val names = listOf("M", "T", "W", "T", "F", "S", "S")
-            for (i in 0 until 7) c.line(names[i], weekdays, gridX + i * (cellW + gx) + cellW / 2f, top, Paint.Align.CENTER)
+        if (src.label.isNotBlank()) top += aligned(c, src.label.uppercase(), c.kicker(), ix, iw, top) + 10f
+        top += aligned(c, view.title(), c.ink(44f, true, st.textColor), ix, iw, top) + 14f
+
+        val weekdayW = if (b.flag) FlexCalendarShape.WEEKDAY_W else 0f
+        val labelH = FlexCalendarShape.LABEL_H
+        val bandGap = FlexCalendarShape.BAND_GAP
+        val cell = calendarCellSide(view, iw, h - pad - top, weekdayW, labelH, bandGap)
+        val widest = plan.weekCounts.maxOrNull() ?: view.columns
+        val gridX = c.alignBox(ix, iw, weekdayW + widest * cell)
+        val daysX = gridX + weekdayW
+        val gap = (cell * 0.06f).coerceIn(2f, 6f)
+        // The cells' corners follow the card's panels, from square to round (the menu's follow the buttons').
+        val corner = (st.panelRadius / 48f).coerceIn(0f, 0.5f) * (cell - 2 * gap)
+        val bandH = labelH + 7 * cell
+        val dots = b.variant == 1
+        val showNumbers = !dots && cell >= FlexCalendarShape.NUMBER_MIN
+        val small = c.ink(20f, true, st.textColor, 0.6f)
+        val numSize = (cell * 0.38f).coerceAtMost(40f)
+
+        plan.labels.forEach { label ->
+            val y = top + label.band * (bandH + bandGap)
+            c.line(MonthKey(view.year, label.month).shortName(), small, daysX + label.col * cell, y + (labelH - c.lineH(small)) / 2f, Paint.Align.LEFT)
         }
-        top = gridTop
-        val dot = min(cellW, cellH)
-        val numP = c.ink((dot * 0.42f).coerceIn(14f, 40f), true, st.textColor)
-        val onP = c.ink((dot * 0.42f).coerceIn(14f, 40f), true, st.bgA)
-        for (d in 1..cal.days) {
-            val slot = cal.firstWeekday + d - 1
-            val col = slot % 7
-            val row = slot / 7
-            val cx = gridX + col * (cellW + gx) + cellW / 2f
-            val cy = top + row * (cellH + gx) + cellH / 2f
-            val marked = d in cal.marked
-            if (b.variant == 1) {
-                val r = dot * 0.34f
-                c.fill.color = if (marked) st.accent else st.textColor
-                c.fill.alpha = if (marked) 255 else 40
-                c.canvas.drawCircle(cx, cy, r, c.fill)
-            } else {
-                val r = dot * 0.46f
-                if (marked) {
-                    c.fill.color = st.accent
-                    c.fill.alpha = 255
-                    c.canvas.drawCircle(cx, cy, r, c.fill)
-                }
-                val p = if (marked) onP else numP
-                c.line(d.toString(), p, cx, cy - c.lineH(p) / 2f, Paint.Align.CENTER)
+        if (b.flag) {
+            for (band in plan.bands.indices) for (row in 0 until 7) {
+                if (cell < 30f && row % 2 == 0) continue
+                val y = top + band * (bandH + bandGap) + labelH + row * cell
+                c.line(plan.weekdayLetter(row), small, gridX + weekdayW / 2f, y + (cell - c.lineH(small)) / 2f, Paint.Align.CENTER)
             }
-            if (d == cal.today) {
+        }
+
+        for (slot in plan.slots) {
+            val x = daysX + slot.col * cell
+            val y = top + slot.band * (bandH + bandGap) + labelH + slot.row * cell
+            val rect = RectF(x + gap, y + gap, x + cell - gap, y + cell - gap)
+            val cx = rect.centerX()
+            val cy = rect.centerY()
+            val reachable = MonthKey(view.year, slot.month) in reach.first..reach.second
+            val day = src.days[slot.dayKey]
+            val markColor = day?.color?.takeIf { it != 0 } ?: st.accent
+            val strength = day?.strength ?: 0f
+            val filled = day != null && day.mark == FlexDayMark.FILL
+            val ringed = day != null && day.mark == FlexDayMark.OUTLINE
+            val isToday = slot.dayKey == ct.calendarToday
+            if (dots) {
+                val r = cell * 0.34f
+                c.fill.color = if (filled) markColor else st.textColor
+                c.fill.alpha = if (filled) (strength * 255f).roundToInt() else if (reachable) 40 else 16
+                c.canvas.drawCircle(cx, cy, r, c.fill)
+                if (ringed) {
+                    c.stroke.color = markColor
+                    c.stroke.alpha = (strength * 255f).roundToInt()
+                    c.stroke.strokeWidth = 2.5f
+                    c.canvas.drawCircle(cx, cy, r, c.stroke)
+                }
+            } else {
+                c.fill.color = st.textColor
+                c.fill.alpha = if (reachable) 20 else 8
+                c.canvas.drawRoundRect(rect, corner, corner, c.fill)
+                if (filled) {
+                    c.fill.color = markColor
+                    c.fill.alpha = (strength * 255f).roundToInt()
+                    c.canvas.drawRoundRect(rect, corner, corner, c.fill)
+                }
+                if (ringed) {
+                    c.stroke.color = markColor
+                    c.stroke.alpha = (strength * 255f).roundToInt()
+                    c.stroke.strokeWidth = if (cell < 32f) 1.5f else 2.5f
+                    c.canvas.drawRoundRect(rect, corner, corner, c.stroke)
+                }
+            }
+            if (showNumbers) {
+                val onMark = filled && strength >= 0.5f
+                // Today is bold and underlined; days of months before the source began are faded.
+                val p = c.ink(numSize, isToday, if (onMark) st.bgA else st.textColor, if (reachable) 1f else 0.4f)
+                val label = slot.dayOfMonth.toString()
+                c.line(label, p, cx, cy - c.lineH(p) / 2f, Paint.Align.CENTER)
+                if (isToday) {
+                    val half = p.measureText(label) / 2f
+                    val under = cy + c.lineH(p) / 2f - 2f
+                    c.stroke.color = p.color
+                    c.stroke.alpha = 230
+                    c.stroke.strokeWidth = 2.5f
+                    c.canvas.drawLine(cx - half, under, cx + half, under, c.stroke)
+                }
+            } else if (isToday) {
                 c.stroke.color = st.textColor
-                c.stroke.alpha = 200
-                c.stroke.strokeWidth = 3f
-                c.canvas.drawCircle(cx, cy, dot * 0.5f - 1.5f, c.stroke)
+                c.stroke.alpha = 160
+                c.stroke.strokeWidth = 2f
+                if (dots) c.canvas.drawCircle(cx, cy, cell * 0.34f + 3f, c.stroke) else c.canvas.drawRoundRect(rect, corner, corner, c.stroke)
             }
         }
     }

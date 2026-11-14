@@ -185,30 +185,6 @@ internal fun CalendarZoom.zoomedOut(): CalendarZoom = when (this) {
     CalendarZoom.QUADRANT, CalendarZoom.YEAR -> CalendarZoom.YEAR
 }
 
-private fun CalendarView.firstMonth(): MonthKey = MonthKey(year, monthRanges.first().first)
-
-private fun CalendarView.lastMonth(): MonthKey = MonthKey(year, monthRanges.last().last)
-
-private fun CalendarView.title(): String = when (zoom) {
-    CalendarZoom.YEAR -> year.toString()
-    CalendarZoom.QUADRANT -> "${firstMonth().shortName()} – ${lastMonth().shortName()} $year"
-    CalendarZoom.MONTH -> MonthKey(year, index).title()
-}
-
-private fun CalendarView.step(direction: Int, first: MonthKey, last: MonthKey): MonthKey? {
-    val target = when (zoom) {
-        CalendarZoom.YEAR -> CalendarView(zoom, year + direction, 0)
-        CalendarZoom.QUADRANT -> {
-            val raw = index + direction
-            CalendarView(zoom, year + Math.floorDiv(raw, 3), Math.floorMod(raw, 3))
-        }
-        CalendarZoom.MONTH -> CalendarView.of(zoom, MonthKey(year, index).let { if (direction < 0) it.previous() else it.next() })
-    }
-    val start = maxOf(target.firstMonth(), first)
-    val end = minOf(target.lastMonth(), last)
-    return if (start <= end) start else null
-}
-
 @Composable
 private fun CalendarHeader(
     title: String,

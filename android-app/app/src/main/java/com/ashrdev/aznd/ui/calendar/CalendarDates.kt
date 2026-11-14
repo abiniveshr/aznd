@@ -12,6 +12,7 @@ private val dayKeyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 private val longDayFormat = SimpleDateFormat("EEE d MMM yyyy", Locale.getDefault())
 private val monthTitleFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
 private val monthShortFormat = SimpleDateFormat("MMM", Locale.getDefault())
+private val monthNameFormat = SimpleDateFormat("MMMM", Locale.getDefault())
 
 /** A calendar month. [month] is 1..12. */
 data class MonthKey(val year: Int, val month: Int) : Comparable<MonthKey> {
@@ -29,6 +30,9 @@ data class MonthKey(val year: Int, val month: Int) : Comparable<MonthKey> {
 
     fun title(): String = monthTitleFormat.format(firstOfMonth().time)
     fun shortName(): String = monthShortFormat.format(firstOfMonth().time)
+
+    /** The month's own name without the year ("March"), for pickers. */
+    fun name(): String = monthNameFormat.format(firstOfMonth().time)
     fun daysInMonth(): Int = firstOfMonth().getActualMaximum(Calendar.DAY_OF_MONTH)
 
     /** Weekday of the 1st, as a Calendar constant (Calendar.SUNDAY..Calendar.SATURDAY). */

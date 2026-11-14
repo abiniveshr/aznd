@@ -21,11 +21,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +57,11 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.calendar.CalendarZoom
+import com.ashrdev.aznd.ui.calendar.MonthKey
+import com.ashrdev.aznd.ui.calendar.inZoom
+import com.ashrdev.aznd.ui.calendar.quadrantTitles
+import com.ashrdev.aznd.ui.calendar.title
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.AlertDialog
@@ -63,6 +71,7 @@ import com.ashrdev.aznd.ui.common.tiling.TileTree
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -153,7 +162,7 @@ internal fun FlexEditPage(
     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
         val uriText = uri.toString()
         change { sp ->
-            sp.copy(blocks = sp.blocks.map { if (it.id == blockId) it.copy(keys = listOf(uriText)) else it })
+            sp.copy(blocks = sp.blocks.map { if (it.id == blockId) it.copy(keys = listOf(uriText), text = if (it.text == FLEX_SCREEN_PHOTO) "" else it.text) else it })
         }
     }
 
@@ -183,6 +192,21 @@ internal fun FlexEditPage(
         change(continuous) { sp ->
             sp.copy(blocks = sp.blocks.map { if (it.id == blockId) changed else it })
         }
+    }
+
+    /**
+     * A calendar block shows one period, so a second period is a block of its own: this one's copy (look, size, source)
+     * for [cal], put right after it, through the same [change] every edit goes through (so the content budget holds and
+     * Undo takes it back). The editor then moves to the new block.
+     */
+    fun addCalendar(from: FlexBlock, cal: FlexCalendarSpec) {
+        val newId = history.current.nextBlockId()
+        change { sp ->
+            val at = sp.blocks.indexOfFirst { it.id == from.id }
+            val added = from.copy(id = newId, cal = cal, freeX = 0f, freeY = 0f, freeW = 0f, freeH = 0f)
+            sp.copy(blocks = sp.blocks.toMutableList().also { it.add(if (at < 0) it.size else at + 1, added) })
+        }
+        if (history.current.blocks.any { it.id == newId }) blockId = newId
     }
 
     ScreenScaffold(
@@ -325,7 +349,8 @@ internal fun FlexEditPage(
                             content = content,
                             photo = (block.keys?.firstOrNull() ?: content.photoUri)?.let { assets.images[it] },
                             onChange = { changed, continuous -> onChange(changed, continuous) },
-                            onPickPhoto = { picker.launch() }
+                            onPickPhoto = { picker.launch() },
+                            onAddCalendar = { addCalendar(block, it) }
                         )
 
                         TextButton(onClick = { confirmRemove = true }) {
@@ -379,7 +404,8 @@ private fun BlockOptions(
     /** The photo block's picture, as the card draws it (null while it loads or when there is none). */
     photo: Bitmap?,
     onChange: (changed: FlexBlock, continuous: Boolean) -> Unit,
-    onPickPhoto: () -> Unit
+    onPickPhoto: () -> Unit,
+    onAddCalendar: (FlexCalendarSpec) -> Unit
 ) {
     val type = block.type
     val hasOptions = type.variants.size > 1 || type.listy || type.flagLabel != null ||
@@ -395,6 +421,7 @@ private fun BlockOptions(
                 onSelect = { onChange(block.copy(variant = it), false) }
             )
         }
+        if (type == FlexBlockType.CALENDAR) CalendarOptions(block, spec, content, onChange, onAddCalendar)
         if (type.listy) {
             val choices = content.choices(type)
             if (choices.isNotEmpty()) {
@@ -458,6 +485,108 @@ private fun BlockOptions(
                 LabeledSlider("Move up / down", "${(block.photoY * 100).roundToInt()}%", block.photoY, 0f..1f) {
                     onChange(block.copy(photoY = it), true)
                 }
+            }
+        }
+    }
+}
+
+private fun zoomName(zoom: CalendarZoom): String = when (zoom) {
+    CalendarZoom.MONTH -> "Month"
+    CalendarZoom.QUADRANT -> "Quadrant"
+    CalendarZoom.YEAR -> "Year"
+}
+
+/**
+ * What a Calendar block shows: which days (the source), how much of the year (month, quadrant or year), which one
+ * (dropdowns for the year and the month or quadrant), and where its weeks start. Picking a period here changes this
+ * block; "Add another" puts a second block on the card for a different period.
+ */
+@Composable
+private fun CalendarOptions(
+    block: FlexBlock,
+    spec: FlexSpec,
+    content: FlexContent,
+    onChange: (changed: FlexBlock, continuous: Boolean) -> Unit,
+    onAdd: (FlexCalendarSpec) -> Unit
+) {
+    val cal = block.cal
+    val anchor = flexCalendarAnchor(content.calendarDay, content.calendarToday)
+    val view = cal.view(anchor)
+    val source = content.calendars.sourceFor(cal.source)
+    val (first, last) = flexCalendarRange(source, flexCalendarAnchor("", content.calendarToday))
+
+    if (content.calendars.size > 1 && source != null) {
+        DropdownField(
+            label = "Days shown",
+            options = content.calendars,
+            selected = source,
+            optionLabel = { it.label }
+        ) { onChange(block.copy(cal = cal.copy(source = it.key)), false) }
+    }
+    DropdownField(
+        label = "Mode",
+        options = listOf(CalendarZoom.MONTH, CalendarZoom.QUADRANT, CalendarZoom.YEAR),
+        selected = view.zoom,
+        optionLabel = { zoomName(it) }
+    ) { zoom ->
+        // A card on the screen's own month keeps following it; a picked period moves to the one of the new mode that holds it.
+        val next = if (cal.year <= 0) cal.copy(zoom = zoom) else {
+            val moved = view.inZoom(zoom)
+            cal.copy(zoom = zoom, year = moved.year, index = moved.index)
+        }
+        onChange(block.copy(cal = next), false)
+    }
+    DropdownField(
+        label = "Year",
+        options = flexCalendarYears(first, last, view.year),
+        selected = view.year,
+        optionLabel = { it.toString() }
+    ) { onChange(block.copy(cal = cal.copy(year = it, index = view.index)), false) }
+    when (view.zoom) {
+        CalendarZoom.MONTH -> DropdownField(
+            label = "Month",
+            options = (1..12).toList(),
+            selected = view.index,
+            optionLabel = { MonthKey(view.year, it).name() }
+        ) { onChange(block.copy(cal = cal.copy(year = view.year, index = it)), false) }
+        CalendarZoom.QUADRANT -> DropdownField(
+            label = "Quadrant",
+            options = (0..2).toList(),
+            selected = view.index,
+            optionLabel = { quadrantTitles(view.year)[it] }
+        ) { onChange(block.copy(cal = cal.copy(year = view.year, index = it)), false) }
+        CalendarZoom.YEAR -> Unit
+    }
+    Text("Week starts on", style = MaterialTheme.typography.labelMedium)
+    ChipChoice(
+        options = listOf(Calendar.SUNDAY, Calendar.MONDAY),
+        selected = cal.weekStart,
+        label = { if (it == Calendar.SUNDAY) "Sunday" else "Monday" },
+        onSelect = { onChange(block.copy(cal = cal.copy(weekStart = it)), false) }
+    )
+
+    // Periods of this mode that no calendar block of the same days shows yet.
+    val taken = spec.blocks
+        .filter { it.type == FlexBlockType.CALENDAR && content.calendars.sourceFor(it.cal.source)?.key == source?.key }
+        .map { it.cal.view(anchor) }
+        .toSet()
+    val choices = flexCalendarChoices(view.zoom, first, last, taken)
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { menu = true }, enabled = choices.isNotEmpty()) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add another ${zoomName(view.zoom).lowercase()}")
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            choices.forEach { period ->
+                DropdownMenuItem(
+                    text = { Text(period.title()) },
+                    onClick = {
+                        menu = false
+                        onAdd(cal.copy(year = period.year, index = period.index))
+                    }
+                )
             }
         }
     }
