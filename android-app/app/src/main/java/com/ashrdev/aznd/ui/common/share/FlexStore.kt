@@ -49,7 +49,7 @@ private inline fun <reified T : Enum<T>> enumOr(name: String?, default: T): T =
 private fun JSONObject.stringOrNull(name: String): String? =
     if (has(name) && !isNull(name)) getString(name) else null
 
-private fun specToJson(spec: FlexSpec): JSONObject {
+internal fun specToJson(spec: FlexSpec): JSONObject {
     val s = spec.style
     val style = JSONObject()
         .put("aspect", s.aspect.name)
@@ -178,7 +178,7 @@ private fun distinctLeaves(n: TileNode?, seen: MutableSet<Int> = HashSet()): Til
     }
 }
 
-private fun specFromJson(o: JSONObject): FlexSpec {
+internal fun specFromJson(o: JSONObject): FlexSpec {
     val legacy = o.optInt("v", 1) < STORE_VERSION
     val d = FlexStyle()
     val s = o.getJSONObject("style")

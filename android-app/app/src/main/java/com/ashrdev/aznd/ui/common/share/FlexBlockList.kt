@@ -66,7 +66,6 @@ internal fun BlockListPanel(
     reorder: ((FlexSpec) -> FlexSpec) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var menu by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val checked = remember(spec, content, assets) { HashMap<Long, Boolean>() }
     val toldAt = remember { LongArray(1) }
@@ -110,50 +109,6 @@ internal fun BlockListPanel(
                     dragModifier = Modifier.dragReorderOnLongPress(listOrder, block.id),
                     handleModifier = Modifier.dragReorderHandle(listOrder, block.id)
                 )
-            }
-        }
-        item(key = "add") {
-            Box {
-                OutlinedButton(onClick = { menu = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add block")
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    FlexBlockType.entries.filter { content.has(it) }.forEach { type ->
-                        DropdownMenuItem(
-                            text = { Text(type.label) },
-                            onClick = {
-                                menu = false
-                                val newId = spec.nextBlockId()
-                                update { sp ->
-                                    sp.copy(
-                                        blocks = sp.blocks + FlexBlock(
-                                            id = sp.nextBlockId(),
-                                            type = type,
-                                            limit = if (type == FlexBlockType.ROUTINE) 10 else 3,
-                                            text = if (type == FlexBlockType.TEXT) "Your text here" else ""
-                                        )
-                                    )
-                                }
-                                onSelect(newId)
-                            }
-                        )
-                    }
-                    // The screen's other pictures that are not on the card yet, one entry each.
-                    val onCard = spec.blocks.mapNotNull { if (it.type == FlexBlockType.PHOTO) it.keys?.firstOrNull() else null }.toSet()
-                    content.photos.filter { it.uri !in onCard }.forEach { photo ->
-                        DropdownMenuItem(
-                            text = { Text("Photo: ${photo.label}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            onClick = {
-                                menu = false
-                                val newId = spec.nextBlockId()
-                                update { sp -> sp.withPhotoBlock(photo.uri) }
-                                onSelect(newId)
-                            }
-                        )
-                    }
-                }
             }
         }
     }
