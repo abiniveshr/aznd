@@ -1,52 +1,132 @@
 package com.ashrdev.aznd.ui.common.share
 
 import android.content.Context
-import com.ashrdev.aznd.ui.common.tiling.TileNode
-import com.ashrdev.aznd.ui.common.tiling.TileTree
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * A saved, named card design the person made (a template). Its [spec] is a whole card; photo blocks that show
- * pictures of a screen are kept pointing at the placeholder pictures of [FlexSampleContent] and are re-pointed at
- * real ones by [appliedTo] when the card is made for a share source. [id] 0 or less means "not stored yet".
+ * A saved, named card design (a template). Its [spec] is a whole poster laid out on sample data; the real data it
+ * shows when used comes from the person's choices ([FlexBindings]), not from the preset.
+ * [id] 0 or less means "not stored yet". [shippedKey] is the stable key of the built-in preset ([FlexComparisonPreset.key]) this
+ * one is, null for the person's own presets; built-in ones cannot be deleted and can be reset to the spec they ship with.
+ * [history] holds the specs the preset had before its last updates, newest first, at most [FLEX_PRESET_HISTORY].
  */
-data class FlexCardPreset(val id: Long, val name: String, val spec: FlexSpec, val updatedAt: Long)
+data class FlexCardPreset(
+    val id: Long,
+    val name: String,
+    val spec: FlexSpec,
+    val updatedAt: Long,
+    val shippedKey: String? = null,
+    val history: List<FlexSpec> = emptyList()
+) {
+    /** True for a built-in preset (not deletable, resettable). */
+    val isShipped: Boolean get() = shippedKey != null
+}
+
+/** How many earlier versions of a preset are kept for undo. */
+const val FLEX_PRESET_HISTORY = 3
 
 /**
- * Keeps the person's [FlexCardPreset]s. Plain SharedPreferences with one JSON array string, written with the same
- * spec encoding as [FlexStore].
+ * Keeps the [FlexCardPreset]s: the built-in ones (the comparison presets, added by [ensureShipped]) and the person's
+ * own. Plain SharedPreferences with one JSON array string, written with the same spec encoding as [FlexStore].
  */
 class FlexPresetStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    /** Every saved preset, the most recently updated first. */
-    fun all(): List<FlexCardPreset> = synchronized(LOCK) { read().sortedByDescending { it.updatedAt } }
+    /** Every preset: the built-in ones first (in the order of the share sources), then the person's, most recently updated first. */
+    fun all(): List<FlexCardPreset> = synchronized(LOCK) {
+        val order = flexComparisonPresets().map { it.key }
+        val (builtIn, own) = read().partition { it.shippedKey != null }
+        builtIn.sortedBy { order.indexOf(it.shippedKey) } + own.sortedByDescending { it.updatedAt }
+    }
 
     fun get(id: Long): FlexCardPreset? = synchronized(LOCK) { read().firstOrNull { it.id == id } }
 
     /**
+     * Adds the built-in preset of every comparison preset that has none yet (see [flexComparisonPresets]); does nothing once they are
+     * all there. Nothing to load (the specs are plain data); it stays a suspend function for its callers.
+     */
+    suspend fun ensureShipped() {
+        val all = flexComparisonPresets()
+        synchronized(LOCK) {
+            val list = read().toMutableList()
+            val have = list.mapNotNull { it.shippedKey }.toSet()
+            val missing = all.filter { it.key !in have }
+            if (missing.isEmpty()) return
+            val now = System.currentTimeMillis()
+            missing.forEach { p ->
+                list += FlexCardPreset(id = nextId(list), name = p.name, spec = p.spec, updatedAt = now, shippedKey = p.key)
+            }
+            write(list)
+        }
+    }
+
+    /**
      * Stores [preset] (replacing the one with its id) and returns what was stored. An id of 0 or less gets a new id;
-     * [FlexCardPreset.updatedAt] is always set to now.
+     * [FlexCardPreset.updatedAt] is always set to now. When the stored preset's spec changes, the spec it had goes on
+     * its history (newest first, at most [FLEX_PRESET_HISTORY]); the history and [FlexCardPreset.shippedKey] of the stored
+     * preset are kept, whatever [preset] carries.
      */
     fun save(preset: FlexCardPreset): FlexCardPreset = synchronized(LOCK) {
         val list = read().toMutableList()
         val id = if (preset.id > 0) preset.id else nextId(list)
-        val stored = preset.copy(id = id, updatedAt = System.currentTimeMillis())
         val at = list.indexOfFirst { it.id == id }
+        val old = list.getOrNull(at)
+        val history = when {
+            old == null -> preset.history.take(FLEX_PRESET_HISTORY)
+            old.spec != preset.spec -> (listOf(old.spec) + old.history).take(FLEX_PRESET_HISTORY)
+            else -> old.history
+        }
+        val stored = preset.copy(
+            id = id, updatedAt = System.currentTimeMillis(), history = history,
+            shippedKey = if (old != null) old.shippedKey else preset.shippedKey
+        )
         if (at >= 0) list[at] = stored else list += stored
         write(list)
         stored
     }
 
-    fun delete(id: Long) = synchronized(LOCK) {
-        write(read().filter { it.id != id })
+    /** Deletes the person's preset [id]; a built-in preset (or an unknown id) is left alone. True when it was deleted. */
+    fun delete(id: Long): Boolean = synchronized(LOCK) {
+        val list = read()
+        val target = list.firstOrNull { it.id == id }
+        if (target == null || target.shippedKey != null) return@synchronized false
+        write(list.filter { it.id != id })
+        true
     }
 
-    /** A copy named "<name> copy" with a new id, null when [id] is not stored. */
+    /** Puts the preset back to the spec before its last update (taken off its history). Null when there is none. */
+    fun undo(id: Long): FlexCardPreset? = synchronized(LOCK) {
+        val list = read().toMutableList()
+        val at = list.indexOfFirst { it.id == id }
+        val old = list.getOrNull(at) ?: return@synchronized null
+        val previous = old.history.firstOrNull() ?: return@synchronized null
+        val stored = old.copy(spec = previous, history = old.history.drop(1), updatedAt = System.currentTimeMillis())
+        list[at] = stored
+        write(list)
+        stored
+    }
+
+    /** Puts a built-in preset back to the spec it ships with (its history is cleared). Null when [id] is not a built-in one. */
+    suspend fun resetShipped(id: Long): FlexCardPreset? {
+        val key = get(id)?.shippedKey ?: return null
+        val original = flexComparisonPresets().firstOrNull { it.key == key }?.spec ?: return null
+        return synchronized(LOCK) {
+            val list = read().toMutableList()
+            val at = list.indexOfFirst { it.id == id }
+            val old = list.getOrNull(at) ?: return@synchronized null
+            val stored = old.copy(spec = original, history = emptyList(), updatedAt = System.currentTimeMillis())
+            list[at] = stored
+            write(list)
+            stored
+        }
+    }
+
+    /** A copy of the person's or a built-in preset named "<name> copy" with a new id (never built-in), null when [id] is not stored. */
     fun duplicate(id: Long): FlexCardPreset? {
         val source = get(id) ?: return null
-        return save(source.copy(id = 0, name = "${source.name} copy"))
+        return save(source.copy(id = 0, name = "${source.name} copy", shippedKey = null, history = emptyList()))
     }
 
     /** "Preset N": the first number not used by a name already saved. */
@@ -72,12 +152,21 @@ class FlexPresetStore(context: Context) {
                     // One broken entry is skipped, not the whole list.
                     runCatching {
                         val o = arr.getJSONObject(i)
+                        // The old per-source built-in presets (the app is unreleased) are dropped; the comparison presets replace them.
+                        if (o.optString("shipped", "").isNotEmpty()) return@runCatching
                         add(
                             FlexCardPreset(
                                 id = o.getLong("id"),
                                 name = o.optString("name", ""),
                                 spec = specFromJson(o.getJSONObject("spec")),
-                                updatedAt = o.optLong("updatedAt", 0L)
+                                updatedAt = o.optLong("updatedAt", 0L),
+                                shippedKey = o.optString("shippedKey", "").takeIf { it.isNotEmpty() },
+                                history = buildList {
+                                    val h = o.optJSONArray("history")
+                                    if (h != null) for (k in 0 until h.length()) {
+                                        runCatching { add(specFromJson(h.getJSONObject(k))) }
+                                    }
+                                }.take(FLEX_PRESET_HISTORY)
                             )
                         )
                     }
@@ -89,12 +178,16 @@ class FlexPresetStore(context: Context) {
     private fun write(list: List<FlexCardPreset>) {
         val arr = JSONArray()
         list.forEach { p ->
+            val history = JSONArray()
+            p.history.forEach { history.put(specToJson(it)) }
             arr.put(
                 JSONObject()
                     .put("id", p.id)
                     .put("name", p.name)
                     .put("updatedAt", p.updatedAt)
                     .put("spec", specToJson(p.spec))
+                    .put("history", history)
+                    .put("shippedKey", p.shippedKey ?: "")
             )
         }
         prefs.edit().putString(KEY_PRESETS, arr.toString()).apply()
@@ -107,56 +200,3 @@ class FlexPresetStore(context: Context) {
         val LOCK = Any()
     }
 }
-
-/**
- * A template spec fitted to real content. A photo block shows its picture from one of three places:
- *  - no keys: the share's own photo ([FlexContent.photoUri]); that follows the content by itself and is left alone;
- *  - keys + [FLEX_SCREEN_PHOTO]: one of the screen's pictures ([FlexContent.photos]);
- *  - keys, no marker: a picture the person picked themselves; real, so it is kept as it is.
- * A block whose picture is one of the placeholder pictures ([FlexSampleContent.isSampleUri]) is re-pointed, in
- * block order, at the content's pictures: the screen's own photo first (unless an enabled photo block without keys
- * already shows it), then [FlexContent.photos]; pictures a block of the person's already shows are skipped. Blocks
- * left over when the content runs out of pictures are dropped. A background photo that is a placeholder is cleared,
- * so the card's background follows the content's own photo again. The result is [reconciled].
- */
-fun FlexSpec.appliedTo(content: FlexContent): FlexSpec {
-    val ownShown = blocks.any { it.type == FlexBlockType.PHOTO && it.enabled && it.keys == null }
-    val taken = blocks.mapNotNull { b ->
-        if (b.type == FlexBlockType.PHOTO) b.keys?.firstOrNull()?.takeIf { !FlexSampleContent.isSampleUri(it) } else null
-    }.toSet()
-    val pool = buildList {
-        if (!ownShown) content.photoUri?.let { add(it) }
-        content.photos.forEach { add(it.uri) }
-    }.distinct().filter { it !in taken }
-    val next = pool.iterator()
-    val fitted = blocks.mapNotNull { b ->
-        if (b.type == FlexBlockType.PHOTO && FlexSampleContent.isSampleUri(b.keys?.firstOrNull())) {
-            if (next.hasNext()) b.copy(keys = listOf(next.next()), text = FLEX_SCREEN_PHOTO) else null
-        } else b
-    }
-    val look = if (FlexSampleContent.isSampleUri(style.photoUri)) style.copy(photoUri = null) else style
-    return copy(style = look, blocks = fitted, layout = prunedLayout(fitted)).reconciled()
-}
-
-/**
- * The inverse, for making a preset from a real card: each screen-picture block ([FLEX_SCREEN_PHOTO] with keys) is
- * re-pointed, in block order, at the placeholder pictures ([FlexContent.photos] of [sample]); blocks beyond the
- * placeholders are dropped. Photo blocks without keys already follow the content, and a picture the person picked
- * themselves is real and stays. Item choices ([FlexBlock.keys] of lists) and the background photo are kept: the
- * choices fall back to automatic where the content has no such item, and a background photo is only ever a picture the
- * person chose (a share's own photo is used while it is not set), so it stays too. The result is [reconciled].
- */
-fun FlexSpec.asTemplate(sample: FlexContent): FlexSpec {
-    val next = sample.photos.map { it.uri }.iterator()
-    val fitted = blocks.mapNotNull { b ->
-        val isScreen = b.type == FlexBlockType.PHOTO && b.text == FLEX_SCREEN_PHOTO && b.keys != null
-        if (isScreen && !FlexSampleContent.isSampleUri(b.keys?.firstOrNull())) {
-            if (next.hasNext()) b.copy(keys = listOf(next.next())) else null
-        } else b
-    }
-    return copy(blocks = fitted, layout = prunedLayout(fitted)).reconciled()
-}
-
-/** The tiling without the tiles of blocks that were dropped, so no tile points at a block the card no longer has. */
-private fun FlexSpec.prunedLayout(kept: List<FlexBlock>): TileNode? =
-    if (kept.size == blocks.size) layout else layout?.let { TileTree.prune(it, kept.map { b -> b.id }.toSet()) }

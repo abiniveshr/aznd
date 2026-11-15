@@ -38,9 +38,20 @@ object FlexSavedImages {
         file
     }.getOrNull()
 
+    /** Keeps a copy of [source] (a PNG or JPG file) under its own extension; null when it could not be copied. Call off the main thread. */
+    fun keepFile(context: Context, source: File): File? = runCatching {
+        val folder = dir(context)
+        val ext = source.extension.ifEmpty { "png" }
+        var file = File(folder, "$PREFIX${System.currentTimeMillis()}.$ext")
+        var n = 1
+        while (file.exists()) file = File(folder, "$PREFIX${System.currentTimeMillis()}_${n++}.$ext")
+        source.copyTo(file)
+        file
+    }.getOrNull()
+
     /** The kept cards, newest first. */
     fun list(context: Context): List<File> =
-        dir(context).listFiles { f -> f.isFile && f.name.endsWith(".png") }
+        dir(context).listFiles { f -> f.isFile && (f.name.endsWith(".png") || f.name.endsWith(".jpg")) }
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
 

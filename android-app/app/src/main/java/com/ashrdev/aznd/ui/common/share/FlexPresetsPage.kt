@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.common.share
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.text.format.DateUtils
 import android.util.LruCache
@@ -22,9 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,126 +49,72 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ashrdev.aznd.ui.common.saveImageToDevice
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.streaks.StreakViewModel
+import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The Presets page: the built-in Default card of the current source first, then the card presets the person made
- * ([FlexCardPreset]), each with a small picture of the card filled with the source's real content.
+ * The Presets page: the built-in presets first (one per share source), then the person's own ([FlexCardPreset]),
+ * each with a small picture of the poster filled with the person's real data (the choices Configure would start
+ * from, see [defaultBindings]). Tapping a row starts Configure ([onConfigure]); the row's menu has Edit (the preset
+ * editor on sample data, [onEdit]), Duplicate, Delete (own presets only) and Reset (a built-in preset goes back to
+ * what it ships with; an own preset goes back to before its last update).
  *
  * Not to be confused with [FlexPreset], which is the share source (home, workout, routine ...).
  *
- * [content] is null while the source is still loading. [onEdit] gets the preset to edit; for the Default entry it is
- * an unsaved one (id 0) made from the current card. [onChanged] says the stored presets changed (duplicate, delete)
- * and [onKept] that a copy of an exported card was added to the Saved page.
+ * [library] is null while the person's data is still loading (thumbnails wait for it); [share] is where Flex was
+ * opened from, null for the home screen. [onChanged] says the stored presets changed.
  */
 @Composable
 internal fun FlexPresetsPage(
     bottom: Dp,
-    source: FlexPreset,
-    content: FlexContent?,
+    library: FlexLibrary?,
+    share: FlexShareContext?,
+    workoutViewModel: WorkoutViewModel,
+    streakViewModel: StreakViewModel,
     presets: List<FlexCardPreset>,
+    onConfigure: (FlexCardPreset) -> Unit,
     onEdit: (FlexCardPreset) -> Unit,
-    onChanged: () -> Unit,
-    onKept: () -> Unit
+    onChanged: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val presetStore = remember { FlexPresetStore(context) }
     var deleting by remember { mutableStateOf<FlexCardPreset?>(null) }
-    var busy by remember { mutableStateOf(false) }
-
-    // The source's own card, the way it was last left (or its default).
-    val defaultSpec by produceState<FlexSpec?>(null, source, content) {
-        val c = content
-        value = if (c == null) null else withContext(Dispatchers.Default) {
-            FlexStore(context).load(source)?.reconciled()?.withoutStalePhotos(c) ?: source.defaultSpec(c)
-        }
-    }
-
-    /** "Edit" on Default: a new, unsaved preset made from the current card, with the sample photos in place of the real ones. */
-    fun editDefault(spec: FlexSpec) {
-        scope.launch {
-            val sample = FlexSampleContent.load(context)
-            val template = withContext(Dispatchers.Default) { spec.asTemplate(sample) }
-            onEdit(FlexCardPreset(id = 0, name = presetStore.nextDefaultName(), spec = template, updatedAt = 0))
-        }
-    }
-
-    /** Renders [spec] (a template is fitted to the content first) at full size, keeps a copy and hands the file on. */
-    fun export(spec: FlexSpec, template: Boolean, then: suspend (android.net.Uri) -> Unit) {
-        val c = content ?: return
-        if (busy) return
-        busy = true
-        scope.launch {
-            val uri = try {
-                withContext(Dispatchers.Default) {
-                    val applied = if (template) spec.appliedTo(c) else spec
-                    val assets = loadFlexAssets(context, applied, c)
-                    val card = fittedTo(applied, c, assets)
-                    val bitmap = FlexExport.render(card, c, assets)
-                    FlexSavedImages.keep(context, bitmap)
-                    FlexExport.writePng(context, bitmap)
-                }
-            } catch (e: Exception) {
-                null
-            } finally {
-                busy = false
-            }
-            if (uri == null) {
-                Toast.makeText(context, "Couldn't make the image", Toast.LENGTH_SHORT).show()
-            } else {
-                onKept()
-                then(uri)
-            }
-        }
-    }
+    var resetting by remember { mutableStateOf<FlexCardPreset?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(key = "default") {
-            val spec = defaultSpec
-            PresetRow(
-                name = "Default",
-                detail = "Your card for ${source.label.lowercase()}, as it is now",
-                spec = spec,
-                template = false,
-                content = content,
-                canExport = spec != null && content != null && !busy,
-                isDefault = true,
-                onOpen = { spec?.let { editDefault(it) } },
-                onShare = { spec?.let { export(it, false) { uri -> FlexExport.share(context, uri) } } },
-                onSave = { spec?.let { export(it, false) { uri -> saveImageToDevice(context, uri) } } },
-                onDuplicate = {},
-                onDelete = {}
-            )
-        }
         items(presets, key = { "p${it.id}" }) { preset ->
             PresetRow(
-                name = preset.name,
-                detail = "Updated " + DateUtils.getRelativeTimeSpanString(
-                    preset.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS
-                ),
-                spec = preset.spec,
-                template = true,
-                content = content,
-                canExport = content != null && !busy,
-                isDefault = false,
-                onOpen = { onEdit(preset) },
-                onShare = { export(preset.spec, true) { uri -> FlexExport.share(context, uri) } },
-                onSave = { export(preset.spec, true) { uri -> saveImageToDevice(context, uri) } },
+                preset = preset,
+                library = library,
+                share = share,
+                workoutViewModel = workoutViewModel,
+                streakViewModel = streakViewModel,
+                onOpen = { onConfigure(preset) },
+                onEdit = { onEdit(preset) },
                 onDuplicate = {
                     presetStore.duplicate(preset.id)
                     onChanged()
                 },
-                onDelete = { deleting = preset }
+                onDelete = { deleting = preset },
+                onReset = {
+                    if (preset.isShipped) {
+                        resetting = preset
+                    } else {
+                        presetStore.undo(preset.id)
+                        onChanged()
+                        Toast.makeText(context, "Went back to before the last update", Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
         }
         if (presets.isEmpty()) {
@@ -213,24 +158,50 @@ internal fun FlexPresetsPage(
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Keep") } }
         )
     }
+    resetting?.let { target ->
+        AlertDialog(
+            onDismissRequest = { resetting = null },
+            title = { Text("Reset \"${target.name}\"?") },
+            text = { Text("The preset goes back to the design it came with. Your changes to it are lost.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    resetting = null
+                    scope.launch {
+                        val done = presetStore.resetShipped(target.id)
+                        onChanged()
+                        Toast.makeText(
+                            context,
+                            if (done != null) "Preset reset" else "Couldn't reset the preset",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }) { Text("Reset", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { resetting = null }) { Text("Keep") } }
+        )
+    }
 }
 
 @Composable
 private fun PresetRow(
-    name: String,
-    detail: String,
-    spec: FlexSpec?,
-    template: Boolean,
-    content: FlexContent?,
-    canExport: Boolean,
-    isDefault: Boolean,
+    preset: FlexCardPreset,
+    library: FlexLibrary?,
+    share: FlexShareContext?,
+    workoutViewModel: WorkoutViewModel,
+    streakViewModel: StreakViewModel,
     onOpen: () -> Unit,
-    onShare: () -> Unit,
-    onSave: () -> Unit,
+    onEdit: () -> Unit,
     onDuplicate: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onReset: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
+    val detail = when {
+        preset.isShipped -> "Built in"
+        else -> "Updated " + DateUtils.getRelativeTimeSpanString(
+            preset.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS
+        )
+    }
     Card(modifier = Modifier
         .fillMaxWidth()
         .clickable(onClick = onOpen)
@@ -241,10 +212,13 @@ private fun PresetRow(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CardThumbnail(spec, content, template, modifier = Modifier.size(width = 84.dp, height = 96.dp))
+            CardThumbnail(
+                preset, library, share, workoutViewModel, streakViewModel,
+                modifier = Modifier.size(width = 84.dp, height = 96.dp)
+            )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(preset.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     detail,
                     style = MaterialTheme.typography.labelMedium,
@@ -253,31 +227,20 @@ private fun PresetRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            IconButton(enabled = canExport, onClick = onShare) {
-                Icon(Icons.Default.Share, contentDescription = "Share")
-            }
-            IconButton(enabled = canExport, onClick = onSave) {
-                Icon(Icons.Default.Download, contentDescription = "Save to gallery")
-            }
             Box {
                 IconButton(onClick = { menu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "More")
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    if (isDefault) {
-                        DropdownMenuItem(text = { Text("Edit as new preset") }, onClick = {
-                            menu = false
-                            onOpen()
-                        })
-                    } else {
-                        DropdownMenuItem(text = { Text("Edit") }, onClick = {
-                            menu = false
-                            onOpen()
-                        })
-                        DropdownMenuItem(text = { Text("Duplicate") }, onClick = {
-                            menu = false
-                            onDuplicate()
-                        })
+                    DropdownMenuItem(text = { Text("Edit") }, onClick = {
+                        menu = false
+                        onEdit()
+                    })
+                    DropdownMenuItem(text = { Text("Duplicate") }, onClick = {
+                        menu = false
+                        onDuplicate()
+                    })
+                    if (!preset.isShipped) {
                         DropdownMenuItem(
                             text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                             onClick = {
@@ -286,21 +249,35 @@ private fun PresetRow(
                             }
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text(if (preset.isShipped) "Reset to original" else "Undo last change") },
+                        enabled = preset.isShipped || preset.history.isNotEmpty(),
+                        onClick = {
+                            menu = false
+                            onReset()
+                        }
+                    )
                 }
             }
         }
     }
 }
 
-/** A small picture of the card, rendered off the main thread and remembered by what was drawn. */
+/** A small picture of the poster with the person's real data, rendered off the main thread. */
 @Composable
-private fun CardThumbnail(spec: FlexSpec?, content: FlexContent?, template: Boolean, modifier: Modifier) {
+private fun CardThumbnail(
+    preset: FlexCardPreset,
+    library: FlexLibrary?,
+    share: FlexShareContext?,
+    workoutViewModel: WorkoutViewModel,
+    streakViewModel: StreakViewModel,
+    modifier: Modifier
+) {
     val context = LocalContext.current
-    val bitmap by produceState<Bitmap?>(null, spec, content, template) {
-        val sp = spec
-        val c = content
-        value = if (sp == null || c == null) null else withContext(Dispatchers.Default) {
-            thumbnailOf(context, sp, c, template)
+    val bitmap by produceState<Bitmap?>(null, preset.spec, library, share) {
+        val lib = library
+        value = if (lib == null) null else withContext(Dispatchers.Default) {
+            runCatching { thumbnailOf(context, preset, lib, share, workoutViewModel, streakViewModel) }.getOrNull()
         }
     }
     Box(modifier = modifier.clip(MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
@@ -320,17 +297,30 @@ private fun CardThumbnail(spec: FlexSpec?, content: FlexContent?, template: Bool
 
 private const val THUMB_SHORT = 360
 
-/** Thumbnails by what they show (the card as drawn plus its content); a few are enough for a screenful. */
-private val thumbCache = LruCache<Any, Bitmap>(16)
+/** What a thumbnail shows: the preset's spec and the choices it was filled with (the library is one load of the person's data). */
+private data class ThumbKey(val spec: FlexSpec, val bindings: FlexBindings, val library: FlexLibrary)
 
-private fun thumbnailOf(context: android.content.Context, spec: FlexSpec, content: FlexContent, template: Boolean): Bitmap? {
-    val applied = if (template) spec.appliedTo(content) else spec
-    val key = applied to content
+/** Thumbnails by what they show; a few are enough for a screenful. */
+private val thumbCache = LruCache<ThumbKey, Bitmap>(16)
+
+/** Blocking work and the content load: call from Dispatchers.Default. */
+private suspend fun thumbnailOf(
+    context: Context,
+    preset: FlexCardPreset,
+    library: FlexLibrary,
+    share: FlexShareContext?,
+    workoutViewModel: WorkoutViewModel,
+    streakViewModel: StreakViewModel
+): Bitmap? {
+    val spec = preset.spec
+    val bindings = defaultBindings(spec, library, FlexBindingStore.load(context, preset.id), share)
+    val key = ThumbKey(spec, bindings, library)
     thumbCache.get(key)?.let { return it }
-    return runCatching {
-        val assets = loadFlexAssets(context, applied, content, backgroundMax = 480, imageMax = 360)
-        FlexExport.render(fittedTo(applied, content, assets), content, assets, short = THUMB_SHORT)
-    }.getOrNull()?.also { thumbCache.put(key, it) }
+    val content = loadBoundContent(context, spec, bindings, library, workoutViewModel, streakViewModel)
+    val bound = spec.bound(bindings)
+    val assets = loadFlexAssets(context, bound, content, backgroundMax = 480, imageMax = 360)
+    return FlexExport.render(fittedTo(bound, content, assets), content, assets, short = THUMB_SHORT)
+        .also { thumbCache.put(key, it) }
 }
 
 /**
@@ -338,7 +328,7 @@ private fun thumbnailOf(context: android.content.Context, spec: FlexSpec, conten
  * gets a quiet auto align, one with a tiling is rescued (the content can differ from the one it was made on, e.g. fewer
  * pictures), a free card has its boxes placed. Falls back to the card as it is. Blocking; call it off the main thread.
  */
-private fun fittedTo(spec: FlexSpec, content: FlexContent, assets: FlexAssets): FlexSpec = runCatching {
+internal fun fittedTo(spec: FlexSpec, content: FlexContent, assets: FlexAssets): FlexSpec = runCatching {
     when (spec.style.layoutMode) {
         FlexLayoutMode.SPLIT ->
             if (spec.layout == null) FlexPainter.autoAlign(spec, content, assets, rescale = false).spec
@@ -364,14 +354,7 @@ internal fun loadFlexAssets(
     val raw = bgUri?.let { FlexBitmaps.load(context, it, backgroundMax) }
     val background = raw?.let { FlexBitmaps.blur(it, (style.photoBlur * 20f).toInt() / 20f) }
 
-    val needed = LinkedHashSet<String>()
-    if (spec.blocks.any { it.enabled && it.type == FlexBlockType.STREAKS }) {
-        content.streaks.forEach { s -> s.logoUri?.let { needed += it } }
-    }
-    spec.blocks.filter { it.enabled && it.type == FlexBlockType.PHOTO }.forEach { b ->
-        (b.keys?.firstOrNull() ?: content.photoUri)?.let { needed += it }
-    }
-    if (spec.blocks.any { it.enabled && it.type == FlexBlockType.MODEL }) content.modelUri?.let { needed += it }
+    val needed = flexNeededImages(spec, content)
     val images = needed.mapNotNull { uri -> FlexBitmaps.load(context, uri, imageMax)?.let { uri to it } }.toMap()
     return FlexAssets(background, images, ready = true)
 }

@@ -27,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,13 +52,12 @@ import kotlin.math.roundToInt
 /*
  * The settings of one card (one FlexBlock) on a poster: the "rules in card edit".
  *
- * Layout, the same for every card, top to bottom:
- *   1. Universal: the 3 × 3 alignment pad (across + down) beside the Size slider; under the slider, in PANEL mode,
- *      Duplicate and Delete (Delete asks first).
- *   2. What the card shows (per type): the stat of a Workout stats card, a Graph's variables and range, a Calendar's
- *      source and period, a Photo's picture.
- *   3. How it looks: Style (the type's variants), which items and how many, the type's detail switch, its text, a
- *      photo's crop.
+ * Layout, the same for every card, top to bottom, each a fold (see FlexFoldSection; only the first is open):
+ *   1. What the card shows and how it looks (per type, titled by it): the stat of a Workout stats card, a Graph's
+ *      variables and range, a Calendar's source and period, a Photo's picture; then Style (the type's variants), which
+ *      items and how many, the type's detail switch, its text, a photo's crop. A card with none of these has no such fold.
+ *   2. Position & size: the 3 × 3 alignment pad (across + down) beside the Size slider.
+ *   3. Card (PANEL mode): Duplicate and Delete (Delete asks first).
  * Every change goes through [FlexCardConfig]'s onChange as a transform of the card with this id inside the poster the
  * caller holds (the caller budget-checks it and records undo, and may refuse it), and the panel always draws from the
  * spec it is given, never from what it asked for.
@@ -74,7 +74,8 @@ private class PendingSelect(val id: Int, val before: FlexSpec)
 
 /**
  * The settings of the card [blockId] on [spec] (in [FlexConfigMode.ADD] the draft, which already holds the new card).
- * Plain content (a Column, no scrolling of its own): the caller puts it in a scrolling bottom half or a popup.
+ * Every group of options is a [FlexFoldSection] (closed but the first, see [firstOpen]): the card's own options, then
+ * "Position & size", then "Card" (PANEL mode). Plain content (a Column, no scrolling of its own): the caller puts it in a scrolling bottom half or a popup.
  * [onSelect] moves the caller's focus: to a card this panel added (Duplicate, "Add another"), once that card is on
  * the poster, or to null after Delete.
  */
@@ -87,9 +88,26 @@ internal fun FlexCardConfig(
     mode: FlexConfigMode,
     onChange: (continuous: Boolean, transform: (FlexSpec) -> FlexSpec) -> Unit,
     onSelect: (Int?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * The card's data is chosen by its data choice (the Use screen's [FlexDataChoice] sits above this panel): the options
+     * that pick data (graph variables and range, calendar source and period, photo, text, which items) are left out
+     * here, since the data choice would override them.
+     */
+    dataBound: Boolean = false,
+    /** The stats a Workout stats card may show and "Add another" may add (null = all): the blueprint's own, see [allowedStats]. */
+    allowedStats: List<FlexWorkoutStat>? = null,
+    /** A Graph card has no variable / compare pickers (the Exercise blueprint always plots that exercise's 1RM); its range stays. */
+    fixedGraphVariable: Boolean = false,
+    /** Blueprint editor: a Photo card is "the screen's photo #n" (nothing to pick); a hint says so instead of the photo picker. */
+    photoSlot: Boolean = false,
+    /** Whether the card's first fold starts open: false when a fold above this panel (the Use screen's "Data") is the open one. */
+    firstOpen: Boolean = true
 ) {
     val block = spec.blocks.firstOrNull { it.id == blockId }
+    // Each card reads its own part of the content (two cards may show different sessions).
+    @Suppress("NAME_SHADOWING")
+    val content = content.forBlock(blockId)
     val selectNow by rememberUpdatedState(onSelect)
 
     // The caller may refuse a change (the poster is full), so a card added here is selected only once it is really
@@ -123,30 +141,121 @@ internal fun FlexCardConfig(
 
     var confirmDelete by remember(blockId) { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (block == null) {
-            ConfigHint("This card is no longer on the poster.")
-        } else {
-            when {
-                !block.enabled -> ConfigHint("This card is hidden. Turn it on in Cards to show it on the poster.")
-                !content.has(block.type) -> ConfigHint("Nothing to show for this card here.")
-            }
-
-            // 1. Universal: alignment, size, and (on the poster) duplicate / delete.
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ConfigLabel("Align")
-                    FlexAlignPad(block.hAlign, block.vAlign) { h, v -> edit { it.copy(hAlign = h, vAlign = v) } }
+    // The folds' open state is kept per card: another card starts with its folds as new.
+    key(blockId) {
+        Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (block == null) {
+                ConfigHint("This card is no longer on the poster.")
+            } else {
+                when {
+                    !block.enabled -> ConfigHint("This card is hidden. Turn it on in Cards to show it on the poster.")
+                    !content.has(block.type) -> ConfigHint("Nothing to show for this card here.")
                 }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    LabeledSlider(
-                        label = "Size",
-                        valueText = "${(block.size * 100).roundToInt()}%",
-                        value = block.size,
-                        range = SIZE_RANGE
-                    ) { v -> edit(continuous = true) { it.copy(size = v) } }
-                    if (mode == FlexConfigMode.PANEL) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+
+                val type = block.type
+                // The look variants, the items and the detail switch come from the card (a Workout stats card's from its
+                // stat): a Graph has one look (bars or line is each variable's own), so it shows no Style.
+                val variants = block.variantLabels
+                val hero = variants.getOrNull(block.variant) == "Hero"
+                // A card with nothing of its own to set (a hidden-by-data Graph, say) has no first fold: Position & size is it.
+                val hasOwn = type == FlexBlockType.WORKOUT_STATS || type == FlexBlockType.PHOTO ||
+                    (!dataBound && (type == FlexBlockType.GRAPH || type == FlexBlockType.CALENDAR ||
+                        type == FlexBlockType.HEADER || type == FlexBlockType.TEXT)) ||
+                    variants.size >= 2 || block.isListy || block.flagText != null
+
+                // 1. What the card shows and how it looks (per type): the stat of a Workout stats card, a Graph's variables
+                // and range, a Calendar's source and period, a Photo's picture, then Style, items, detail switch, text, crop.
+                if (hasOwn) {
+                    val ownTitle = when (type) {
+                        FlexBlockType.WORKOUT_STATS -> "Workout stats"
+                        FlexBlockType.GRAPH -> "Graph"
+                        FlexBlockType.CALENDAR -> "Calendar"
+                        FlexBlockType.PHOTO -> "Photo"
+                        else -> type.label
+                    }
+                    val ownSummary = listOfNotNull(
+                        when (type) {
+                            FlexBlockType.WORKOUT_STATS -> block.stat.label
+                            FlexBlockType.GRAPH -> content.graphs.firstOrNull { it.id == block.graph.variables.firstOrNull() }?.label
+                            FlexBlockType.CALENDAR ->
+                                zoomName(block.cal.view(flexCalendarAnchor(content.calendarDay, content.calendarToday)).zoom)
+                            FlexBlockType.PHOTO -> if (photoSlot) "Screen's photo" else if (block.keys != null) "Picked photo" else null
+                            else -> null
+                        },
+                        if (variants.size >= 2) variants[block.variant.coerceIn(0, variants.lastIndex)] else null
+                    ).joinToString(" · ")
+                    FlexFoldSection(ownTitle, ownSummary, initiallyOpen = firstOpen) {
+                        when (type) {
+                            FlexBlockType.WORKOUT_STATS -> WorkoutStatsOptions(
+                                block = block,
+                                spec = spec,
+                                content = content,
+                                stats = allowedStats ?: FlexWorkoutStat.entries.toList(),
+                                edit = { c, f -> edit(c, f) },
+                                onAddStat = { stat -> addAfter { from, id -> from.copy(id = id, stat = stat, variant = 0, keys = null) } }
+                            )
+                            FlexBlockType.GRAPH -> if (!dataBound) GraphOptions(block, content, fixedGraphVariable) { f -> edit { it.copy(graph = f(it.graph)) } }
+                            FlexBlockType.CALENDAR -> if (!dataBound) CalendarOptions(
+                                block = block,
+                                spec = spec,
+                                content = content,
+                                edit = { f -> edit { it.copy(cal = f(it.cal)) } },
+                                onAdd = { cal -> addAfter { from, id -> from.copy(id = id, cal = cal) } }
+                            )
+                            FlexBlockType.PHOTO ->
+                                if (photoSlot) ConfigHint("Shows the shared item's photos in order.")
+                                else if (!dataBound) PhotoPick(block) { c, f -> edit(c, f) }
+                            else -> Unit
+                        }
+
+                        StyleChoice(variants, block.variant) { v -> edit { it.copy(variant = v) } }
+                        if (block.isListy) {
+                            // A hero look shows one item (the first picked), so it has no count.
+                            ItemOptions(if (dataBound) emptyList() else content.choices(type), block, hideCount = hero) { c, f -> edit(c, f) }
+                        }
+                        block.flagText?.let { label -> SwitchRow(label, block.flag) { on -> edit { it.copy(flag = on) } } }
+                        if (!dataBound && (type == FlexBlockType.HEADER || type == FlexBlockType.TEXT)) {
+                            OutlinedTextField(
+                                value = block.text,
+                                onValueChange = { t -> edit(continuous = true) { it.copy(text = t.take(300)) } },
+                                label = { Text(if (type == FlexBlockType.TEXT) "Text" else "Title (empty = default)") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (type == FlexBlockType.PHOTO) {
+                            PhotoCrop(block, spec, content, assets) { c, f -> edit(c, f) }
+                        }
+                    }
+                }
+
+                // 2. Universal: the 3 × 3 alignment pad (across + down) beside the Size slider.
+                val where = if (block.hAlign == FlexAlign.CENTER && block.vAlign == FlexVAlign.CENTER) "Centre"
+                else "${block.vAlign.label} ${block.hAlign.label.lowercase()}"
+                FlexFoldSection(
+                    "Position & size",
+                    "$where · ${(block.size * 100).roundToInt()}%",
+                    initiallyOpen = firstOpen && !hasOwn
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            ConfigLabel("Align")
+                            FlexAlignPad(block.hAlign, block.vAlign) { h, v -> edit { it.copy(hAlign = h, vAlign = v) } }
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            LabeledSlider(
+                                label = "Size",
+                                valueText = "${(block.size * 100).roundToInt()}%",
+                                value = block.size,
+                                range = SIZE_RANGE
+                            ) { v -> edit(continuous = true) { it.copy(size = v) } }
+                        }
+                    }
+                }
+
+                // 3. On the poster: duplicate / delete (Delete asks first).
+                if (mode == FlexConfigMode.PANEL) {
+                    FlexFoldSection("Card", "Duplicate or delete") {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(
                                 onClick = { addAfter { from, id -> from.copy(id = id) } },
                                 contentPadding = PaddingValues(horizontal = 8.dp)
@@ -171,51 +280,6 @@ internal fun FlexCardConfig(
                         }
                     }
                 }
-            }
-            HorizontalDivider()
-
-            // 2 and 3. What the card shows and how it looks.
-            val type = block.type
-            when (type) {
-                FlexBlockType.WORKOUT_STATS -> WorkoutStatsOptions(
-                    block = block,
-                    spec = spec,
-                    content = content,
-                    edit = { c, f -> edit(c, f) },
-                    onAddStat = { stat -> addAfter { from, id -> from.copy(id = id, stat = stat, variant = 0, keys = null) } }
-                )
-                FlexBlockType.GRAPH -> GraphOptions(block, content) { f -> edit { it.copy(graph = f(it.graph)) } }
-                FlexBlockType.CALENDAR -> CalendarOptions(
-                    block = block,
-                    spec = spec,
-                    content = content,
-                    edit = { f -> edit { it.copy(cal = f(it.cal)) } },
-                    onAdd = { cal -> addAfter { from, id -> from.copy(id = id, cal = cal) } }
-                )
-                FlexBlockType.PHOTO -> PhotoPick(block) { c, f -> edit(c, f) }
-                else -> Unit
-            }
-
-            // The look variants, the items and the detail switch come from the card (a Workout stats card's from its
-            // stat): a Graph has one look (bars or line is each variable's own), so it shows no Style.
-            val variants = block.variantLabels
-            StyleChoice(variants, block.variant) { v -> edit { it.copy(variant = v) } }
-            if (block.isListy) {
-                // A hero look shows one item (the first picked), so it has no count.
-                val hero = variants.getOrNull(block.variant) == "Hero"
-                ItemOptions(content.choices(type), block, hideCount = hero) { c, f -> edit(c, f) }
-            }
-            block.flagText?.let { label -> SwitchRow(label, block.flag) { on -> edit { it.copy(flag = on) } } }
-            if (type == FlexBlockType.HEADER || type == FlexBlockType.TEXT) {
-                OutlinedTextField(
-                    value = block.text,
-                    onValueChange = { t -> edit(continuous = true) { it.copy(text = t.take(300)) } },
-                    label = { Text(if (type == FlexBlockType.TEXT) "Text" else "Title (empty = default)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            if (type == FlexBlockType.PHOTO) {
-                PhotoCrop(block, spec, content, assets) { c, f -> edit(c, f) }
             }
         }
     }
@@ -334,16 +398,19 @@ private fun WorkoutStatsOptions(
     block: FlexBlock,
     spec: FlexSpec,
     content: FlexContent,
+    /** The stats this card may show (the blueprint's own); the card's current stat is always listed. */
+    stats: List<FlexWorkoutStat>,
     edit: (continuous: Boolean, (FlexBlock) -> FlexBlock) -> Unit,
     onAddStat: (FlexWorkoutStat) -> Unit
 ) {
     val stat = block.stat
-    val next = FlexWorkoutStat.entries.firstOrNull { s ->
+    val choices = if (stat in stats) stats else stats + stat
+    val next = stats.firstOrNull { s ->
         spec.blocks.none { it.type == FlexBlockType.WORKOUT_STATS && it.stat == s }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
         Box(modifier = Modifier.weight(1f)) {
-            DropdownField("Shows", FlexWorkoutStat.entries, stat, { it.label }) { s ->
+            DropdownField("Shows", choices, stat, { it.label }) { s ->
                 // Each stat has its own looks: keep the look's number when the new stat has it, else its last.
                 edit(false) { it.copy(stat = s, variant = it.variant.coerceIn(0, s.variants.lastIndex.coerceAtLeast(0))) }
             }
@@ -354,7 +421,7 @@ private fun WorkoutStatsOptions(
             Text("Add another")
         }
     }
-    if (next == null) ConfigHint("Top set, one rep max and session stats are all on the poster already.")
+    if (next == null) ConfigHint("Every stat this card can show is on the poster already.")
     val empty = when (stat) {
         FlexWorkoutStat.TOP_SET, FlexWorkoutStat.ONE_RM -> content.lifts.isEmpty()
         FlexWorkoutStat.SESSION -> content.stats.isEmpty()
@@ -392,7 +459,16 @@ private fun noDataText(series: FlexGraphSeries, range: FlexGraphRange): String =
  * range gets a line saying so.
  */
 @Composable
-private fun GraphOptions(block: FlexBlock, content: FlexContent, editGraph: ((FlexGraphConfig) -> FlexGraphConfig) -> Unit) {
+private fun GraphOptions(
+    block: FlexBlock,
+    content: FlexContent,
+    rangeOnly: Boolean,
+    editGraph: ((FlexGraphConfig) -> FlexGraphConfig) -> Unit
+) {
+    if (rangeOnly) {
+        DropdownField("Range", FlexGraphRange.entries, block.graph.range, { it.label }) { r -> editGraph { it.copy(range = r) } }
+        return
+    }
     val graphs = content.graphs
     val cfg = block.graph
     val first = cfg.variables.getOrNull(0)

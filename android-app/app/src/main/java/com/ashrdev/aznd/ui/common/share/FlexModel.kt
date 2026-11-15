@@ -398,7 +398,7 @@ val FlexWorkoutStat.flagLabel: String?
     get() = when (this) {
         FlexWorkoutStat.TOP_SET -> "Show RPE and date"
         FlexWorkoutStat.ONE_RM -> "Show \"calculated from\""
-        FlexWorkoutStat.SESSION -> null
+        FlexWorkoutStat.SESSION -> "Show workout & date"
     }
 
 /** True when the stat lists items to pick between (the lifts), so "max items" and item picking make sense. */
@@ -420,6 +420,13 @@ val FlexBlock.isListy: Boolean
 enum class FlexGraphRange(val label: String, val days: Int?) {
     WEEKS_4("4 weeks", 28), MONTHS_3("3 months", 91), MONTHS_6("6 months", 182), YEAR("1 year", 365), ALL("All time", null)
 }
+
+/**
+ * A graph variable that stands for "this screen's exercise 1RM": only the Exercise blueprint (FlexDefaults) uses it. The painter
+ * plots the first "Exercise 1RM" series of the content for it (the sample exercise in the editor); sharing replaces it with
+ * the shared exercise's own series id.
+ */
+const val FLEX_SCREEN_EXERCISE_1RM = "e1rm:@screen"
 
 /** GRAPH: [variables] holds 0 to 2 [FlexGraphSeries] ids (first = main, second = "compare with"); empty = not set up yet. */
 data class FlexGraphConfig(
@@ -480,6 +487,15 @@ data class FlexBlock(
     /** Free mode: whether the block has a box of its own yet. */
     val placed: Boolean get() = freeW > 0f && freeH > 0f
 }
+
+/**
+ * The key of a photo card that has no picture yet: [FlexBlock.keys] = `listOf(FLEX_NO_PHOTO)`. Null keys mean "the screen's
+ * own photo", so an empty card needs a marker of its own. It is blank, so it never names a real picture.
+ */
+const val FLEX_NO_PHOTO = ""
+
+/** True for a photo card that has no picture yet (see [FLEX_NO_PHOTO]); a card turned off is still empty. */
+fun FlexBlock.isEmptyPhoto(): Boolean = type == FlexBlockType.PHOTO && keys?.firstOrNull() == FLEX_NO_PHOTO
 
 /**
  * A card: its look, its blocks and how the blocks are tiled on it. [layout] is the tiling (see ui/common/tiling/TileTree.kt);
@@ -586,8 +602,16 @@ data class FlexContent(
      */
     val photos: List<FlexPhoto> = emptyList(),
     /** A snapshot of the 3D body model, as an image uri (the 3D model block). */
-    val modelUri: String? = null
+    val modelUri: String? = null,
+    /**
+     * What one card shows when it differs from the rest, by [FlexBlock.id] (two cards showing two different workouts). A part
+     * is a whole content of its own, read for that card alone; its own parts are ignored. Empty: every card reads this content.
+     */
+    val parts: Map<Int, FlexContent> = emptyMap()
 ) {
+    /** The content the card with this id reads: its own part, else this content. */
+    fun forBlock(id: Int): FlexContent = parts[id] ?: this
+
     /** True when a block of [type] has something to show here. */
     fun has(type: FlexBlockType): Boolean = when (type) {
         FlexBlockType.HEADER, FlexBlockType.TEXT, FlexBlockType.PHOTO -> true

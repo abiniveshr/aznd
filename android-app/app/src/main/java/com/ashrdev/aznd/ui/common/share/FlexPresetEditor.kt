@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Widgets
@@ -165,6 +166,35 @@ private fun fitKeyOf(spec: FlexSpec): Any {
     )
 }
 
+/** What the editor is for: [EDIT] changes a preset on sample data; [USE] shows a preset with the person's real data. */
+internal enum class FlexEditorMode { EDIT, USE }
+
+/** What decides the data the poster needs: the cards, their kind, count and choices. Layout and look changes are not in it. */
+private fun contentKeyOf(spec: FlexSpec): Any =
+    spec.blocks.map { listOf(it.id, it.type, it.enabled, it.limit, it.stat, it.keys, it.graph, it.cal) }
+
+/**
+ * [next] (made from the poster as it is drawn, [shown]: the preset's spec with the person's data choices applied by
+ * [bound]) put back on the preset's own spec [base]: the fields the choices decide (text, items, count, graph,
+ * calendar) keep the preset's values unless [next] changed them, so a choice never leaks into the preset.
+ */
+private fun rebaseSpec(next: FlexSpec, shown: FlexSpec, base: FlexSpec): FlexSpec {
+    if (shown == base) return next
+    val baseBy = base.blocks.associateBy { it.id }
+    val shownBy = shown.blocks.associateBy { it.id }
+    return next.copy(blocks = next.blocks.map { b ->
+        val o = baseBy[b.id]
+        val s = shownBy[b.id]
+        if (o == null || s == null) b else b.copy(
+            keys = if (b.keys == s.keys) o.keys else b.keys,
+            limit = if (b.limit == s.limit) o.limit else b.limit,
+            text = if (b.text == s.text) o.text else b.text,
+            graph = if (b.graph == s.graph) o.graph else b.graph,
+            cal = if (b.cal == s.cal) o.cal else b.cal
+        )
+    })
+}
+
 /**
  * The preset editor: the poster maker for one [FlexCardPreset]. Three swipeable pages, also tabs in the bottom bar:
  * Look (colours, text, background), Poster (the live poster; tap a card on it and its settings open under it) and
@@ -173,6 +203,14 @@ private fun fitKeyOf(spec: FlexSpec): Any {
  * (a new one asks for its name first); leaving with unsaved changes asks first.
  * [initial] is null for a new preset (it starts from the blank card), else the preset to edit; one with an id of 0 or
  * less is not stored yet.
+ *
+ * In [FlexEditorMode.USE] (the Use screen) the same editor shows the real data: [initialBindings] are the person's
+ * choices (see [FlexBindings]) and the poster's content comes from [loadBoundContent]. The editor holds two specs:
+ * the preset's own (layout edits apply to it, it is what "Update preset to current" stores) and the one drawn, which
+ * is the first with the choices applied ([bound]). Share opens the Export screen; Update preset to current stores the
+ * layout, look and card options (not the choices) as the preset's new spec ([onSaved] gets it, the screen stays);
+ * Configure again reopens the choices. Leaving with layout changes asks first. [onKept] says an export was added to
+ * the Saved page.
  */
 @Composable
 internal fun FlexPresetEditor(
@@ -180,19 +218,55 @@ internal fun FlexPresetEditor(
     onSaved: (FlexCardPreset) -> Unit,
     onClose: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    mode: FlexEditorMode = FlexEditorMode.EDIT,
+    library: FlexLibrary? = null,
+    initialBindings: FlexBindings = emptyMap(),
+    workoutViewModel: WorkoutViewModel? = null,
+    streakViewModel: StreakViewModel? = null,
+    onKept: () -> Unit = {},
+    /**
+     * The screen whose blueprint ("<Name> default", see FlexDefaults.kt) this poster is: with [FlexEditorMode.EDIT] the
+     * Defaults page's editor (Save writes the blueprint, no name), with [FlexEditorMode.USE] a share started on that
+     * screen (the same Use screen as for a preset). Only that screen's card types and stats are offered either way.
+     */
+    allowed: FlexPreset? = null,
+    /** Screen share only: the blueprint as stored (before the cards the item has no data for were turned off). */
+    blueprint: FlexSpec? = null,
+    /** Screen share only: where the share started, for the defaults of cards turned on or added here. */
+    share: FlexShareContext? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val presetStore = remember { FlexPresetStore(context) }
+    val use = mode == FlexEditorMode.USE && initial != null && library != null &&
+        workoutViewModel != null && streakViewModel != null
+    /** The Use screen of a share started on a screen: no remembered choices, no Configure, "Save layout to ... default". */
+    val screenFlow = use && allowed != null
+    /** The Defaults page's editor: Save writes the blueprint of [allowed]. */
+    val blueprintEdit = !use && allowed != null
 
-    val content by produceState<FlexContent?>(null) {
-        value = FlexSampleContent.load(context)
-    }
-
-    var spec by remember { mutableStateOf<FlexSpec?>(null) }
+    // On the Use screen the preset's spec is there from the start (the data is real, there is no sample to wait for).
+    var spec by remember { mutableStateOf<FlexSpec?>(if (use) initial?.spec?.reconciled() else null) }
     /** The card the editor started from: what "reset" goes back to and what "unsaved changes" is measured against. */
-    var startSpec by remember { mutableStateOf<FlexSpec?>(null) }
+    var startSpec by remember { mutableStateOf<FlexSpec?>(spec) }
+    /** The person's data choices (Use screen only). */
+    var bindings by remember { mutableStateOf(initialBindings) }
+    val contentKey = spec?.let { contentKeyOf(it) }
+    val content by produceState<FlexContent?>(null, use, contentKey, bindings) {
+        value = if (use) {
+            val sp = spec
+            if (sp == null) null else runCatching {
+                loadBoundContent(context, sp, bindings, library!!, workoutViewModel!!, streakViewModel!!)
+            }.getOrNull() ?: value
+        } else {
+            // The sample's title matches the screen the blueprint is for (a preset has no subject: blank kicker).
+            FlexSampleContent.forSubject(FlexSampleContent.load(context), allowed)
+        }
+    }
+    /** The poster as drawn: the preset's spec with the data choices applied. Equal to [spec] in the editor. */
+    val shown = remember(spec, bindings, use) { spec?.let { if (use) it.bound(bindings) else it } }
+    fun view(sp: FlexSpec): FlexSpec = if (use) sp.bound(bindings) else sp
     LaunchedEffect(content) {
         val c = content ?: return@LaunchedEffect
         if (spec == null) {
@@ -206,10 +280,10 @@ internal fun FlexPresetEditor(
     /** True from opening until the card's first automatic fit is done: that fit is part of the starting card, not an edit. */
     var settling by remember { mutableStateOf(true) }
 
-    val assets = rememberFlexAssets(spec, content)
+    val assets = rememberFlexAssets(shown, content)
     // The layout of the card as it is right now: its height, shrink, block positions, what is hidden or cut off.
-    val plan = remember(spec, content, assets) {
-        val sp = spec
+    val plan = remember(shown, content, assets) {
+        val sp = shown
         val ct = content
         if (sp != null && ct != null) FlexPainter.plan(sp, ct, assets) else null
     }
@@ -217,6 +291,13 @@ internal fun FlexPresetEditor(
     var selectedBlock by remember { mutableStateOf<Int?>(null) }
     /** The Add screen is open (it replaces the pages). */
     var adding by remember { mutableStateOf(false) }
+    /** The Export screen is open (Use screen; it replaces the pages). */
+    var exporting by remember { mutableStateOf(false) }
+    /** Share was tapped while a photo card on the poster has no picture: the dialog that says so is open. */
+    var askPictures by remember { mutableStateOf(false) }
+    /** The Configure popup is open (Use screen). */
+    var configuring by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
     /** Set after a card was added: once the pages are back, go to the Poster page. */
     var goPoster by remember { mutableStateOf(false) }
 
@@ -232,11 +313,21 @@ internal fun FlexPresetEditor(
     fun tryCommit(next: FlexSpec, continuous: Boolean = false, join: Boolean = false, force: Boolean = false): Boolean {
         val before = spec
         val ct = content
-        if (!force && before != null && ct != null && fitKeyOf(before) != fitKeyOf(next) &&
-            FlexPainter.refuses(before, next, ct, assets)
+        var next = next
+        if (!force && before != null && ct != null && fitKeyOf(view(before)) != fitKeyOf(view(next)) &&
+            FlexPainter.refuses(view(before), view(next), ct, assets)
         ) {
-            full = true
-            return false
+            // A card that is added (a new block id: Add screen, Duplicate, "Add another") and does not fit is added turned
+            // off instead: a card that is off costs the poster nothing. Any other change that does not fit is refused.
+            val known = before.blocks.map { it.id }.toSet()
+            val added = next.blocks.filter { it.id !in known && it.enabled }.map { it.id }.toSet()
+            val off = if (added.isEmpty()) null else next.copy(blocks = next.blocks.map { if (it.id in added) it.copy(enabled = false) else it })
+            if (off == null || FlexPainter.refuses(view(before), view(off), ct, assets)) {
+                full = true
+                return false
+            }
+            next = off
+            Toast.makeText(context, "The poster is full, so the card was added turned off", Toast.LENGTH_LONG).show()
         }
         if (settling && force) {
             startSpec = next
@@ -259,7 +350,7 @@ internal fun FlexPresetEditor(
 
     var fittedKey by remember { mutableStateOf<Any?>(null) }
     fun markFitted(sp: FlexSpec?) {
-        if (sp != null) fittedKey = fitKeyOf(sp)
+        if (sp != null) fittedKey = fitKeyOf(view(sp))
     }
     fun undo() {
         val now = spec ?: return
@@ -290,10 +381,13 @@ internal fun FlexPresetEditor(
         }
         aligning = true
         val snapshot = assets
+        val drawn = view(sp)
         scope.launch {
             val run = veil.Run(this)
             val fixed = try {
-                withContext(Dispatchers.Default) { runCatching { FlexPainter.rescue(sp, ct, snapshot) }.getOrNull() }
+                withContext(Dispatchers.Default) {
+                    runCatching { FlexPainter.rescue(drawn, ct, snapshot) }.getOrNull()?.let { rebaseSpec(it, drawn, sp) }
+                }
             } finally {
                 aligning = false
             }
@@ -312,7 +406,8 @@ internal fun FlexPresetEditor(
         when (sp.style.layoutMode) {
             FlexLayoutMode.SPLIT -> rescue(join)
             FlexLayoutMode.FREE -> {
-                val placed = FlexPainter.placeBoxes(sp, ct, assets)
+                val drawn = view(sp)
+                val placed = rebaseSpec(FlexPainter.placeBoxes(drawn, ct, assets), drawn, sp)
                 if (placed != sp) commit(placed, join = join, force = true)
                 markFitted(placed)
             }
@@ -328,17 +423,21 @@ internal fun FlexPresetEditor(
         }
         aligning = true
         val snapshot = assets
+        val drawn = view(sp)
         scope.launch {
             val run = veil.Run(this)
-            val result = try {
-                withContext(Dispatchers.Default) { runCatching { FlexPainter.autoAlign(sp, ct, snapshot, rescale = !quiet) }.getOrNull() }
+            val aligned = try {
+                withContext(Dispatchers.Default) { runCatching { FlexPainter.autoAlign(drawn, ct, snapshot, rescale = !quiet) }.getOrNull() }
             } finally {
                 aligning = false
             }
-            run.finish(if (result != null && result.changed && spec == sp) ({ if (spec == sp) commit(result.spec, join = join, force = true) }) else null)
+            // The result is made on the poster as drawn; what goes into the editor is the preset's own spec with its layout.
+            val resultSpec = aligned?.let { rebaseSpec(it.spec, drawn, sp) }
+            val result = aligned
+            run.finish(if (result != null && resultSpec != null && result.changed && spec == sp) ({ if (spec == sp) commit(resultSpec, join = join, force = true) }) else null)
             if (result == null) {
                 if (!quiet) Toast.makeText(context, "Couldn't align the poster", Toast.LENGTH_SHORT).show()
-            } else if (spec == sp || spec == result.spec) {
+            } else if (spec == sp || spec == resultSpec) {
                 if (!quiet) Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                 then?.invoke(result)
             }
@@ -354,10 +453,12 @@ internal fun FlexPresetEditor(
         val ct = content ?: return
         if (sp.style.layoutMode == mode) return
         val snapshot = assets
+        val drawn = view(sp)
         scope.launch {
             val run = veil.Run(this)
             val next = withContext(Dispatchers.Default) {
-                runCatching { FlexPainter.placeBoxes(FlexPainter.withMode(sp, ct, snapshot, mode), ct, snapshot) }.getOrNull()
+                runCatching { FlexPainter.placeBoxes(FlexPainter.withMode(drawn, ct, snapshot, mode), ct, snapshot) }.getOrNull()
+                    ?.let { rebaseSpec(it, drawn, sp) }
             }
             if (next == null || spec != sp) {
                 run.finish(null)
@@ -375,7 +476,7 @@ internal fun FlexPresetEditor(
     }
 
     var alignOnOpen by remember { mutableStateOf(true) }
-    LaunchedEffect(spec != null, content, assets) {
+    LaunchedEffect(spec != null, content, assets, alignOnOpen) {
         if (!alignOnOpen || spec == null || content == null || !assets.ready) return@LaunchedEffect
         alignOnOpen = false
         val sp = spec ?: return@LaunchedEffect
@@ -385,7 +486,35 @@ internal fun FlexPresetEditor(
     LaunchedEffect(alignOnOpen, aligning, veil.up) {
         if (settling && !alignOnOpen && !aligning && !veil.up) settling = false
     }
-    val fitKey = spec?.let { fitKeyOf(it) }
+    // Use screen: new data (a choice changed, Configure again) can need another fit. While nothing was changed by hand
+    // that fit belongs to the starting card (like the first one), after hand changes it is a change of its own.
+    var lastContent by remember { mutableStateOf<FlexContent?>(null) }
+    LaunchedEffect(content) {
+        val c = content ?: return@LaunchedEffect
+        val first = lastContent == null
+        lastContent = c
+        if (first || !use) return@LaunchedEffect
+        if (spec == startSpec) {
+            settling = true
+            alignOnOpen = true
+        } else {
+            delay(FIT_DELAY_MS)
+            fitByItself(join = true)
+        }
+    }
+    // Use screen: a card turned on or added gets its default choices.
+    val activeCards = spec?.blocks?.filter { it.enabled }?.map { it.id to it.type }
+    LaunchedEffect(use, activeCards, screenFlow) {
+        val sp = spec
+        if (!use || sp == null || library == null) return@LaunchedEffect
+        // Only cards without choices yet get their defaults; the choices already made stay.
+        // A photo card added empty stays empty (no picture in its binding): the person picks one with the "+" on the poster.
+        val empty = sp.blocks.filter { it.enabled && it.isEmptyPhoto() }.map { it.id }.toSet()
+        val missing = defaultBindings(sp, library, bindings, if (screenFlow) share else null).filterKeys { it !in bindings }
+            .mapValues { (id, b) -> if (id in empty) FlexBinding() else b }
+        if (missing.isNotEmpty()) bindings = bindings + missing
+    }
+    val fitKey = shown?.let { fitKeyOf(it) }
     LaunchedEffect(fitKey, assets.ready) {
         val key = fitKey ?: return@LaunchedEffect
         if (alignOnOpen || !assets.ready || content == null || key == fittedKey) return@LaunchedEffect
@@ -396,6 +525,20 @@ internal fun FlexPresetEditor(
 
     val picker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
         updateStyle { it.copy(photoUri = uri.toString(), bgMode = FlexBgMode.PHOTO) }
+    }
+
+    /** The empty photo card the "+" on the poster was tapped for (the picker answers for it). */
+    var photoFor by remember { mutableStateOf<Int?>(null) }
+    val cardPicker = rememberImagePicker(aspect = null, outputWidth = 1600, outputHeight = 1600) { uri ->
+        val id = photoFor ?: return@rememberImagePicker
+        photoFor = null
+        val picked = uri.toString()
+        if (use) {
+            // Use screen: the picture is a data choice of that card.
+            bindings = bindings + (id to (bindings[id] ?: FlexBinding()).copy(photoUri = picked))
+        } else {
+            update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == id) it.copy(keys = listOf(picked), text = "") else it }) }
+        }
     }
 
     val pagerState = rememberPagerState(initialPage = PAGE_POSTER, pageCount = { FlexEditorPages.size })
@@ -416,6 +559,66 @@ internal fun FlexPresetEditor(
         )
         onSaved(saved)
     }
+    /** Use screen: stores the layout, look and card options as the preset's new spec (not the data choices). */
+    fun updatePreset() {
+        val sp = spec ?: return
+        val base = initial ?: return
+        val saved = presetStore.save(base.copy(spec = sp))
+        startSpec = sp
+        Toast.makeText(context, "Preset updated", Toast.LENGTH_SHORT).show()
+        onSaved(saved)
+    }
+    /** Screen share: the Use screen as opened or as last saved; what "the person turned a card on or off here" is measured against. */
+    var enabledRef by remember { mutableStateOf(initial?.spec) }
+    /** Screen share: the blueprint as it is stored now (what a card the person did not touch goes back to). */
+    var blueprintNow by remember { mutableStateOf(blueprint) }
+    /**
+     * Screen share: "Save layout to <Name> default". Writes the base spec (layout, look, card options; never the data
+     * choices). Cards the share turned off for lack of data ([prepareScreenShare]) keep the enabled state of the stored
+     * blueprint, unless the person turned that card on or off on this screen since the screen opened (or was last saved).
+     */
+    fun saveToDefault() {
+        val source = allowed ?: return
+        val sp = spec ?: return
+        val ref = enabledRef?.blocks.orEmpty().associateBy { it.id }
+        val kept = blueprintNow?.blocks.orEmpty().associateBy { it.id }
+        val base = blueprintNow
+        val out = if (base == null) sp else sp.copy(blocks = sp.blocks.map { c ->
+            val r = ref[c.id]
+            val o = kept[c.id]
+            if (o == null) {
+                // A card added on this screen: saved in blueprint form (data is the share's, not this card's).
+                when {
+                    c.type == FlexBlockType.PHOTO -> c.copy(keys = null, text = "")
+                    c.type == FlexBlockType.GRAPH && allowed == FlexPreset.EXERCISE ->
+                        c.copy(graph = c.graph.copy(variables = listOf(FLEX_SCREEN_EXERCISE_1RM)))
+                    else -> c
+                }
+            } else {
+                // The stored blueprint's card with this screen's layout/look and card options; what the share filled in
+                // (photo pictures, a graph's resolved variables) and the card's own text stay the blueprint's.
+                c.copy(
+                    keys = o.keys,
+                    text = o.text,
+                    graph = c.graph.copy(variables = o.graph.variables),
+                    enabled = if (r == null || c.enabled != r.enabled) c.enabled else o.enabled
+                )
+            }
+        }).reconciled()
+        FlexDefaultsStore.save(context, source, out)
+        enabledRef = sp
+        blueprintNow = out
+        startSpec = sp
+        Toast.makeText(context, "Saved to ${source.defaultsName()} default", Toast.LENGTH_SHORT).show()
+    }
+    /** Defaults page's editor: stores the blueprint (no name to ask). */
+    fun saveBlueprint() {
+        val source = allowed ?: return
+        val sp = spec ?: return
+        FlexDefaultsStore.save(context, source, sp)
+        val base = initial ?: return
+        onSaved(base.copy(spec = sp))
+    }
     fun askName(mode: Int) {
         nameDraft = name.ifBlank { initial?.name?.takeIf { it.isNotBlank() } ?: presetStore.nextDefaultName() }
         nameDialog = mode
@@ -432,16 +635,29 @@ internal fun FlexPresetEditor(
         }
     }
 
-    BackHandler(enabled = !adding) { requestClose() }
-    val addSpec = spec
+    BackHandler(enabled = !adding && !exporting) { requestClose() }
+    val addSpec = shown
     val addContent = content
-    if (adding && addSpec != null && addContent != null) {
+    if (exporting && addSpec != null && addContent != null && initial != null) {
+        FlexExportScreen(
+            spec = addSpec,
+            content = addContent,
+            presetId = initial.id,
+            presetName = initial.name,
+            bindings = bindings,
+            onKept = onKept,
+            onBack = { exporting = false },
+            onHome = onHome,
+            onOpenSettings = onOpenSettings,
+            rememberChoices = !screenFlow
+        )
+    } else if (adding && addSpec != null && addContent != null) {
         FlexAddPage(
             spec = addSpec,
             content = addContent,
             onAdd = { draft, newId ->
                 // A refused add leaves the poster as it was (the full dialog tells why) and the popup open.
-                val done = tryCommit(draft)
+                val done = tryCommit(rebaseSpec(draft, addSpec, spec ?: addSpec))
                 if (done) {
                     selectedBlock = newId
                     adding = false
@@ -451,31 +667,79 @@ internal fun FlexPresetEditor(
             },
             onBack = { adding = false },
             onHome = onHome,
-            onOpenSettings = onOpenSettings
+            onOpenSettings = onOpenSettings,
+            library = if (use) library else null,
+            allowed = allowed
         )
     } else {
         ScreenScaffold(
             title = name.ifBlank { "New preset" },
-            subtitle = "Preset",
+            subtitle = if (use) "Use preset" else if (blueprintEdit) "Default" else "Preset",
             onBack = { requestClose() },
             onHome = onHome,
             onOpenSettings = onOpenSettings,
             subPages = bar,
             topBarActions = {
-                IconButton(enabled = ready, onClick = { askName(2) }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Rename")
-                }
-                IconButton(
-                    enabled = ready,
-                    onClick = {
-                        if (stored) save(name.ifBlank { initial?.name.orEmpty() }) else askName(1)
+                if (use) {
+                    IconButton(enabled = ready && !aligning && !veil.up, onClick = {
+                        // A poster with an empty photo card is not shared (see FLEX_EMPTY_PHOTO_MESSAGE).
+                        if (shown?.blocks?.any { it.enabled && it.isEmptyPhoto() } == true) askPictures = true else exporting = true
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Share")
                     }
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = "Save")
+                    Box {
+                        IconButton(onClick = { moreMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                            if (screenFlow) {
+                                DropdownMenuItem(
+                                    text = { Text("Save layout to ${allowed?.defaultsName().orEmpty()} default") },
+                                    enabled = ready,
+                                    onClick = {
+                                        moreMenu = false
+                                        saveToDefault()
+                                    }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("Update preset to current") },
+                                    enabled = ready,
+                                    onClick = {
+                                        moreMenu = false
+                                        updatePreset()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Configure again") },
+                                    enabled = ready,
+                                    onClick = {
+                                        moreMenu = false
+                                        configuring = true
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    if (!blueprintEdit) {
+                        IconButton(enabled = ready, onClick = { askName(2) }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Rename")
+                        }
+                    }
+                    IconButton(
+                        enabled = ready,
+                        onClick = {
+                            if (blueprintEdit) saveBlueprint()
+                            else if (stored) save(name.ifBlank { initial?.name.orEmpty() }) else askName(1)
+                        }
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "Save")
+                    }
                 }
             }
         ) { padding ->
-            val sp = spec
+            val sp = shown
             val ct = content
             val pl = plan
             if (sp == null || ct == null || pl == null) {
@@ -511,10 +775,36 @@ internal fun FlexPresetEditor(
                                 assets = assets,
                                 plan = pl,
                                 bottom = bottom,
-                                onCard = { card -> commit(card) },
+                                onCard = { card -> spec?.let { base -> commit(rebaseSpec(card, sp, base)) } },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
                                 panel = { id ->
+                                    val own = spec?.blocks?.firstOrNull { it.id == id }
+                                    // A share from a screen: the screen fixes the session, lifts, routine, streaks and day note, so
+                                    // only the title, text, photo and a graph's range are chosen here (a screen's own photo cards are
+                                    // shown as a photo choice too: the item's pictures and the gallery).
+                                    val choiceBlock = when {
+                                        own == null -> null
+                                        !screenFlow -> own
+                                        own.type == FlexBlockType.PHOTO -> own.copy(text = "")
+                                        own.type == FlexBlockType.HEADER || own.type == FlexBlockType.TEXT ||
+                                            own.type == FlexBlockType.GRAPH -> own
+                                        else -> null
+                                    }
+                                    // The data choice is the panel's first (open) fold; the card's own folds below start closed.
+                                    val dataFold = use && library != null && choiceBlock != null && choiceBlock.dataNeed() != null
+                                    if (dataFold && library != null && choiceBlock != null) {
+                                        FlexFoldSection("Data", "What this card shows", initiallyOpen = true) {
+                                            FlexDataChoice(
+                                                block = choiceBlock,
+                                                binding = bindings[id] ?: FlexBinding(),
+                                                library = library,
+                                                onChange = { chosen -> bindings = bindings + (id to chosen) },
+                                                graphRangeOnly = screenFlow
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
                                     FlexCardConfig(
                                         blockId = id,
                                         spec = sp,
@@ -524,7 +814,12 @@ internal fun FlexPresetEditor(
                                         onChange = { continuous, transform ->
                                             update(continuous = continuous, transform = transform)
                                         },
-                                        onSelect = { selectedBlock = it }
+                                        onSelect = { selectedBlock = it },
+                                        dataBound = use,
+                                        allowedStats = allowed?.allowedStats()?.takeIf { it.isNotEmpty() },
+                                        fixedGraphVariable = allowed == FlexPreset.EXERCISE,
+                                        photoSlot = blueprintEdit,
+                                        firstOpen = !dataFold
                                     )
                                 },
                                 canUndo = history.canUndo,
@@ -547,7 +842,12 @@ internal fun FlexPresetEditor(
                                 },
                                 onMode = { setMode(it) },
                                 aligning = aligning,
-                                veiled = veil.up
+                                veiled = veil.up,
+                                // Blueprint editor: photo cards are slots (the shared item's photos), there is nothing to pick.
+                                onPickPhoto = if (blueprintEdit) null else ({ id: Int ->
+                                    photoFor = id
+                                    cardPicker.launch()
+                                })
                             )
                             else -> FlexCardsPage(
                                 spec = sp,
@@ -571,6 +871,39 @@ internal fun FlexPresetEditor(
         }
     }
     if (full) FlexFullDialog { full = false }
+    if (askPictures) {
+        // The first empty photo card in poster order (cards the poster cannot show come last).
+        val empty = shown?.blocks.orEmpty().filter { it.enabled && it.isEmptyPhoto() }.map { it.id }
+        val first = plan?.boxes?.map { it.id }?.firstOrNull { it in empty } ?: empty.firstOrNull()
+        AlertDialog(
+            onDismissRequest = { askPictures = false },
+            text = { Text(FLEX_EMPTY_PHOTO_MESSAGE) },
+            confirmButton = {
+                TextButton(onClick = {
+                    askPictures = false
+                    if (first != null) {
+                        selectedBlock = first
+                        scope.launch { pagerState.animateScrollToPage(PAGE_POSTER) }
+                    }
+                }) { Text("Show the card") }
+            },
+            dismissButton = { TextButton(onClick = { askPictures = false }) { Text("Cancel") } }
+        )
+    }
+    val configSpec = spec
+    if (configuring && use && configSpec != null && library != null) {
+        FlexConfigureDialog(
+            spec = configSpec,
+            library = library,
+            initial = bindings,
+            previewContent = { b -> loadBoundContent(context, configSpec, b, library, workoutViewModel!!, streakViewModel!!) },
+            onDone = { chosen ->
+                configuring = false
+                bindings = chosen
+            },
+            onCancel = { configuring = false }
+        )
+    }
     if (nameDialog != 0) {
         val saving = nameDialog == 1
         AlertDialog(
@@ -603,7 +936,7 @@ internal fun FlexPresetEditor(
         AlertDialog(
             onDismissRequest = { askDiscard = false },
             title = { Text("Discard changes?") },
-            text = { Text("Your changes to this preset have not been saved.") },
+            text = { Text(if (use) "Your layout changes will not be kept." else "Your changes to this preset have not been saved.") },
             confirmButton = {
                 TextButton(onClick = {
                     askDiscard = false

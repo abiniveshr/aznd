@@ -5,6 +5,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Close
@@ -17,6 +20,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -25,18 +29,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.ViewQuilt
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.CloseFullscreen
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FlipToBack
 import androidx.compose.material.icons.filled.FlipToFront
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +74,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.common.tiling.DropKind
@@ -111,7 +122,9 @@ internal fun FlexViewPage(
     onLayer: (id: Int, front: Boolean) -> Unit,
     onMode: (FlexLayoutMode) -> Unit,
     aligning: Boolean,
-    veiled: Boolean = false
+    veiled: Boolean = false,
+    /** Opens the picture picker for the empty photo card [blockId] (a "+" over each such card); null shows no "+". */
+    onPickPhoto: ((blockId: Int) -> Unit)? = null
 ) {
     val mode = spec.style.layoutMode
     val scope = rememberCoroutineScope()
@@ -419,8 +432,12 @@ internal fun FlexViewPage(
     // The selected card's settings take the bottom half; the poster shrinks into the top half and stays live.
     val panelId = selectedId?.takeIf { id -> spec.blocks.any { it.id == id } }
     BackHandler(enabled = panelId != null) { selectNow(null) }
+    // The panel can open to the whole page (the poster gives way entirely); closing it puts it back to half for the next card.
+    var full by remember(panelId != null) { mutableStateOf(false) }
+    // Registered after the close handler above, so it runs first: back from the full panel goes to half, not out.
+    BackHandler(enabled = panelId != null && full) { full = false }
     val share by animateFloatAsState(
-        targetValue = if (panelId != null) 0.5f else 1f,
+        targetValue = if (panelId == null) 1f else if (full) 0f else 0.5f,
         animationSpec = tween(PANEL_MS),
         label = "flexPosterShare"
     )
@@ -438,7 +455,8 @@ internal fun FlexViewPage(
         ) {
             val posterHeight = maxHeight * share
             Column(modifier = Modifier.fillMaxSize()) {
-                BoxWithConstraints(
+                // Not composed while the panel is full (no poster to draw or touch, and a box of no height to avoid).
+                if (share > 0.01f) BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(posterHeight)
@@ -457,6 +475,31 @@ internal fun FlexViewPage(
                             canvasModifier = gestures,
                             veiled = veiled,
                             instantShape = resizing,
+                            foreground = { k ->
+                                // A "+" in the middle of every empty photo card opens the picture picker at once.
+                                if (onPickPhoto != null && dragging == null && !resizing && !veiled) {
+                                    val half = 20.dp
+                                    for (box in plan.boxes) {
+                                        val own = spec.blocks.firstOrNull { it.id == box.id }
+                                        if (own == null || !own.isEmptyPhoto()) continue
+                                        key(box.id) {
+                                            FilledTonalIconButton(
+                                                onClick = { onPickPhoto(box.id) },
+                                                modifier = Modifier
+                                                    .offset {
+                                                        IntOffset(
+                                                            ((box.left + box.width / 2f) * k - half.toPx()).roundToInt(),
+                                                            ((box.top + box.height / 2f) * k - half.toPx()).roundToInt()
+                                                        )
+                                                    }
+                                                    .size(half * 2)
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = "Add a picture")
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                             poses = {
                                 val free = freeAt
                                 val rid = released
@@ -594,6 +637,38 @@ internal fun FlexViewPage(
                                 .weight(1f)
                                 .fillMaxWidth()
                         ) {
+                            // The handle: drag it up for the full panel, down for the half one, or tap it to switch. Only
+                            // the handle drags, so the header's buttons keep plain taps.
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(22.dp)
+                                    .pointerInput(full) {
+                                        val reach = 24.dp.toPx()
+                                        var total = 0f
+                                        detectVerticalDragGestures(
+                                            onDragStart = { total = 0f },
+                                            onDragEnd = {
+                                                if (total < -reach) full = true else if (total > reach) full = false
+                                            },
+                                            onDragCancel = { total = 0f },
+                                            onVerticalDrag = { change, amount ->
+                                                change.consume()
+                                                total += amount
+                                            }
+                                        )
+                                    }
+                                    .pointerInput(Unit) { detectTapGestures { full = !full } },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(36.dp)
+                                        .height(4.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                                )
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -614,6 +689,12 @@ internal fun FlexViewPage(
                                     IconButton(onClick = { onLayer(block.id, true) }, enabled = position < plan.boxes.size) {
                                         Icon(Icons.Default.FlipToFront, contentDescription = "Bring to front")
                                     }
+                                }
+                                IconButton(onClick = { full = !full }) {
+                                    Icon(
+                                        if (full) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
+                                        contentDescription = if (full) "Show the poster" else "Full screen"
+                                    )
                                 }
                                 IconButton(onClick = { selectNow(null) }) {
                                     Icon(Icons.Default.Close, contentDescription = "Close")

@@ -63,11 +63,23 @@ internal fun FlexAddPage(
     onAdd: (draft: FlexSpec, newId: Int) -> Boolean,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    /** The person's real data (Use screen): then what to offer is decided from it, since the shared content lacks per-card data. */
+    library: FlexLibrary? = null,
+    /** The screen whose blueprint this poster is (Defaults editor, or a share from that screen): only its card types are offered. Null = all. */
+    allowed: FlexPreset? = null
 ) {
-    val groups = remember(content) {
+    val allowedTypes = remember(allowed) { allowed?.allowedTypes() }
+    // The Defaults editor (a blueprint, no library): a Photo card is a slot for the shared item's photos.
+    val photoSlot = allowed != null && library == null
+    val allowedStats = remember(allowed) { allowed?.allowedStats()?.takeIf { it.isNotEmpty() } }
+    val groups = remember(content, library, allowedTypes) {
         FlexCategory.entries.mapNotNull { cat ->
-            val types = FlexBlockType.entries.filter { it.category == cat && content.has(it) }
+            // The 3D body model stays hidden until the model is real.
+            val types = FlexBlockType.entries.filter {
+                it.category == cat && it != FlexBlockType.MODEL && (allowedTypes == null || it in allowedTypes) &&
+                    offered(it, content, library, blueprint = allowed != null)
+            }
             if (types.isEmpty()) null else cat to types
         }
     }
@@ -127,9 +139,12 @@ internal fun FlexAddPage(
     if (type != null) {
         val newId = spec.nextBlockId()
         AddCardDialog(
-            start = spec.copy(blocks = spec.blocks + newCardOf(type, spec, newId)),
+            start = spec.copy(blocks = spec.blocks + newCardOf(type, spec, newId, allowedStats, allowed == FlexPreset.EXERCISE, photoSlot)),
             newId = newId,
             content = content,
+            allowedStats = allowedStats,
+            fixedGraphVariable = allowed == FlexPreset.EXERCISE,
+            photoSlot = photoSlot,
             onCancel = { picked = null },
             onAdd = onAdd
         )
@@ -137,19 +152,32 @@ internal fun FlexAddPage(
 }
 
 /** A new card of [type] with its starting settings; [spec] is the poster it is added to. */
-private fun newCardOf(type: FlexBlockType, spec: FlexSpec, id: Int): FlexBlock {
-    val stat = FlexWorkoutStat.entries.firstOrNull { s ->
+private fun newCardOf(
+    type: FlexBlockType,
+    spec: FlexSpec,
+    id: Int,
+    allowedStats: List<FlexWorkoutStat>?,
+    screenGraph: Boolean,
+    photoSlot: Boolean
+): FlexBlock {
+    val stats = allowedStats ?: FlexWorkoutStat.entries.toList()
+    val stat = stats.firstOrNull { s ->
         spec.blocks.none { it.type == FlexBlockType.WORKOUT_STATS && it.stat == s }
-    } ?: FlexWorkoutStat.entries.first()
+    } ?: stats.first()
     return FlexBlock(
         id = id,
         type = type,
         limit = if (type == FlexBlockType.ROUTINE) 10 else 3,
         text = if (type == FlexBlockType.TEXT) "Your text here" else "",
         stat = if (type == FlexBlockType.WORKOUT_STATS) stat else FlexWorkoutStat.entries.first(),
-        graph = FlexGraphConfig(),
+        // A new Session stats card starts without the "workout & date" line (the title usually says it).
+        flag = !(type == FlexBlockType.WORKOUT_STATS && stat == FlexWorkoutStat.SESSION),
+        // The Exercise blueprint's graph always plots that exercise's one rep max (a placeholder the share resolves).
+        graph = if (type == FlexBlockType.GRAPH && screenGraph) FlexGraphConfig(variables = listOf(FLEX_SCREEN_EXERCISE_1RM)) else FlexGraphConfig(),
         cal = FlexCalendarSpec(source = ""),
-        keys = null
+        // A new photo card starts with no picture (null keys would be the screen's own photo); the + on the poster picks one.
+        // A blueprint's photo card is a slot: null keys draw the sample picture, the share fills it with the item's photo.
+        keys = if (type == FlexBlockType.PHOTO && !photoSlot) listOf(FLEX_NO_PHOTO) else null
     )
 }
 
@@ -162,6 +190,9 @@ private fun AddCardDialog(
     start: FlexSpec,
     newId: Int,
     content: FlexContent,
+    allowedStats: List<FlexWorkoutStat>?,
+    fixedGraphVariable: Boolean,
+    photoSlot: Boolean,
     onCancel: () -> Unit,
     onAdd: (FlexSpec, Int) -> Boolean
 ) {
@@ -201,7 +232,10 @@ private fun AddCardDialog(
                     assets = assets,
                     mode = FlexConfigMode.ADD,
                     onChange = { _, transform -> draft = transform(draft) },
-                    onSelect = { id -> if (id != null && draft.blocks.any { it.id == id }) focus = id }
+                    onSelect = { id -> if (id != null && draft.blocks.any { it.id == id }) focus = id },
+                    allowedStats = allowedStats,
+                    fixedGraphVariable = fixedGraphVariable,
+                    photoSlot = photoSlot
                 )
             }
             Row(
@@ -243,4 +277,23 @@ private fun addNoteOf(type: FlexBlockType): String = when (type) {
     FlexBlockType.TEXT -> "Your own words"
     FlexBlockType.CALENDAR -> "A month of days with highlights"
     FlexBlockType.MODEL -> "The 3D body model"
+}
+
+/** Whether a card of [type] can be offered: from the [library] when there is one (Use screen), else from what the [content] has. */
+private fun offered(type: FlexBlockType, content: FlexContent, library: FlexLibrary?, blueprint: Boolean): Boolean {
+    // A blueprint is a layout for a screen: any of its allowed types can be put on it (the data comes from the screen later).
+    if (blueprint) return true
+    if (library == null) return content.has(type)
+    return when (type) {
+        FlexBlockType.HEADER, FlexBlockType.TEXT -> true
+        // The phone's gallery can always give a photo.
+        FlexBlockType.PHOTO -> true
+        FlexBlockType.STREAKS, FlexBlockType.DAY_NOTE -> library.streaks.isNotEmpty()
+        FlexBlockType.WORKOUT_STATS -> library.sessions.isNotEmpty() || library.exercisesWithData.isNotEmpty()
+        FlexBlockType.EXERCISES -> library.sessions.isNotEmpty()
+        FlexBlockType.ROUTINE -> library.routines.isNotEmpty()
+        FlexBlockType.GRAPH -> library.graphs.isNotEmpty()
+        FlexBlockType.CALENDAR -> library.calendars.isNotEmpty()
+        FlexBlockType.MODEL -> false
+    }
 }

@@ -25,11 +25,19 @@ import java.util.Locale
 
 /**
  * Placeholder content for the preset editor: every block type has something to show, so a card can be designed
- * without a real workout or streak behind it. The pictures are generated once as PNG files in cacheDir/flex_sample
+ * without a real workout or streak behind it. It is unmistakably sample data (Sample workout, Exercise A to D, Streak A
+ * to C, round numbers, grey placeholder pictures); nothing in it reads like a real person's log. Its calendar days cover
+ * [CALENDAR_DAYS] days back, so any month, quadrant or year a card is set to shows highlighted days. The pictures are generated once as PNG files in cacheDir/flex_sample
  * (referenced by file uris, which [FlexBitmaps.load] reads through the content resolver like any other uri).
  */
 object FlexSampleContent {
     private const val DIR = "flex_sample"
+
+    /** How far back the sample calendar days reach (about 2.2 years): every period a card can be set to has highlights. */
+    private const val CALENDAR_DAYS = 800
+
+    /** Streak A slips every this many days (counting back from today), so its current run is STREAK_PERIOD - 1 days. */
+    private const val STREAK_PERIOD = 11
     private val mutex = Mutex()
 
     @Volatile
@@ -50,6 +58,19 @@ object FlexSampleContent {
     }
 
     /**
+     * [content] with the header of the subject a blueprint is for, so the Title card of an editor on sample data reads like the real
+     * one: Workout "WORKOUT / Sample workout", Routine "ROUTINE / Sample routine", Exercise "EXERCISE / Exercise A", Streak day
+     * "STREAK A / Day 10". A preset ([source] null or HOME) has no subject: no kicker, the card's own text is its title.
+     */
+    fun forSubject(content: FlexContent, source: FlexPreset?): FlexContent = when (source) {
+        FlexPreset.WORKOUT -> content.copy(kicker = "WORKOUT", title = "Sample workout", subtitle = "Sample content")
+        FlexPreset.ROUTINE -> content.copy(kicker = "ROUTINE", title = "Sample routine", subtitle = "4 exercises \u00b7 11 sets")
+        FlexPreset.EXERCISE -> content.copy(kicker = "EXERCISE", title = "Exercise A", subtitle = "16 sessions")
+        FlexPreset.STREAK_DAY -> content.copy(kicker = "STREAK A", title = "Day 10", subtitle = "")
+        FlexPreset.HOME, null -> content.copy(kicker = "", title = "Sample workout", subtitle = "")
+    }
+
+    /**
      * The card a new preset starts with: a title, a photo, the top lift as a hero number and a 1RM graph, on the
      * Midnight look. A block of a type the [content] has nothing for is left off.
      */
@@ -58,7 +79,7 @@ object FlexSampleContent {
             starter(FlexBlockType.HEADER),
             starter(FlexBlockType.PHOTO),
             starter(FlexBlockType.WORKOUT_STATS, limit = 1, stat = FlexWorkoutStat.ONE_RM),
-            starter(FlexBlockType.GRAPH, graph = FlexGraphConfig(listOf(FlexGraphLoader.exerciseId("Bench Press")), FlexGraphRange.MONTHS_6))
+            starter(FlexBlockType.GRAPH, graph = FlexGraphConfig(listOf(FlexGraphLoader.exerciseId("Exercise A")), FlexGraphRange.MONTHS_6))
         ).filter { content.has(it.type) }
         val blocks = wanted.mapIndexed { i, b -> b.copy(id = i + 1) }
         return FlexSpec(flexStyleOf(FlexPalettes.Midnight, FlexAspect.PORTRAIT), blocks)
@@ -75,11 +96,11 @@ object FlexSampleContent {
 
     private fun build(context: Context): FlexContent {
         val dir = File(context.cacheDir, DIR).apply { mkdirs() }
-        val main = picture(dir, "photo_main.png", 1200, 900, Color.rgb(255, 138, 76), Color.rgb(124, 58, 237), "Sample photo", Shape.SUN)
-        val p1 = picture(dir, "photo_1.png", 900, 1200, Color.rgb(61, 214, 208), Color.rgb(11, 110, 142), "Sample photo 1", Shape.HILLS)
-        val p2 = picture(dir, "photo_2.png", 1200, 900, Color.rgb(255, 209, 102), Color.rgb(217, 72, 43), "Sample photo 2", Shape.SUN)
-        val p3 = picture(dir, "photo_3.png", 1000, 1000, Color.rgb(92, 224, 160), Color.rgb(20, 68, 44), "Sample photo 3", Shape.HILLS)
-        val model = picture(dir, "model.png", 600, 900, Color.TRANSPARENT, Color.TRANSPARENT, "Sample model", Shape.FIGURE)
+        val main = picture(dir, "sample_photo_main.png", 1200, 900, Color.rgb(150, 156, 170), Color.rgb(96, 102, 118), "Sample photo", Shape.PLACEHOLDER)
+        val p1 = picture(dir, "sample_photo_1.png", 900, 1200, Color.rgb(150, 156, 170), Color.rgb(96, 102, 118), "Sample photo 1", Shape.PLACEHOLDER)
+        val p2 = picture(dir, "sample_photo_2.png", 1200, 900, Color.rgb(150, 156, 170), Color.rgb(96, 102, 118), "Sample photo 2", Shape.PLACEHOLDER)
+        val p3 = picture(dir, "sample_photo_3.png", 1000, 1000, Color.rgb(150, 156, 170), Color.rgb(96, 102, 118), "Sample photo 3", Shape.PLACEHOLDER)
+        val model = picture(dir, "sample_model.png", 600, 900, Color.TRANSPARENT, Color.TRANSPARENT, "Sample model", Shape.FIGURE)
         fun uri(f: File) = Uri.fromFile(f).toString()
 
         val now = System.currentTimeMillis()
@@ -87,78 +108,80 @@ object FlexSampleContent {
         val today = todayDayKey()
         val graphs = sampleGraphs(now, day)
 
-        val runStart = addDaysKey(today, -45)
-        val runDays = dayKeysBetween(runStart, today).filterIndexed { i, _ -> i % 9 != 5 }
-        val trainStart = addDaysKey(today, -70)
-        val trained = dayKeysBetween(trainStart, today).filterIndexed { i, _ -> i % 7 in intArrayOf(0, 2, 4) }
+        // Streak A: kept every day except a slip every 11th day back from today, so its current run is 10 days (the graph
+        // below follows the same rule). Workout days: Mon/Wed/Fri-like, three a week. Both reach CALENDAR_DAYS back.
+        val firstDay = addDaysKey(today, -(CALENDAR_DAYS - 1))
+        val allDays = dayKeysBetween(firstDay, today)
+        val keptDays = allDays.filterIndexed { i, _ -> (allDays.size - 1 - i) % STREAK_PERIOD != STREAK_PERIOD - 1 }
+        val trained = allDays.filterIndexed { i, _ -> i % 7 in intArrayOf(0, 2, 4) }
 
         return FlexContent(
             kicker = "WORKOUT",
-            title = "Push day",
+            title = "Sample workout",
             subtitle = "Sample content",
             dateText = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(now)),
             streaks = listOf(
-                FlexStreakItem(1L, "Morning run", 32, 45),
-                FlexStreakItem(2L, "Read 20 pages", 18, 18),
-                FlexStreakItem(3L, "No sugar", 7, 21)
+                FlexStreakItem(1L, "Streak A", 10, 10),
+                FlexStreakItem(2L, "Streak B", 20, 30),
+                FlexStreakItem(3L, "Streak C", 5, 50)
             ),
             lifts = listOf(
-                FlexLiftItem("Deadlift", 180.0, 3, 8.5, 198.0, now - 2 * day),
-                FlexLiftItem("Squat", 150.0, 5, 8.0, 175.0, now - 4 * day),
-                FlexLiftItem("Bench Press", 100.0, 5, 9.0, 117.5, now - 1 * day),
-                FlexLiftItem("Overhead Press", 60.0, 6, null, 72.0, now - 6 * day)
+                FlexLiftItem("Exercise A", 100.0, 5, 8.0, 120.0, now - 1 * day),
+                FlexLiftItem("Exercise B", 80.0, 8, 8.0, 100.0, now - 2 * day),
+                FlexLiftItem("Exercise C", 60.0, 10, null, 80.0, now - 3 * day),
+                FlexLiftItem("Exercise D", 40.0, 12, null, 60.0, now - 4 * day)
             ),
             exercises = listOf(
                 FlexExerciseItem(
-                    "Bench Press",
-                    listOf(FlexSetLine(80.0, 8, rpe = 7.0), FlexSetLine(90.0, 6, rpe = 8.0), FlexSetLine(100.0, 5, rpe = 9.0)),
+                    "Exercise A",
+                    listOf(FlexSetLine(60.0, 10, rpe = 7.0), FlexSetLine(80.0, 8, rpe = 8.0), FlexSetLine(100.0, 5, rpe = 9.0)),
                     bestIndex = 2
                 ),
                 FlexExerciseItem(
-                    "Incline Dumbbell Press",
-                    listOf(FlexSetLine(30.0, 10, rpe = 7.5), FlexSetLine(32.5, 8, rpe = 8.5)),
+                    "Exercise B",
+                    listOf(FlexSetLine(40.0, 10, rpe = 7.0), FlexSetLine(50.0, 8, rpe = 8.0)),
                     bestIndex = 1
                 ),
                 FlexExerciseItem(
-                    "Triceps Pushdown",
-                    listOf(FlexSetLine(35.0, 12), FlexSetLine(40.0, 10), FlexSetLine(40.0, 9)),
-                    bestIndex = 1
+                    "Exercise C",
+                    listOf(FlexSetLine(30.0, 12), FlexSetLine(30.0, 10), FlexSetLine(30.0, 10)),
+                    bestIndex = 0
                 ),
-                FlexExerciseItem("Plank", listOf(FlexSetLine(seconds = 60), FlexSetLine(seconds = 75)), bestIndex = 1)
+                FlexExerciseItem("Exercise D", listOf(FlexSetLine(seconds = 60), FlexSetLine(seconds = 90)), bestIndex = 1)
             ),
             routine = listOf(
-                FlexRoutineItem("Bench Press", 3, "3 × 5–8"),
-                FlexRoutineItem("Incline Dumbbell Press + Lateral Raise", 3, "3 × 10–12", "Superset"),
-                FlexRoutineItem("Triceps Pushdown", 3, "3 × 12", "Drop set"),
-                FlexRoutineItem("Plank", 2, null)
+                FlexRoutineItem("Exercise A", 3, "3 × 5–8"),
+                FlexRoutineItem("Exercise B + Exercise C", 3, "3 × 10", "Superset"),
+                FlexRoutineItem("Exercise D", 3, "3 × 12", "Drop set"),
+                FlexRoutineItem("Exercise E", 2, null)
             ),
             stats = listOf(
-                FlexStat("Duration", "1:12:30"),
-                FlexStat("Volume", "8,450 kg"),
-                FlexStat("Sets", "11"),
+                FlexStat("Duration", "1:00:00"),
+                FlexStat("Volume", "10,000 kg"),
+                FlexStat("Sets", "10"),
                 FlexStat("Exercises", "4")
             ),
             graphs = graphs,
-            dayNote = "Felt strong today. Keep showing up.",
+            dayNote = "Sample note",
             photoUri = uri(main),
             calendars = listOf(
-                FlexCalendarSource("streak:1", "Morning run", runDays.associateWith { FlexDay() }, runStart),
-                FlexCalendarSource("workouts", "Workout days", trained.associateWith { FlexDay() }, trainStart)
+                FlexCalendarSource("streak:1", "Streak A", keptDays.associateWith { FlexDay() }, firstDay),
+                FlexCalendarSource("workouts", "Workout days", trained.associateWith { FlexDay() }, firstDay)
             ),
-            calendarDay = "",
+            calendarDay = today,
             calendarToday = today,
             photos = listOf(
-                FlexPhoto(uri(p1), "Sample · Day 1"),
-                FlexPhoto(uri(p2), "Sample · Day 2"),
-                FlexPhoto(uri(p3), "Sample · Day 3")
+                FlexPhoto(uri(p1), "Sample photo 1"),
+                FlexPhoto(uri(p2), "Sample photo 2"),
+                FlexPhoto(uri(p3), "Sample photo 3")
             ),
             modelUri = uri(model)
         )
     }
 
     /**
-     * A plausible series for every variable the real loader can produce ([FlexGraphLoader]): the dashboard's ids, a few
-     * exercises' 1RM and a streak, over the last months.
+     * A plausible series for every variable the real loader can produce ([FlexGraphLoader]): the dashboard's ids, Exercises A to D's 1RM
+     * and Streak A, over the last months.
      */
     private fun sampleGraphs(now: Long, day: Long): List<FlexGraphSeries> {
         fun daily(days: Int, f: (Int) -> Double) =
@@ -173,20 +196,20 @@ object FlexSampleContent {
         val nutrition = FlexGraphLoader.GROUP_NUTRITION
         val body = FlexGraphLoader.GROUP_BODY
         val workout = FlexGraphLoader.GROUP_WORKOUT
-        out += series("calories", "Calories eaten", "kcal", true, nutrition, daily(60) { wave(it, 2300.0, 350.0) })
-        out += series("protein", "Protein", "g", true, nutrition, daily(60) { wave(it, 150.0, 25.0, 5.0) })
-        out += series("carbs", "Carbs", "g", true, nutrition, daily(60) { wave(it, 240.0, 40.0, 7.0) })
-        out += series("fat", "Fat", "g", true, nutrition, daily(60) { wave(it, 70.0, 12.0, 4.0) })
-        out += series("burned", "Calories burned", "kcal", true, nutrition, every(2, 40) { wave(it, 420.0, 130.0) })
-        out += series("bodyweight", "Bodyweight", "kg", false, body, every(3, 40) { 84.0 - it * 0.12 + wave(it, 0.0, 0.4, 4.0) }, zero = false)
-        out += series("body_fat", "Body fat", "%", false, body, every(7, 16) { 19.5 - it * 0.15 + wave(it, 0.0, 0.2, 3.0) }, zero = false)
-        out += series("volume", "Workout volume", "kg", true, workout, every(2, 40) { wave(it, 8200.0, 1800.0) })
-        out += series("workout_minutes", "Workout time", "min", true, workout, every(2, 40) { wave(it, 68.0, 14.0, 5.0) })
-        out += series("sets", "Sets", "sets", true, workout, every(2, 40) { wave(it, 17.0, 4.0, 4.0) })
+        out += series("calories", "Calories eaten", "kcal", true, nutrition, daily(60) { wave(it, 2000.0, 300.0) })
+        out += series("protein", "Protein", "g", true, nutrition, daily(60) { wave(it, 150.0, 20.0, 5.0) })
+        out += series("carbs", "Carbs", "g", true, nutrition, daily(60) { wave(it, 250.0, 40.0, 7.0) })
+        out += series("fat", "Fat", "g", true, nutrition, daily(60) { wave(it, 70.0, 10.0, 4.0) })
+        out += series("burned", "Calories burned", "kcal", true, nutrition, every(2, 40) { wave(it, 400.0, 100.0) })
+        out += series("bodyweight", "Bodyweight", "kg", false, body, every(3, 40) { 80.0 - it * 0.1 + wave(it, 0.0, 0.4, 4.0) }, zero = false)
+        out += series("body_fat", "Body fat", "%", false, body, every(7, 16) { 20.0 - it * 0.15 + wave(it, 0.0, 0.2, 3.0) }, zero = false)
+        out += series("volume", "Workout volume", "kg", true, workout, every(2, 40) { wave(it, 10000.0, 2000.0) })
+        out += series("workout_minutes", "Workout time", "min", true, workout, every(2, 40) { wave(it, 60.0, 10.0, 5.0) })
+        out += series("sets", "Sets", "sets", true, workout, every(2, 40) { wave(it, 20.0, 4.0, 4.0) })
 
         val lifts = listOf(
-            Triple("Bench Press", 100.0, 0.9), Triple("Squat", 140.0, 1.2),
-            Triple("Deadlift", 175.0, 1.3), Triple("Overhead Press", 62.0, 0.5)
+            Triple("Exercise A", 105.0, 1.0), Triple("Exercise B", 85.0, 0.35),
+            Triple("Exercise C", 70.0, 0.5), Triple("Exercise D", 50.0, 0.5)
         )
         for ((name, start, step) in lifts) {
             out += series(
@@ -195,14 +218,15 @@ object FlexSampleContent {
             )
         }
 
-        // A streak with a slip: the run climbs a day at a time and falls to zero on the slip.
-        val streakDays = 46
+        // Streak A with slips: the run climbs a day at a time and falls to zero on a slip (every STREAK_PERIOD days back
+        // from today, as in the calendar), so it ends on a run of STREAK_PERIOD - 1 days.
+        val streakDays = 45
         val progress = ArrayList<FlexChartPoint>()
         val runs = ArrayList<FlexChartPoint>()
         var run = 0
         for (i in 0 until streakDays) {
             val t = now - (streakDays - 1 - i) * day
-            if (i % 9 == 5) {
+            if ((streakDays - 1 - i) % STREAK_PERIOD == STREAK_PERIOD - 1) {
                 if (run > 0) {
                     progress += FlexChartPoint(t, run.toDouble())
                     runs += FlexChartPoint(t - day, run.toDouble())
@@ -215,12 +239,12 @@ object FlexSampleContent {
         }
         if (run > 0) runs += FlexChartPoint(now, run.toDouble())
         val streaks = FlexGraphLoader.GROUP_STREAKS
-        out += series(FlexGraphLoader.streakId(1L, "progress"), "Morning run progress", "days", false, streaks, progress)
-        out += series(FlexGraphLoader.streakId(1L, "runs"), "Morning run runs", "days", true, streaks, runs)
+        out += series(FlexGraphLoader.streakId(1L, "progress"), "Streak A progress", "days", false, streaks, progress)
+        out += series(FlexGraphLoader.streakId(1L, "runs"), "Streak A runs", "days", true, streaks, runs)
         return out
     }
 
-    private enum class Shape { SUN, HILLS, FIGURE }
+    private enum class Shape { PLACEHOLDER, FIGURE }
 
     /** Writes the picture once: an existing non-empty file is reused. */
     private fun picture(dir: File, name: String, w: Int, h: Int, top: Int, bottom: Int, label: String, shape: Shape): File {
@@ -249,17 +273,23 @@ object FlexSampleContent {
             paint.shader = null
         }
         when (shape) {
-            Shape.SUN -> {
-                paint.color = Color.argb(200, 255, 255, 255)
-                c.drawCircle(w * 0.7f, h * 0.3f, h * 0.12f, paint)
-                paint.color = Color.argb(90, 0, 0, 0)
-                hills(c, w, h, paint, 0.72f, 0.62f)
-            }
-            Shape.HILLS -> {
-                paint.color = Color.argb(70, 0, 0, 0)
-                hills(c, w, h, paint, 0.65f, 0.55f)
-                paint.color = Color.argb(110, 0, 0, 0)
-                hills(c, w, h, paint, 0.8f, 0.72f)
+            Shape.PLACEHOLDER -> {
+                // The classic placeholder: a frame with both diagonals, over a faint grid, so it can't pass for a photo.
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = minOf(w, h) * 0.004f
+                paint.color = Color.argb(45, 255, 255, 255)
+                val step = minOf(w, h) / 8f
+                var x = step
+                while (x < w) { c.drawLine(x, 0f, x, h, paint); x += step }
+                var y = step
+                while (y < h) { c.drawLine(0f, y, w, y, paint); y += step }
+                paint.strokeWidth = minOf(w, h) * 0.008f
+                paint.color = Color.argb(130, 255, 255, 255)
+                c.drawLine(0f, 0f, w, h, paint)
+                c.drawLine(w, 0f, 0f, h, paint)
+                val inset = minOf(w, h) * 0.03f
+                c.drawRect(inset, inset, w - inset, h - inset, paint)
+                paint.style = Paint.Style.FILL
             }
             Shape.FIGURE -> {
                 // A plain body silhouette on a transparent background, like a snapshot of the 3D model.
@@ -279,12 +309,14 @@ object FlexSampleContent {
             textAlign = Paint.Align.CENTER
             if (shape != Shape.FIGURE) setShadowLayer(8f, 0f, 2f, Color.argb(120, 0, 0, 0))
         }
-        c.drawText(label, w / 2f, if (shape == Shape.FIGURE) h * 0.98f else h * 0.92f, text)
-    }
-
-    /** Two overlapping rounded hills filling the picture below [baseY] (fractions of its height). */
-    private fun hills(c: Canvas, w: Float, h: Float, paint: Paint, baseY: Float, peakY: Float) {
-        c.drawOval(RectF(-w * 0.2f, h * peakY, w * 0.7f, h * (baseY + 0.5f)), paint)
-        c.drawOval(RectF(w * 0.3f, h * (peakY + 0.05f), w * 1.25f, h * (baseY + 0.5f)), paint)
+        if (shape != Shape.FIGURE) {
+            // A plate behind the words so they read over the diagonals.
+            val half = text.measureText(label) / 2f + text.textSize
+            paint.color = Color.argb(150, 40, 44, 56)
+            c.drawRoundRect(RectF(w / 2f - half, h / 2f - text.textSize * 1.3f, w / 2f + half, h / 2f + text.textSize * 0.7f), text.textSize * 0.5f, text.textSize * 0.5f, paint)
+            c.drawText(label, w / 2f, h / 2f + text.textSize * 0.3f, text)
+        } else {
+            c.drawText(label, w / 2f, h * 0.98f, text)
+        }
     }
 }

@@ -222,6 +222,10 @@ fun BottomBarShell(
             row1?.invoke()
 
             val trayHeight = with(density) { (trayHeightPx * tray.value).toDp() }
+            // The row below is laid out at full height even while the tray is closed (it only gets clipped), and
+            // clipping hides it without stopping touches: its tiles would still catch taps over the main row and
+            // below the bar. So they only respond once the tray is all the way open.
+            val trayOpen = tray.value >= TRAY_OPEN_FOR_TAPS
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -245,28 +249,34 @@ fun BottomBarShell(
                             ActionTile(
                                 icon = Icons.Default.Home,
                                 label = "Home",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            ) {
-                                collapseTray()
-                                onHome()
-                            }
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = if (trayOpen) {
+                                    {
+                                        collapseTray()
+                                        onHome()
+                                    }
+                                } else null
+                            )
                         }
                         if (onHome == null && onShare != null) {
                             ActionTile(
                                 icon = Icons.Default.Share,
                                 label = "Share",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            ) {
-                                collapseTray()
-                                onShare()
-                            }
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = if (trayOpen) {
+                                    {
+                                        collapseTray()
+                                        onShare()
+                                    }
+                                } else null
+                            )
                         }
                         // Grayed out and inert while you're already inside Settings.
                         ActionTile(
                             icon = Icons.Default.Settings,
                             label = "Settings",
                             tint = if (settingsEnabled) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
-                            onClick = if (settingsEnabled) {
+                            onClick = if (trayOpen && settingsEnabled) {
                                 {
                                     collapseTray()
                                     onOpenSettings()
@@ -277,7 +287,7 @@ fun BottomBarShell(
                             icon = Icons.Default.ImportExport,
                             label = "Manage data",
                             tint = if (manageDataEnabled && openManageData != null) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
-                            onClick = if (manageDataEnabled && openManageData != null) {
+                            onClick = if (trayOpen && manageDataEnabled && openManageData != null) {
                                 {
                                     collapseTray()
                                     openManageData.openForCurrentScreen()
@@ -290,6 +300,9 @@ fun BottomBarShell(
         }
     }
 }
+
+// How far the tray must be pulled up before its tiles take taps (it settles at 0 or 1, so in practice: fully open).
+private const val TRAY_OPEN_FOR_TAPS = 0.98f
 
 // Shared tile used by every row in every bottom bar. onClick = null renders an inert tile.
 @Composable

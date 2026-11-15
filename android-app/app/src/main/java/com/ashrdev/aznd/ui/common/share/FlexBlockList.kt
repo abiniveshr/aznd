@@ -202,7 +202,7 @@ private fun BlockRow(
             ) {
                 Text(type.label, style = MaterialTheme.typography.titleMedium)
                 val note = when {
-                    !content.has(type) -> "Nothing to show here"
+                    !content.forBlock(block.id).has(type) -> "Nothing to show here"
                     block.enabled && block.id in plan.hidden -> "Not shown: the poster cannot fit any more content"
                     else -> null
                 }

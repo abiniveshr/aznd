@@ -26,6 +26,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -224,7 +225,12 @@ fun FlexPreview(
      * Something is being resized by hand: the card takes its new shape at once, as the tiles do (an eased shape would
      * trail behind the content and the finger). Otherwise it eases into it with the tiles' glide (see FlexViewPage).
      */
-    instantShape: Boolean = false
+    instantShape: Boolean = false,
+    /**
+     * Composables laid over the card (buttons on its tiles), given the scale from card pixels to canvas pixels. They sit
+     * above the canvas, so only the pixels they cover stop taking the canvas's gestures.
+     */
+    foreground: (@Composable BoxScope.(scale: Float) -> Unit)? = null
 ) {
     // The height is what changes (Free size follows its content), so the height is eased, on the tiles' timing: the
     // card's edge then moves in step with the tiles gliding inside it (easing the width / height ratio would not).
@@ -270,6 +276,11 @@ fun FlexPreview(
                 }
                 overlay?.invoke(this, k)
                 if (veil > 0.01f) drawRect(Color.Black.copy(alpha = 0.28f * veil))
+            }
+            if (foreground != null) {
+                BoxWithConstraints(modifier = Modifier.matchParentSize()) {
+                    foreground(this, constraints.maxWidth.toFloat() / plan.width)
+                }
             }
             if (veil > 0.01f) AzndingLabel(Modifier.alpha(veil))
         }

@@ -296,7 +296,7 @@ object FlexPainter {
         val m = Metrics(c, content, availW)
 
         val drawable = spec.blocks
-            .filter { it.enabled && content.has(it.type) }
+            .filter { it.enabled && content.forBlock(it.id).has(it.type) }
             .filter { m.heightOf(it, availW) > 0f }
         val admitted = admit(m, st, drawable, spec.layout)
         val limit = admitted.size
@@ -454,7 +454,7 @@ object FlexPainter {
         val c = Ctx(Canvas(), st, assets).also { it.dry = true }
         val availW = st.aspect.width - 2f * st.padding
         val m = Metrics(c, content, availW)
-        val shown = spec.blocks.filter { it.enabled && content.has(it.type) && m.heightOf(it, availW) > 0f }
+        val shown = spec.blocks.filter { it.enabled && content.forBlock(it.id).has(it.type) && m.heightOf(it, availW) > 0f }
         val tree = budgetLayout(spec, m, shown)
         val held = admitOn(m, st, shown, tree, strict = true)
         return FlexLoad(shown.associate { it.id to m.cost(it) }, m.leastOf(shown, tree) + st.spacing, roomOf(st) * (1f - BUDGET_SLACK) + st.spacing, held.map { it.id })
@@ -582,7 +582,7 @@ object FlexPainter {
         val availW = st.aspect.width - 2 * pad
         val gap = st.spacing.toFloat()
         val m = Metrics(c, content, availW)
-        val shown = spec.blocks.filter { it.enabled && content.has(it.type) }.filter { m.heightOf(it, availW) > 0f }
+        val shown = spec.blocks.filter { it.enabled && content.forBlock(it.id).has(it.type) }.filter { m.heightOf(it, availW) > 0f }
         val maxH = maxBoxH(st, padV, footer)
         val rects = freeRects(shown, m, pad, padV, availW, gap, maxH)
         val bottom = rects.values.maxOfOrNull { it[1] + it[3] } ?: padV
@@ -699,18 +699,17 @@ object FlexPainter {
         private val needs = HashMap<Int, Float>()
         private val stats = HashMap<Int, StatShape?>()
         private val shapes = HashMap<Int, DrawableShape>()
-        private val contentId = System.identityHashCode(ct)
-
+        
         private fun laidOut(b: FlexBlock, w: Float): Measured {
             val st = c.st
             val key = MeasureKey(
                 b.type, b.variant, b.keys, b.limit, b.text, b.flag, b.size, st.font, st.textScale, st.moduleScale,
-                st.panel != FlexPanel.NONE, contentId, (w * 100).roundToLong()
+                st.panel != FlexPanel.NONE, System.identityHashCode(ct.forBlock(b.id)), (w * 100).roundToLong()
             )
             measures[key]?.let { return it }
             if (measures.size > MEASURE_CACHE) measures.clear()
             c.overflow = 0f
-            val h = block(c, b, ct, 0f, 0f, w)
+            val h = block(c, b, ct.forBlock(b.id), 0f, 0f, w)
             val out = Measured(h, c.overflow)
             measures[key] = out
             return out
@@ -873,9 +872,9 @@ object FlexPainter {
             return h.coerceAtLeast(max(sh.minH, FREE_MIN)).coerceAtMost(min(availH, max(sh.maxH, sh.minH)))
         }
 
-        fun shape(b: FlexBlock): DrawableShape = shapes.getOrPut(b.id) { drawableShape(c, b, ct) }
+        fun shape(b: FlexBlock): DrawableShape = shapes.getOrPut(b.id) { drawableShape(c, b, ct.forBlock(b.id)) }
 
-        fun stat(b: FlexBlock): StatShape? = stats.getOrPut(b.id) { statShape(c, b, ct) }
+        fun stat(b: FlexBlock): StatShape? = stats.getOrPut(b.id) { statShape(c, b, ct.forBlock(b.id)) }
 
         fun limits(b: FlexBlock, maxH: Float): FlexBoxLimits {
             val s = LIMIT_SCALE
@@ -1083,7 +1082,7 @@ object FlexPainter {
         val m = Metrics(c, content, availW)
 
         /** The blocks that can be on the card. */
-        val drawable = spec.blocks.filter { it.enabled && content.has(it.type) }.filter { m.heightOf(it, availW) > 0f }
+        val drawable = spec.blocks.filter { it.enabled && content.forBlock(it.id).has(it.type) }.filter { m.heightOf(it, availW) > 0f }
         val byId = drawable.associateBy { it.id }
         val items: Map<Int, AlignItem> by lazy { HashMap<Int, AlignItem>().also { map -> for (b in drawable) map[b.id] = autoItem(c, m, b, availW) } }
         private val stackSpace = AlignSpace(availW, 1f, gap)
@@ -1394,8 +1393,12 @@ object FlexPainter {
 
     private fun photoBitmap(c: Ctx, b: FlexBlock, ct: FlexContent): Bitmap? = when (b.type) {
         FlexBlockType.MODEL -> ct.modelUri?.let { c.assets.images[it] }
+        FlexBlockType.PHOTO -> if (b.isEmptyPhoto()) null else (b.keys?.firstOrNull() ?: ct.photoUri)?.let { c.assets.images[it] }
         else -> (b.keys?.firstOrNull() ?: ct.photoUri)?.let { c.assets.images[it] }
     }
+
+    /** The shape an empty photo card (no picture yet) takes: a 4:3 placeholder unless the card has a fixed shape. */
+    private const val EMPTY_PHOTO_RATIO = 4f / 3f
 
     /**
      * How a drawable block takes its cell. Adding a kind of drawable (a 3D snapshot, say) is a branch here and one
@@ -1415,11 +1418,13 @@ object FlexPainter {
             val fill = b.photoRatio == 0f && !circle
             // "Fill its tile" may take the whole card and any crop in the wide range; a fixed or free shape keeps the half-card limit.
             val box = if (fill) c.fillLimits else lim
-            val own = (cropShape ?: if (b.photoRatio > 0f) b.photoRatio else bmp?.let { it.width.toFloat() / it.height } ?: 1f)
+            val empty = b.isEmptyPhoto()
+            val own = (cropShape ?: if (b.photoRatio > 0f) b.photoRatio else bmp?.let { it.width.toFloat() / it.height } ?: if (empty) EMPTY_PHOTO_RATIO else 1f)
                 .coerceIn(box.range.start, box.range.endInclusive)
             val lo = if (circle) 1f else if (fill) box.range.start else own
             val hi = if (circle) 1f else if (fill) box.range.endInclusive else own
-            DrawableShape(bmp != null, if (circle) 1f else own, lo, hi, 0f, 0f, box.maxWidth, box.maxHeight, greedy = true, crops = fill, ownMaxW = lim.maxWidth, ownMaxH = lim.maxHeight)
+            // An empty card keeps its tile (it is a placeholder the person fills in), unlike a picture still loading.
+            DrawableShape(bmp != null || empty, if (circle) 1f else own, lo, hi, 0f, 0f, box.maxWidth, box.maxHeight, greedy = true, crops = fill && !empty, ownMaxW = lim.maxWidth, ownMaxH = lim.maxHeight)
         }
         FlexBlockType.MODEL -> {
             val bmp = photoBitmap(c, b, ct)
@@ -1683,6 +1688,14 @@ object FlexPainter {
 
         fun panelPad(): Float = if (st.panel == FlexPanel.NONE) 0f else 30f
 
+        /** The blank tile of a photo card without a picture: the text colour at a low strength, [w] by [h] with round corners. */
+        fun blankRect(w: Float, h: Float, radius: Float) {
+            if (dry) return
+            fill.color = st.textColor
+            fill.alpha = 28
+            canvas.drawRoundRect(RectF(0f, 0f, w, h), radius, radius, fill)
+        }
+
         fun panelRect(x: Float, y: Float, w: Float, h: Float) {
             if (dry || st.panel == FlexPanel.NONE) return
             val r = RectF(x, y, x + w, y + h)
@@ -1884,12 +1897,12 @@ object FlexPainter {
                 val landing = (poses?.landing ?: 0f).coerceIn(0f, 1f)
                 if (landing > 0.01f) {
                     val layer = c.canvas.saveLayerAlpha(left, top, left + box.width, top + box.height, (landing * 255).roundToInt())
-                    drawTile(c, b, content, box, left, top)
+                    drawTile(c, b, content.forBlock(b.id), box, left, top)
                     c.canvas.restoreToCount(layer)
                 }
                 continue
             }
-            drawTile(c, b, content, box, left, top)
+            drawTile(c, b, content.forBlock(b.id), box, left, top)
         }
         if (poses != null && heldId != null) drawHeld(c, content, plan, poses, byId[heldId])
 
@@ -1963,12 +1976,17 @@ object FlexPainter {
 
     /** A photo is its own tile: the image fills it. */
     private fun drawPhoto(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
-        val bmp = photoBitmap(c, b, ct) ?: return
         val radius = when (b.variant) {
             1 -> min(w, h) / 2f
             2 -> 0f
             else -> max(c.st.panelRadius.toFloat(), 24f)
         }
+        if (b.isEmptyPhoto()) {
+            // No picture yet: a blank, subtle panel of the picture's shape and size (the editor puts a "+" over it).
+            c.blankRect(w, h, radius)
+            return
+        }
+        val bmp = photoBitmap(c, b, ct) ?: return
         val crop = if (b.photoRatio == FLEX_PHOTO_FREE) freeCropOf(b) else null
         c.image(bmp, RectF(0f, 0f, w, h), radius, b.photoZoom, b.photoX, b.photoY, crop)
     }
@@ -2144,7 +2162,7 @@ object FlexPainter {
                 )
             }
         }
-        drawTile(c, b, content, box, left, top, grow)
+        drawTile(c, b, content.forBlock(b.id), box, left, top, grow)
     }
 
     private fun stretches(st: FlexStyle, b: FlexBlock): Boolean = st.panel != FlexPanel.NONE &&
@@ -2594,6 +2612,9 @@ object FlexPainter {
         val stats = ct.stats
         if (stats.isEmpty()) return null
         val st = c.st
+        // "Show workout & date": a small line over the stats that names the workout and its day (two posters of two workouts).
+        val which = if (b.flag) listOf(ct.title, ct.dateText).filter { it.isNotBlank() }.joinToString("  ·  ") else ""
+        val head = if (which.isNotBlank()) headingCell(c, which.uppercase()) else null
         if (b.variant == 1) {
             // One line: the stats as one sentence, which breaks only between stats when it is too long.
             val p = c.ink(44f, true, st.textColor)
@@ -2601,7 +2622,7 @@ object FlexPainter {
                 val text = "${s.value} ${s.label.lowercase()}"
                 StatCell(p.measureText(text), c.lineH(p)) { x, y, _, _ -> c.line(text, p, x, y, Paint.Align.LEFT) }
             }
-            return StatBlock(cells, stats.size, gapY = 0f, cellPanels = false, separator = "  ·  ", sepPaint = p)
+            return StatBlock(cells, stats.size, heading = head, gapY = 0f, cellPanels = false, separator = "  ·  ", sepPaint = p)
         }
         val n = stats.size
         val cols = when {
@@ -2619,7 +2640,7 @@ object FlexPainter {
                 c.line(label, labelP, x + w / 2f, y + c.lineH(valueP) + 4f, Paint.Align.CENTER)
             }
         }
-        return StatBlock(cells, cols)
+        return StatBlock(cells, cols, heading = head)
     }
 
     // -----------------------------------------------------------------------------------------
@@ -2745,10 +2766,11 @@ object FlexPainter {
 
     private fun graphData(b: FlexBlock, ct: FlexContent): GraphData {
         val ids = b.graph.variables.take(2)
+        val resolved = ids.map { if (it == FLEX_SCREEN_EXERCISE_1RM) ct.graphs.firstOrNull { g -> g.group == FlexGraphLoader.GROUP_EXERCISE }?.id ?: it else it }
         val cutoff = b.graph.range.days?.let { System.currentTimeMillis() - it * 86_400_000L }
         val series = ArrayList<FlexGraphSeries>(2)
         val points = ArrayList<List<FlexChartPoint>>(2)
-        for (id in ids) {
+        for (id in resolved) {
             val g = ct.graphs.firstOrNull { it.id == id } ?: continue
             val inRange = g.points.filter { cutoff == null || it.timeMs >= cutoff }.sortedBy { it.timeMs }
             if (inRange.isEmpty()) continue
@@ -2854,8 +2876,9 @@ object FlexPainter {
     }
 
     /**
-     * One or two series over a shared time axis. Each has its own value scale (the left labels belong to the first,
-     * the right ones to the second, in its colour), so two things of different units can be compared by their shape.
+     * One or two series over a shared time axis. Series of the same unit share one value scale and one left axis; otherwise each has
+     * its own (the left labels belong to the first, the right ones to the second, in its colour), so two things of different
+     * units can be compared by their shape.
      */
     private fun drawGraph(c: Ctx, g: GraphData, colors: List<Int>, left: Float, top: Float, width: Float, height: Float, labels: Boolean) {
         val st = c.st
@@ -2898,6 +2921,14 @@ object FlexPainter {
                 lows[i] = minV - sp * 0.15
                 highs[i] = maxV + sp * 0.15
             }
+        }
+        // Two series of the SAME unit (two 1RMs in kg) share one value scale, so the comparison shows; different units keep their own.
+        val shared = two && g.series[0].unit.isNotBlank() && g.series[0].unit == g.series[1].unit
+        if (shared) {
+            val lo = lows.min()
+            val hi = highs.max()
+            lows.fill(lo)
+            highs.fill(hi)
         }
         fun yOf(i: Int, v: Double): Float {
             val r = (highs[i] - lows[i]).takeIf { it > 0.0 } ?: 1.0
@@ -2963,7 +2994,8 @@ object FlexPainter {
 
         if (labels) {
             g.series.forEachIndexed { i, _ ->
-                val p = if (two) c.ink(24f, false, colors[i], 0.9f) else c.ink(24f, false, st.textColor, 0.65f)
+                if (shared && i > 0) return@forEachIndexed       // one left axis, in the neutral colour
+                val p = if (two && !shared) c.ink(24f, false, colors[i], 0.9f) else c.ink(24f, false, st.textColor, 0.65f)
                 val range = highs[i] - lows[i]
                 val align = if (i == 0) Paint.Align.RIGHT else Paint.Align.LEFT
                 val lx = if (i == 0) left - 12f else left + width + 12f

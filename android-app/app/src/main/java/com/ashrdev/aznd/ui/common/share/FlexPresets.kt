@@ -25,29 +25,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToLong
 
-/**
- * One preset per place a card can be shared from. A preset decides which blocks a card starts with and
- * how it looks; the person's edits are remembered per preset (see [FlexStore]). The arguments a
- * preset needs travel in the route: [a] / [b] are ids, [s] is a text key.
- *
- *  HOME        none                         the general "flex" card: streaks, top lifts
- *  WORKOUT     a = session id               one finished workout
- *  ROUTINE     a = workout id               a saved routine (template)
- *  EXERCISE    a = workout id, b = exercise id   one exercise's 1RM progress
- *  STREAK_DAY  a = streak id, s = date      one saved streak day
- */
-enum class FlexPreset(val id: String, val label: String) {
-    HOME("home", "Flex"),
-    WORKOUT("workout", "Workout"),
-    ROUTINE("routine", "Routine"),
-    EXERCISE("exercise", "Exercise"),
-    STREAK_DAY("streak_day", "Streak day");
-
-    companion object {
-        fun fromId(id: String?): FlexPreset = entries.firstOrNull { it.id == id } ?: HOME
-    }
-}
-
 /** The navigation route that opens Flex on this preset. */
 fun FlexPreset.route(a: Long = -1L, b: Long = -1L, s: String = ""): String =
     Destination.Flex.createRoute(id, a, b, Uri.encode(s))
@@ -223,9 +200,9 @@ object FlexContentLoader {
         return content.copy(graphs = (content.graphs + all).distinctBy { it.id })
     }
 
-    private fun date(ms: Long): String = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(ms))
+    internal fun date(ms: Long): String = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(ms))
 
-    private fun liftsFrom(top: List<TopExerciseStat>): List<FlexLiftItem> =
+    internal fun liftsFrom(top: List<TopExerciseStat>): List<FlexLiftItem> =
         top.groupBy { it.exerciseName }.values
             .mapNotNull { list -> list.maxByOrNull { it.bestPoint.e1rm } }
             .sortedByDescending { it.bestPoint.e1rm }
@@ -240,7 +217,7 @@ object FlexContentLoader {
     /** Photos of recent workouts the home card can offer. */
     private const val HOME_PHOTOS = 12
 
-    private suspend fun allSessions(workout: WorkoutViewModel): List<SessionWithSets> =
+    internal suspend fun allSessions(workout: WorkoutViewModel): List<SessionWithSets> =
         withTimeoutOrNull(SESSIONS_WAIT_MS) { workout.allSessions.first { it.isNotEmpty() } } ?: workout.allSessions.value
 
     private suspend fun home(workout: WorkoutViewModel, streaks: StreakViewModel): FlexContent {
@@ -274,14 +251,14 @@ object FlexContentLoader {
      * A streak's kept days as a Calendar source: every day from its start to today except its slips, as the card has
      * always marked them.
      */
-    private suspend fun streakSource(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, today: String): FlexCalendarSource {
+    internal suspend fun streakSource(streaks: StreakViewModel, streakId: Long, name: String, startDate: String, today: String): FlexCalendarSource {
         val breaks = streaks.breaksForStreak(streakId).first().toSet()
         val kept = dayKeysBetween(startDate, today).filter { it !in breaks }
         return FlexCalendarSource("streak:$streakId", name, kept.associateWith { FlexDay() }, startDate)
     }
 
     /** The days a workout was done, as a Calendar source; null when none was. */
-    private fun workoutDays(sessions: List<SessionWithSets>): FlexCalendarSource? {
+    internal fun workoutDays(sessions: List<SessionWithSets>): FlexCalendarSource? {
         val days = sessions.map { dayKeyOf(it.session.startedAt) }.toSortedSet()
         if (days.isEmpty()) return null
         return FlexCalendarSource("workouts", "Workout days", days.associateWith { FlexDay() }, days.first())
@@ -289,6 +266,11 @@ object FlexContentLoader {
 
     private suspend fun workoutSession(workout: WorkoutViewModel, sessionId: Long): FlexContent {
         val data = workout.getSession(sessionId) ?: return FlexContent(kicker = "Workout", title = "Workout")
+        return sessionContent(data)
+    }
+
+    /** One finished workout as content: its exercises with their sets, its best set per exercise, its totals and its photo. */
+    internal fun sessionContent(data: SessionWithSets): FlexContent {
         val session = data.session
         val grouped = data.sets.sortedBy { it.orderIndex }.groupBy { it.exerciseName }
 
@@ -331,7 +313,7 @@ object FlexContentLoader {
         )
     }
 
-    private suspend fun routine(workout: WorkoutViewModel, workoutId: Long): FlexContent {
+    internal suspend fun routine(workout: WorkoutViewModel, workoutId: Long): FlexContent {
         val w = workout.getWorkout(workoutId) ?: return FlexContent(kicker = "Routine", title = "Routine")
         val view = workout.templateView(workoutId)
         val items = view.cards.map { card ->

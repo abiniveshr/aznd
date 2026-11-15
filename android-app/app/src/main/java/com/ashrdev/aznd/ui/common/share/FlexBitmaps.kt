@@ -88,16 +88,20 @@ object FlexBitmaps {
 }
 
 /** Every image uri the card currently needs besides its background. */
-private fun neededImages(spec: FlexSpec?, content: FlexContent?): Set<String> {
+// Each card reads its own part of the content (FlexContent.forBlock).
+internal fun flexNeededImages(spec: FlexSpec?, content: FlexContent?): Set<String> {
     if (spec == null || content == null) return emptySet()
     val out = LinkedHashSet<String>()
-    if (spec.blocks.any { it.enabled && it.type == FlexBlockType.STREAKS }) {
-        content.streaks.forEach { s -> s.logoUri?.let { out += it } }
+    for (b in spec.blocks) {
+        if (!b.enabled) continue
+        val own = content.forBlock(b.id)
+        when (b.type) {
+            FlexBlockType.STREAKS -> own.streaks.forEach { s -> s.logoUri?.let { out += it } }
+            FlexBlockType.PHOTO -> if (!b.isEmptyPhoto()) (b.keys?.firstOrNull() ?: own.photoUri)?.let { out += it }
+            FlexBlockType.MODEL -> own.modelUri?.let { out += it }
+            else -> {}
+        }
     }
-    spec.blocks.filter { it.enabled && it.type == FlexBlockType.PHOTO }.forEach { b ->
-        (b.keys?.firstOrNull() ?: content.photoUri)?.let { out += it }
-    }
-    if (spec.blocks.any { it.enabled && it.type == FlexBlockType.MODEL }) content.modelUri?.let { out += it }
     return out
 }
 
@@ -119,7 +123,7 @@ fun rememberFlexAssets(spec: FlexSpec?, content: FlexContent?): FlexAssets {
         value = if (src == null) null else withContext(Dispatchers.Default) { FlexBitmaps.blur(src, blurStep / 20f) }
     }.value
 
-    val needed = remember(spec?.blocks, content) { neededImages(spec, content) }
+    val needed = remember(spec?.blocks, content) { flexNeededImages(spec, content) }
     // Remembers which uris it loaded, so the assets can say when the pictures for the current blocks are in.
     val loaded = produceState<Pair<Set<String>, Map<String, Bitmap>>?>(null, needed) {
         value = needed to withContext(Dispatchers.IO) {

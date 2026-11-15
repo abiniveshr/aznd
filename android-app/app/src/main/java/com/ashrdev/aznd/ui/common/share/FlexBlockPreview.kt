@@ -32,7 +32,7 @@ internal fun BlockPreview(
     plan: FlexPlan,
     block: FlexBlock
 ) {
-    if (!content.has(block.type)) {
+    if (!content.forBlock(block.id).has(block.type)) {
         Text(
             "Nothing to show for this block here.",
             style = MaterialTheme.typography.labelSmall,
