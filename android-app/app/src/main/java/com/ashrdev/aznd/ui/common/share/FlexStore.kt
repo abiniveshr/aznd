@@ -86,6 +86,7 @@ internal fun specToJson(spec: FlexSpec): JSONObject {
         .put("watermarkText", s.watermarkText)
         .put("watermarkAlign", s.watermarkAlign.name)
         .put("moduleScale", s.moduleScale.toDouble())
+        .put("moduleScaleSet", s.moduleScaleSet)
         .put("layoutMode", s.layoutMode.name)
     val blocks = JSONArray()
     spec.blocks.forEach { b ->
@@ -119,6 +120,9 @@ internal fun specToJson(spec: FlexSpec): JSONObject {
                 .put("calIndex", b.cal.index)
                 .put("calSource", b.cal.source)
                 .put("calWeek", b.cal.weekStart)
+                .put("stat", b.stat.name)
+                .put("graphVars", JSONArray(b.graph.variables))
+                .put("graphRange", b.graph.range.name)
         )
     }
     val out = JSONObject().put("v", STORE_VERSION).put("style", style).put("blocks", blocks)
@@ -217,6 +221,7 @@ internal fun specFromJson(o: JSONObject): FlexSpec {
         watermarkText = s.optString("watermarkText", d.watermarkText),
         watermarkAlign = enumOr(s.optString("watermarkAlign"), d.watermarkAlign),
         moduleScale = s.optDouble("moduleScale", d.moduleScale.toDouble()).toFloat().coerceIn(FLEX_MODULE_MIN, FLEX_MODULE_MAX),
+        moduleScaleSet = s.optBoolean("moduleScaleSet", d.moduleScaleSet),
         layoutMode = enumOr(s.optString("layoutMode"), d.layoutMode)
     )
     // Before alignment belonged to each block it was one setting for the whole card: carry it over.
@@ -267,6 +272,11 @@ internal fun specFromJson(o: JSONObject): FlexSpec {
                 index = b.optInt("calIndex", 0).coerceIn(0, 12),
                 source = b.optString("calSource", ""),
                 weekStart = b.optInt("calWeek", Calendar.MONDAY).let { if (it == Calendar.SUNDAY) Calendar.SUNDAY else Calendar.MONDAY }
+            ),
+            stat = enumOr(b.optString("stat"), FlexWorkoutStat.TOP_SET),
+            graph = FlexGraphConfig(
+                variables = b.optJSONArray("graphVars")?.let { a -> List(a.length()) { idx -> a.optString(idx) }.filter { it.isNotBlank() }.take(2) }.orEmpty(),
+                range = enumOr(b.optString("graphRange"), FlexGraphRange.MONTHS_3)
             )
         )
     }

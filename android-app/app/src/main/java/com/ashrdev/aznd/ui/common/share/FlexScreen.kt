@@ -56,7 +56,7 @@ fun FlexScreen(
     val context = LocalContext.current
     val presetStore = remember { FlexPresetStore(context) }
     val content by produceState<FlexContent?>(null, preset, a, b, s) {
-        value = FlexContentLoader.load(preset, a, b, s, workoutViewModel, streakViewModel)
+        value = FlexContentLoader.load(preset, a, b, s, workoutViewModel, streakViewModel, context)
     }
     var presets by remember { mutableStateOf(presetStore.all()) }
     var savedKey by remember { mutableIntStateOf(0) }

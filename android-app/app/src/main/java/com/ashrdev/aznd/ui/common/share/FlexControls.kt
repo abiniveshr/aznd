@@ -36,6 +36,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -48,9 +51,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -227,27 +234,157 @@ fun ColorPickerDialog(initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit
 // Dropdowns
 // ---------------------------------------------------------------------------------------------
 
-/** The closed look of a dropdown: the current value and an arrow, outlined. */
+/** The closed look of a dropdown: the current value and an arrow, outlined. [hint] draws the text dimmed (a "pick one" prompt). */
 @Composable
-private fun DropdownBox(text: String, onClick: () -> Unit) {
+private fun DropdownBox(text: String, enabled: Boolean = true, hint: Boolean = false, onClick: () -> Unit) {
     val shape = MaterialTheme.shapes.small
+    val ink = if (enabled && !hint) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.5f)
             .clip(shape)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
+            color = ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+    }
+}
+
+/**
+ * Pick one of [options] from a dropdown that may have nothing picked yet: [valueText] is what the closed box says (a
+ * prompt such as "Pick a variable" when [placeholder]), [isSelected] ticks the current option. With [group] the menu
+ * lists the options under a heading per group, in the order the groups first appear (a blank group has no heading).
+ */
+@Composable
+fun <T> FlexPickField(
+    label: String,
+    valueText: String,
+    options: List<T>,
+    optionLabel: (T) -> String,
+    isSelected: (T) -> Boolean,
+    placeholder: Boolean = false,
+    group: ((T) -> String)? = null,
+    enabled: Boolean = true,
+    onSelect: (T) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            DropdownBox(valueText, enabled = enabled, hint = placeholder) { open = true }
+            DropdownMenu(expanded = open && enabled, onDismissRequest = { open = false }) {
+                val sections: List<Pair<String, List<T>>> =
+                    if (group == null) listOf("" to options) else options.groupBy(group).toList()
+                if (options.isEmpty()) {
+                    DropdownMenuItem(text = { Text("Nothing to pick here") }, onClick = { open = false }, enabled = false)
+                }
+                sections.forEach { (heading, items) ->
+                    if (heading.isNotBlank()) {
+                        Text(
+                            heading,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 2.dp)
+                        )
+                    }
+                    items.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(optionLabel(option), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            trailingIcon = if (isSelected(option)) {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null,
+                            onClick = {
+                                open = false
+                                onSelect(option)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Pick one of a few short [options] with a segmented row (for two to four choices; use a dropdown for more). */
+@Composable
+fun <T> FlexSegmented(
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    modifier: Modifier = Modifier,
+    onSelect: (T) -> Unit
+) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+        options.forEachIndexed { i, option ->
+            SegmentedButton(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index = i, count = options.size),
+                icon = {}
+            ) { Text(label(option), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+    }
+}
+
+/**
+ * Where a card's content sits in its tile, as a 3 × 3 pad: the rows are top / middle / bottom, the columns left /
+ * centre / right, and the picked spot is filled. One tap sets both [FlexAlign] and [FlexVAlign].
+ */
+@Composable
+fun FlexAlignPad(
+    h: FlexAlign,
+    v: FlexVAlign,
+    modifier: Modifier = Modifier,
+    onChange: (FlexAlign, FlexVAlign) -> Unit
+) {
+    val shape = MaterialTheme.shapes.small
+    val primary = MaterialTheme.colorScheme.primary
+    val picked = MaterialTheme.colorScheme.primaryContainer
+    val idle = MaterialTheme.colorScheme.outline
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .padding(3.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        FlexVAlign.entries.forEach { vv ->
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                FlexAlign.entries.forEach { hh ->
+                    val on = hh == h && vv == v
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(shape)
+                            .background(if (on) picked else Color.Transparent)
+                            .clickable { onChange(hh, vv) }
+                            .semantics {
+                                contentDescription = "Align ${vv.label.lowercase()} ${hh.label.lowercase()}"
+                                selected = on
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (on) 10.dp else 5.dp)
+                                .clip(CircleShape)
+                                .background(if (on) primary else idle)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -331,14 +468,14 @@ fun MultiSelectDropdown(
 // Crowding warning
 // ---------------------------------------------------------------------------------------------
 
-internal const val FLEX_NO_ROOM = "That arrangement doesn't fit this card"
+internal const val FLEX_NO_ROOM = "That arrangement doesn't fit this poster"
 
-/** What is wrong with how full the card is, in plain words. Empty when it is fine. */
+/** What is wrong with how full the poster is, in plain words. Empty when it is fine. */
 fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
     val out = ArrayList<String>()
     if (plan.hidden.isNotEmpty()) {
         val names = spec.blocks.filter { it.id in plan.hidden }.joinToString(", ") { it.type.label }
-        out += "This card cannot fit any more content. Not shown: $names."
+        out += "This poster cannot fit any more cards. Not shown: $names."
     }
     if (plan.clipped) {
         out += "Some content is too big for its tile and is cut off at the tile's edge. Give that tile more room, show fewer items, or use Free size."
@@ -346,20 +483,20 @@ fun flexWarnings(spec: FlexSpec, plan: FlexPlan): List<String> {
         out += "Crowded: some content was shrunk to ${(plan.minScale * 100).toInt()}% to fit its tile. Give it more room, show fewer items or use a taller size."
     }
     if (plan.tooTall) {
-        out += "This card is very tall (${plan.height.toInt()} px). Some apps crop or reject images this long."
+        out += "This poster is very tall (${plan.height.toInt()} px). Some apps crop or reject images this long."
     }
     return out
 }
 
 /**
- * What the editor says when a change would take the card past its content budget (see FlexPainter.refuses): the
+ * What the editor says when a change would take the poster past its content budget (see FlexPainter.refuses): the
  * change is not made. Nothing else about the budget is ever shown.
  */
 @Composable
 internal fun FlexFullDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        text = { Text("This card cannot fit any more content") },
+        text = { Text("This poster cannot fit any more cards") },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
     )
 }

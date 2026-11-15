@@ -175,7 +175,13 @@ object FlexFonts {
     private var assets: AssetManager? = null
     private val cache = ConcurrentHashMap<String, Typeface>()
 
+    /** The application context of the last [attach]: lets the content loader reach the app's data without a screen handing it over. */
+    @Volatile
+    internal var appContext: Context? = null
+        private set
+
     fun attach(context: Context) {
+        appContext = context.applicationContext
         if (assets == null) assets = context.applicationContext.assets
     }
 
@@ -276,6 +282,11 @@ data class FlexStyle(
     val watermarkAlign: FlexAlign = FlexAlign.START,
     /** Module size, the person's: every block's content is drawn at this on top of [FLEX_MODULE_SCALE] and its own size. */
     val moduleScale: Float = FLEX_MODULE_DEFAULT,
+    /**
+     * The person moved the Module size slider: best fit keeps [moduleScale] then. While it is false the size is
+     * best fit's to choose (it may have set [moduleScale] itself), and the Auto button next to the slider clears it.
+     */
+    val moduleScaleSet: Boolean = false,
     val layoutMode: FlexLayoutMode = FlexLayoutMode.SPLIT
 ) {
     /**
@@ -309,7 +320,7 @@ fun flexStyleOf(palette: FlexPalette, aspect: FlexAspect = FlexAspect.PORTRAIT):
  *
  *  - [TITLE]      read first; never shrunk if it can help it, wraps only when it must; at the top edge of the card
  *                 it keeps a little air above it (see [FlexStyle.titleInset]).
- *  - [DRAWABLE]   a picture of some kind: a photo the person added, a chart, a calendar, a snapshot of the 3D body
+ *  - [DRAWABLE]   a picture of some kind: a photo the person added, a graph, a calendar, a snapshot of the 3D body
  *                 model. No text scale; it has a shape (a range of aspect ratios), min / max sizes and a least size at
  *                 which it still reads as a picture ([FlexPainter.VISIBLE_AREA]). It fills its cell edge to edge within
  *                 them, hugs the cell's sides when it nearly reaches them, and sits in the middle when it does not.
@@ -337,19 +348,84 @@ enum class FlexBlockType(
 ) {
     HEADER("Title", listOf("Standard", "Huge", "Compact"), "Show date", false, FlexBlockClass.TITLE),
     STREAKS("Streaks", listOf("Cards", "Grid", "Hero number"), "Show longest run", true, FlexBlockClass.STATISTIC),
-    TOP_SET("Top set", listOf("Hero", "Rows"), "Show RPE and date", true, FlexBlockClass.STATISTIC),
-    ONE_RM("1 rep max", listOf("Hero", "Rows", "Tiles"), "Show \"calculated from\"", true, FlexBlockClass.STATISTIC),
-    SESSION_STATS("Workout stats", listOf("Tiles", "One line"), null, false, FlexBlockClass.STATISTIC),
+    // WORKOUT_STATS shows a top set, a one rep max or the session's totals, chosen by [FlexBlock.stat]; its variants and
+    // detail switch depend on that choice, so use [FlexBlock.variantLabels] and [FlexBlock.flagText] for what to offer.
+    WORKOUT_STATS("Workout stats", listOf("Hero", "Rows", "Tiles"), "Show details", true, FlexBlockClass.STATISTIC),
     // Lists of names: they wrap like text (on whole words).
     EXERCISES("Exercises", listOf("Detailed", "Compact", "Best set only"), "Show RPE", true, FlexBlockClass.TEXT),
     ROUTINE("Routine", listOf("Detailed", "Compact"), "Show targets", true, FlexBlockClass.TEXT),
-    CHART("1RM chart", listOf("Line", "Bars"), "Show axis labels", false, FlexBlockClass.DRAWABLE),
+    GRAPH("Graph", listOf("Standard"), "Show axis labels", false, FlexBlockClass.DRAWABLE),
     DAY_NOTE("Day note", listOf("Quote", "Plain"), "Show date", false, FlexBlockClass.TEXT),
     PHOTO("Photo", listOf("Rounded", "Circle", "Full width"), null, false, FlexBlockClass.DRAWABLE),
     TEXT("Text", listOf("Plain", "Quote", "Big"), null, false, FlexBlockClass.TEXT),
     CALENDAR("Calendar", listOf("Numbers", "Dots"), "Show weekdays", false, FlexBlockClass.DRAWABLE),
     MODEL("3D model", listOf("Plain", "On a panel"), null, false, FlexBlockClass.DRAWABLE)
 }
+
+/** The groups the Add screen lists card types under, in this order; a group with no types is hidden. */
+enum class FlexCategory(val label: String) {
+    GENERAL("General"), NUTRITION("Nutrition"), WORKOUT("Workout"), ROUTINE("Routine"),
+    BODY("Body"), DRAWABLES("Drawables"), STREAKS("Streaks")
+}
+
+val FlexBlockType.category: FlexCategory
+    get() = when (this) {
+        FlexBlockType.HEADER, FlexBlockType.TEXT, FlexBlockType.DAY_NOTE -> FlexCategory.GENERAL
+        FlexBlockType.WORKOUT_STATS, FlexBlockType.EXERCISES -> FlexCategory.WORKOUT
+        FlexBlockType.ROUTINE -> FlexCategory.ROUTINE
+        FlexBlockType.GRAPH, FlexBlockType.CALENDAR, FlexBlockType.PHOTO, FlexBlockType.MODEL -> FlexCategory.DRAWABLES
+        FlexBlockType.STREAKS -> FlexCategory.STREAKS
+    }
+
+/**
+ * What a WORKOUT_STATS card shows. Each one keeps what the old Top set, 1 rep max and Workout stats cards had:
+ * their variants, detail switch and whether they list items ([FlexBlock.keys] / [FlexBlock.limit]).
+ */
+enum class FlexWorkoutStat(val label: String) {
+    TOP_SET("Top set"), ONE_RM("One rep max"), SESSION("Session stats")
+}
+
+/** The variant names of a [FlexWorkoutStat] (index = [FlexBlock.variant]). */
+val FlexWorkoutStat.variants: List<String>
+    get() = when (this) {
+        FlexWorkoutStat.TOP_SET -> listOf("Hero", "Rows")
+        FlexWorkoutStat.ONE_RM -> listOf("Hero", "Rows", "Tiles")
+        FlexWorkoutStat.SESSION -> listOf("Tiles", "One line")
+    }
+
+/** The label of the detail switch of a [FlexWorkoutStat]; null when it has none. */
+val FlexWorkoutStat.flagLabel: String?
+    get() = when (this) {
+        FlexWorkoutStat.TOP_SET -> "Show RPE and date"
+        FlexWorkoutStat.ONE_RM -> "Show \"calculated from\""
+        FlexWorkoutStat.SESSION -> null
+    }
+
+/** True when the stat lists items to pick between (the lifts), so "max items" and item picking make sense. */
+val FlexWorkoutStat.listy: Boolean get() = this != FlexWorkoutStat.SESSION
+
+/** The variant names to offer for this card: its stat's for a WORKOUT_STATS card, else its type's. */
+val FlexBlock.variantLabels: List<String>
+    get() = if (type == FlexBlockType.WORKOUT_STATS) stat.variants else type.variants
+
+/** The label of this card's detail switch, null when it has none (a WORKOUT_STATS card asks its stat). */
+val FlexBlock.flagText: String?
+    get() = if (type == FlexBlockType.WORKOUT_STATS) stat.flagLabel else type.flagLabel
+
+/** Whether this card lists items (see [FlexBlockType.listy]; a WORKOUT_STATS card asks its stat). */
+val FlexBlock.isListy: Boolean
+    get() = if (type == FlexBlockType.WORKOUT_STATS) stat.listy else type.listy
+
+/** How far back a GRAPH card looks; [days] null is everything. */
+enum class FlexGraphRange(val label: String, val days: Int?) {
+    WEEKS_4("4 weeks", 28), MONTHS_3("3 months", 91), MONTHS_6("6 months", 182), YEAR("1 year", 365), ALL("All time", null)
+}
+
+/** GRAPH: [variables] holds 0 to 2 [FlexGraphSeries] ids (first = main, second = "compare with"); empty = not set up yet. */
+data class FlexGraphConfig(
+    val variables: List<String> = emptyList(),
+    val range: FlexGraphRange = FlexGraphRange.MONTHS_3
+)
 
 /**
  * One piece of a card. A block is generic on purpose (every field is a plain value), so a card can be
@@ -395,7 +471,11 @@ data class FlexBlock(
     val freeW: Float = 0f,
     val freeH: Float = 0f,
     /** CALENDAR: the period it shows, where its highlights come from and how its weeks run. */
-    val cal: FlexCalendarSpec = FlexCalendarSpec()
+    val cal: FlexCalendarSpec = FlexCalendarSpec(),
+    /** WORKOUT_STATS: what it shows (its [variant] and [flag] mean what that stat's did as a card of its own). */
+    val stat: FlexWorkoutStat = FlexWorkoutStat.TOP_SET,
+    /** GRAPH: what it plots and over what range. */
+    val graph: FlexGraphConfig = FlexGraphConfig()
 ) {
     /** Free mode: whether the block has a box of its own yet. */
     val placed: Boolean get() = freeW > 0f && freeH > 0f
@@ -456,6 +536,21 @@ data class FlexStat(val label: String, val value: String)
 
 data class FlexChartPoint(val timeMs: Long, val value: Double)
 
+/**
+ * One plottable variable. [group] is the heading it is listed under in the picker ("Nutrition", "Body", "Workout",
+ * "Exercise 1RM", "Streaks"). [bars] draws it as bars rather than a line; [startAtZero] false lets a line hover in
+ * its own band (bodyweight, 1RM).
+ */
+data class FlexGraphSeries(
+    val id: String,
+    val label: String,
+    val unit: String,
+    val bars: Boolean,
+    val group: String,
+    val points: List<FlexChartPoint>,
+    val startAtZero: Boolean = true
+)
+
 /** A picture a screen offers a card besides its own photo: [label] says where it is from (a workout and day, a saved day). */
 data class FlexPhoto(val uri: String, val label: String)
 
@@ -471,8 +566,8 @@ data class FlexContent(
     val exercises: List<FlexExerciseItem> = emptyList(),
     val routine: List<FlexRoutineItem> = emptyList(),
     val stats: List<FlexStat> = emptyList(),
-    val chart: List<FlexChartPoint> = emptyList(),
-    val chartLabel: String = "",
+    /** Everything a Graph card can plot (see [FlexGraphSeries]); a card picks up to two by id. */
+    val graphs: List<FlexGraphSeries> = emptyList(),
     val dayNote: String = "",
     /** The share's own photo (workout photo, saved-day photo). */
     val photoUri: String? = null,
@@ -497,11 +592,10 @@ data class FlexContent(
     fun has(type: FlexBlockType): Boolean = when (type) {
         FlexBlockType.HEADER, FlexBlockType.TEXT, FlexBlockType.PHOTO -> true
         FlexBlockType.STREAKS -> streaks.isNotEmpty()
-        FlexBlockType.TOP_SET, FlexBlockType.ONE_RM -> lifts.isNotEmpty()
-        FlexBlockType.SESSION_STATS -> stats.isNotEmpty()
+        FlexBlockType.WORKOUT_STATS -> lifts.isNotEmpty() || stats.isNotEmpty()
         FlexBlockType.EXERCISES -> exercises.isNotEmpty()
         FlexBlockType.ROUTINE -> routine.isNotEmpty()
-        FlexBlockType.CHART -> chart.isNotEmpty()
+        FlexBlockType.GRAPH -> graphs.isNotEmpty()
         FlexBlockType.DAY_NOTE -> dayNote.isNotBlank()
         FlexBlockType.CALENDAR -> calendars.isNotEmpty()
         FlexBlockType.MODEL -> modelUri != null
@@ -510,7 +604,7 @@ data class FlexContent(
     /** The items a person can pick between for [type], as (key, label). Empty when the block is not pickable. */
     fun choices(type: FlexBlockType): List<Pair<String, String>> = when (type) {
         FlexBlockType.STREAKS -> streaks.map { streakKey(it) to it.name }
-        FlexBlockType.TOP_SET, FlexBlockType.ONE_RM -> lifts.map { it.name to it.name }
+        FlexBlockType.WORKOUT_STATS -> lifts.map { it.name to it.name }
         FlexBlockType.EXERCISES -> exercises.map { it.name to it.name }
         else -> emptyList()
     }

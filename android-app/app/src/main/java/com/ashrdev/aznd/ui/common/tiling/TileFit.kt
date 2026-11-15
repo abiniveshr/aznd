@@ -45,9 +45,20 @@ class DrawableShape(
  * at least [widths]`[k]` wide and [heights]`[k]` tall, at scale 1. Nothing in a statistic wraps, so these are fixed
  * numbers; reflowing is picking a layout with fewer columns. [designed] is the column count it is meant to have
  * (fewer costs more, see [TileRules.tileCost]); 1 for a statistic that has no such count (a sentence of stats).
- * [reflowKeep] is the ruleset's [TileRules.reflowKeep].
+ * [reflowKeep] is the ruleset's [TileRules.reflowKeep]. [cells] is how many cells a grid holds (0 when unknown, or for a
+ * flow, which has no slots to leave empty): a grid whose last row is not full leaves its slots empty, see [emptyShare].
  */
-class StatShape(val columns: IntArray, val widths: FloatArray, val heights: FloatArray, val designed: Int, val reflowKeep: Float) {
+class StatShape(val columns: IntArray, val widths: FloatArray, val heights: FloatArray, val designed: Int, val reflowKeep: Float, val cells: Int = 0) {
+
+    /**
+     * The share of a grid's slots that stay empty when it takes [cols] columns (3 cells in 2 columns leave a quarter),
+     * 0 when [cells] is unknown or [cols] is not a column count.
+     */
+    fun emptyShare(cols: Int): Float {
+        if (cells <= 0 || cols <= 0) return 0f
+        val slots = ((cells + cols - 1) / cols) * cols
+        return (slots - cells).toFloat() / slots
+    }
 
     /** The least width it can have at scale 1: its narrowest layout. */
     val need: Float get() = widths[widths.size - 1]

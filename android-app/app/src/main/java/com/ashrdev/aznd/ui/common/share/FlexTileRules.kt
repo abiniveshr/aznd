@@ -120,6 +120,14 @@ object FlexTileRules : TileRules {
     /** Card height no cell was given (a share of the content height): wasted like room inside a cell. */
     const val LEFT_OVER = 1.2
 
+    /**
+     * Room inside a tile that its content leaves empty (a share of the area), per unit: a line of text much shorter
+     * than its cell, or the empty slots of a statistics grid. A cell's own waste ([tileCost]'s `waste`) cannot see it,
+     * because text and statistics take the whole width of their cell. Without it a full-width stack of short modules
+     * looks free on a wide card, however little of the cell it draws.
+     */
+    const val HOLLOW = 3.0
+
     /** A title at the top that had to give up the air above it (all of it). */
     const val NO_AIR = 0.6
 
@@ -172,6 +180,18 @@ object FlexTileRules : TileRules {
         return c
     }
 
+    /**
+     * The share of the area that [fit]'s tile leaves empty inside itself. Text is as wide as its widest line
+     * ([AlignItem.hug], measured at scale 1, times the scale it is drawn at, never more than the tile); a statistics
+     * grid is empty where its last row has no cell. Titles are not counted (a title with air around it is meant to be),
+     * and neither are drawables (they fill their shape).
+     */
+    private fun hollow(item: AlignItem, area: Double, fit: TileFit): Double = when (item.kind) {
+        TileKind.TEXT -> if (item.hug > 0f) (fit.w - min(fit.w, item.hug * fit.scale)).toDouble() * fit.h / area else 0.0
+        TileKind.STATISTIC -> (item.stat?.emptyShare(fit.columns) ?: 0f).toDouble() * fit.w * fit.h / area
+        else -> 0.0
+    }
+
     /** [top]: the tile touches the top edge; [air]: it runs across the top (a title there is owed its air). */
     override fun tileCost(item: AlignItem, space: AlignSpace, cw: Float, ch: Float, fit: TileFit, top: Boolean, air: Boolean): Double {
         val area = (space.width * space.height).toDouble().coerceAtLeast(1.0)
@@ -184,6 +204,7 @@ object FlexTileRules : TileRules {
             TileKind.TEXT -> {
                 c += 5.0 * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
                 c += 3.0 * waste
+                c += HOLLOW * hollow(item, area, fit)
                 c += 4.0 * max(0.0, 0.30 - cw.toDouble() / space.width)
                 val at = fit.scale.coerceAtLeast(0.3f)
                 val full = item.height(space.width / at).toDouble().coerceAtLeast(1.0)
@@ -194,6 +215,7 @@ object FlexTileRules : TileRules {
                 // Shrunk as one unit: the same price as text, but nothing wraps, so fewer columns is the price instead.
                 c += 5.0 * (1.0 - s) + 9.0 * max(0.0, 0.85 - s)
                 c += 3.0 * waste
+                c += HOLLOW * hollow(item, area, fit)
                 c += 4.0 * max(0.0, 0.30 - cw.toDouble() / space.width)
                 val designed = item.stat?.designed ?: 1
                 if (fit.columns in 1 until designed) c += REFLOW * (designed - fit.columns)

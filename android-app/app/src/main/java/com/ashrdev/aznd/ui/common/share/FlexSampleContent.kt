@@ -50,22 +50,26 @@ object FlexSampleContent {
     }
 
     /**
-     * The card a new preset starts with: a title, a photo, the top lift as a hero number and the 1RM chart, on the
+     * The card a new preset starts with: a title, a photo, the top lift as a hero number and a 1RM graph, on the
      * Midnight look. A block of a type the [content] has nothing for is left off.
      */
     fun blankSpec(content: FlexContent): FlexSpec {
         val wanted = listOf(
             starter(FlexBlockType.HEADER),
             starter(FlexBlockType.PHOTO),
-            starter(FlexBlockType.ONE_RM, limit = 1),
-            starter(FlexBlockType.CHART)
+            starter(FlexBlockType.WORKOUT_STATS, limit = 1, stat = FlexWorkoutStat.ONE_RM),
+            starter(FlexBlockType.GRAPH, graph = FlexGraphConfig(listOf(FlexGraphLoader.exerciseId("Bench Press")), FlexGraphRange.MONTHS_6))
         ).filter { content.has(it.type) }
         val blocks = wanted.mapIndexed { i, b -> b.copy(id = i + 1) }
         return FlexSpec(flexStyleOf(FlexPalettes.Midnight, FlexAspect.PORTRAIT), blocks)
     }
 
-    private fun starter(type: FlexBlockType, limit: Int = 3) =
-        FlexBlock(id = 0, type = type, enabled = true, variant = 0, keys = null, limit = limit, text = "", flag = true)
+    private fun starter(
+        type: FlexBlockType,
+        limit: Int = 3,
+        stat: FlexWorkoutStat = FlexWorkoutStat.TOP_SET,
+        graph: FlexGraphConfig = FlexGraphConfig()
+    ) = FlexBlock(id = 0, type = type, enabled = true, variant = 0, keys = null, limit = limit, text = "", flag = true, stat = stat, graph = graph)
 
     // ---------------------------------------------------------------------------------------------
 
@@ -81,8 +85,7 @@ object FlexSampleContent {
         val now = System.currentTimeMillis()
         val day = 24L * 60 * 60 * 1000
         val today = todayDayKey()
-        val chartValues = listOf(100.0, 103.5, 102.0, 107.5, 110.0, 109.0, 114.5, 117.0, 116.0, 121.5)
-        val chart = chartValues.mapIndexed { i, v -> FlexChartPoint(now - (chartValues.size - 1 - i) * 7 * day, v) }
+        val graphs = sampleGraphs(now, day)
 
         val runStart = addDaysKey(today, -45)
         val runDays = dayKeysBetween(runStart, today).filterIndexed { i, _ -> i % 9 != 5 }
@@ -135,8 +138,7 @@ object FlexSampleContent {
                 FlexStat("Sets", "11"),
                 FlexStat("Exercises", "4")
             ),
-            chart = chart,
-            chartLabel = "Estimated 1RM (kg)",
+            graphs = graphs,
             dayNote = "Felt strong today. Keep showing up.",
             photoUri = uri(main),
             calendars = listOf(
@@ -152,6 +154,70 @@ object FlexSampleContent {
             ),
             modelUri = uri(model)
         )
+    }
+
+    /**
+     * A plausible series for every variable the real loader can produce ([FlexGraphLoader]): the dashboard's ids, a few
+     * exercises' 1RM and a streak, over the last months.
+     */
+    private fun sampleGraphs(now: Long, day: Long): List<FlexGraphSeries> {
+        fun daily(days: Int, f: (Int) -> Double) =
+            (0 until days).map { i -> FlexChartPoint(now - (days - 1 - i) * day, f(i)) }
+        fun every(step: Int, count: Int, f: (Int) -> Double) =
+            (0 until count).map { i -> FlexChartPoint(now - (count - 1 - i).toLong() * step * day, f(i)) }
+        fun wave(i: Int, mid: Double, amp: Double, period: Double = 6.0): Double = mid + amp * Math.sin(i * 2.0 * Math.PI / period)
+        fun series(id: String, label: String, unit: String, bars: Boolean, group: String, points: List<FlexChartPoint>, zero: Boolean = true) =
+            FlexGraphSeries(id, label, unit, bars, group, points, zero)
+
+        val out = ArrayList<FlexGraphSeries>()
+        val nutrition = FlexGraphLoader.GROUP_NUTRITION
+        val body = FlexGraphLoader.GROUP_BODY
+        val workout = FlexGraphLoader.GROUP_WORKOUT
+        out += series("calories", "Calories eaten", "kcal", true, nutrition, daily(60) { wave(it, 2300.0, 350.0) })
+        out += series("protein", "Protein", "g", true, nutrition, daily(60) { wave(it, 150.0, 25.0, 5.0) })
+        out += series("carbs", "Carbs", "g", true, nutrition, daily(60) { wave(it, 240.0, 40.0, 7.0) })
+        out += series("fat", "Fat", "g", true, nutrition, daily(60) { wave(it, 70.0, 12.0, 4.0) })
+        out += series("burned", "Calories burned", "kcal", true, nutrition, every(2, 40) { wave(it, 420.0, 130.0) })
+        out += series("bodyweight", "Bodyweight", "kg", false, body, every(3, 40) { 84.0 - it * 0.12 + wave(it, 0.0, 0.4, 4.0) }, zero = false)
+        out += series("body_fat", "Body fat", "%", false, body, every(7, 16) { 19.5 - it * 0.15 + wave(it, 0.0, 0.2, 3.0) }, zero = false)
+        out += series("volume", "Workout volume", "kg", true, workout, every(2, 40) { wave(it, 8200.0, 1800.0) })
+        out += series("workout_minutes", "Workout time", "min", true, workout, every(2, 40) { wave(it, 68.0, 14.0, 5.0) })
+        out += series("sets", "Sets", "sets", true, workout, every(2, 40) { wave(it, 17.0, 4.0, 4.0) })
+
+        val lifts = listOf(
+            Triple("Bench Press", 100.0, 0.9), Triple("Squat", 140.0, 1.2),
+            Triple("Deadlift", 175.0, 1.3), Triple("Overhead Press", 62.0, 0.5)
+        )
+        for ((name, start, step) in lifts) {
+            out += series(
+                FlexGraphLoader.exerciseId(name), "$name 1RM", "kg", false, FlexGraphLoader.GROUP_EXERCISE,
+                every(7, 16) { start + it * step + wave(it, 0.0, 1.5, 3.0) }, zero = false
+            )
+        }
+
+        // A streak with a slip: the run climbs a day at a time and falls to zero on the slip.
+        val streakDays = 46
+        val progress = ArrayList<FlexChartPoint>()
+        val runs = ArrayList<FlexChartPoint>()
+        var run = 0
+        for (i in 0 until streakDays) {
+            val t = now - (streakDays - 1 - i) * day
+            if (i % 9 == 5) {
+                if (run > 0) {
+                    progress += FlexChartPoint(t, run.toDouble())
+                    runs += FlexChartPoint(t - day, run.toDouble())
+                }
+                run = 0
+            } else {
+                run++
+            }
+            progress += FlexChartPoint(t, run.toDouble())
+        }
+        if (run > 0) runs += FlexChartPoint(now, run.toDouble())
+        val streaks = FlexGraphLoader.GROUP_STREAKS
+        out += series(FlexGraphLoader.streakId(1L, "progress"), "Morning run progress", "days", false, streaks, progress)
+        out += series(FlexGraphLoader.streakId(1L, "runs"), "Morning run runs", "days", true, streaks, runs)
+        return out
     }
 
     private enum class Shape { SUN, HILLS, FIGURE }

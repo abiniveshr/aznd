@@ -77,7 +77,7 @@ internal fun FlexFloatingMenu(
             ) {
                 if (!open) {
                     IconButton(onClick = { open = true }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Card tools")
+                        Icon(Icons.Default.MoreVert, contentDescription = "Poster tools")
                     }
                 } else {
                     Column(
@@ -86,7 +86,7 @@ internal fun FlexFloatingMenu(
                     ) {
                         val toggle: @Composable () -> Unit = {
                             IconButton(onClick = { open = false }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Hide card tools")
+                                Icon(Icons.Default.Close, contentDescription = "Hide poster tools")
                             }
                         }
                         if (!low) toggle()

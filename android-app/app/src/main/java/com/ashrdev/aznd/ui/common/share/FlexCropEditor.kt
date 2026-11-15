@@ -28,8 +28,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-/** The tallest the crop editor's picture is drawn. */
-private val CROP_EDITOR_MAX_HEIGHT = 280.dp
+/** The tallest the crop editor's picture is drawn (it sits in the card panel, in half of the screen). */
+private val CROP_EDITOR_MAX_HEIGHT = 220.dp
 
 /** How far from a corner or an edge a finger still grabs it, each way (so a corner's touch target is 56 dp square). */
 private val CROP_REACH = 28.dp
@@ -37,15 +37,15 @@ private val CROP_REACH = 28.dp
 /**
  * The editor of a free crop ([FlexPhotoRatio.FREE]): the whole [photo] fitted into a box as wide as the controls (at most
  * [CROP_EDITOR_MAX_HEIGHT] tall), the part outside the crop dimmed, and a frame with a handle on each corner and each
- * edge. Dragging a corner or an edge changes the frame, dragging inside it moves it. Every drag step reports the block
- * with its new crop through [onChange] as a continuous change (one undo step per drag, like a slider). Without a
- * [photo] (not loaded yet) the frame is shown over a plain box of a 4:3 shape.
+ * edge. Dragging a corner or an edge changes the frame, dragging inside it moves it. Every drag step reports the new
+ * crop (fractions of the photo) through [onChange] as a continuous change (one undo step per drag, like a slider).
+ * Without a [photo] (not loaded yet) the frame is shown over a plain box of a 4:3 shape.
  */
 @Composable
 internal fun FlexCropEditor(
     block: FlexBlock,
     photo: Bitmap?,
-    onChange: (changed: FlexBlock, continuous: Boolean) -> Unit
+    onChange: (crop: FlexCropBox, continuous: Boolean) -> Unit
 ) {
     val image = remember(photo) { photo?.asImageBitmap() }
     val aspect = if (photo != null && photo.width > 0 && photo.height > 0) photo.width.toFloat() / photo.height else 4f / 3f
@@ -90,7 +90,7 @@ internal fun FlexCropEditor(
                                         tx += amount.x / size.width
                                         ty += amount.y / size.height
                                         val d = FlexCrop.drag(start.l, start.t, start.r, start.b, h, tx, ty)
-                                        changeNow(blockNow.copy(cropL = d.l, cropT = d.t, cropR = d.r, cropB = d.b), true)
+                                        changeNow(d, true)
                                     }
                                 },
                                 onDragEnd = { handle = null },
@@ -145,7 +145,7 @@ internal fun FlexCropEditor(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         TextButton(
-            onClick = { onChange(block.copy(cropL = 0f, cropT = 0f, cropR = 1f, cropB = 1f), false) },
+            onClick = { onChange(FlexCropBox(0f, 0f, 1f, 1f), false) },
             enabled = !whole
         ) { Text("Reset crop") }
     }

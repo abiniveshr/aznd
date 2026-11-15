@@ -51,7 +51,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddBox
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Dashboard
@@ -137,13 +136,13 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 
-/** Left to right: how the card looks, the card with its blocks, adding a block. Opens on the middle one. */
+/** Left to right: how the poster looks, the poster itself, its list of cards. Opens on the middle one. */
 private val FlexEditorPages = listOf(
     BarPage("Look", Icons.Default.Palette),
-    BarPage("Card", Icons.Default.Dashboard),
-    BarPage("Add", Icons.Default.AddBox)
+    BarPage("Poster", Icons.Default.Dashboard),
+    BarPage("Cards", Icons.Default.Widgets)
 )
-private const val PAGE_CARD = 1
+private const val PAGE_POSTER = 1
 
 private const val FIT_DELAY_MS = 600L
 
@@ -167,10 +166,10 @@ private fun fitKeyOf(spec: FlexSpec): Any {
 }
 
 /**
- * The preset editor: the card maker for one [FlexCardPreset]. Three swipeable pages, also tabs in the bottom bar:
- * Look (colours, text, background), Card (the card, large, edited right on the card, with its list of blocks under it;
- * tap a block for its Edit button) and Add (tiles to add a block). It works on sample content, so every block shows
- * something. A block's edit page replaces the screen while it is open. Save sits in the top bar and stores the preset
+ * The preset editor: the poster maker for one [FlexCardPreset]. Three swipeable pages, also tabs in the bottom bar:
+ * Look (colours, text, background), Poster (the live poster; tap a card on it and its settings open under it) and
+ * Cards (the list of cards to reorder and switch on or off, with the Add button that opens the Add screen). It works
+ * on sample content, so every card shows something. Save sits in the top bar and stores the preset
  * (a new one asks for its name first); leaving with unsaved changes asks first.
  * [initial] is null for a new preset (it starts from the blank card), else the preset to edit; one with an id of 0 or
  * less is not stored yet.
@@ -214,35 +213,43 @@ internal fun FlexPresetEditor(
         val ct = content
         if (sp != null && ct != null) FlexPainter.plan(sp, ct, assets) else null
     }
-    /** The block selected on the Flex page (card and list share it), and the one whose edit page is open. */
+    /** The card selected on the poster (its settings are open under the poster while one is). */
     var selectedBlock by remember { mutableStateOf<Int?>(null) }
-    var editingId by rememberSaveable { mutableStateOf<Int?>(null) }
+    /** The Add screen is open (it replaces the pages). */
+    var adding by remember { mutableStateOf(false) }
+    /** Set after a card was added: once the pages are back, go to the Poster page. */
+    var goPoster by remember { mutableStateOf(false) }
 
     // Everything done to the card on this screen can be undone and redone (from the drop-down over the card).
     val history = remember { UndoStack<FlexSpec>() }
-    // The card's content budget: a change that would take the card past what it can hold (a block added or turned on,
-    // more items, a bigger size, a smaller card ...) is not made, and the person is told the card cannot fit any more.
+    // The poster's content budget: a change that would take the poster past what it can hold (a card added or turned on,
+    // more items, a bigger size, a smaller poster ...) is not made, and the person is told it cannot fit any more.
     var full by remember { mutableStateOf(false) }
     /**
      * [join]: the change belongs to the undo step before it (best fit following the change that set it off). [force]:
      * not held to the content budget (fits, which never add content, and putting the preset's card back).
      */
-    fun commit(next: FlexSpec, continuous: Boolean = false, join: Boolean = false, force: Boolean = false) {
+    fun tryCommit(next: FlexSpec, continuous: Boolean = false, join: Boolean = false, force: Boolean = false): Boolean {
         val before = spec
         val ct = content
         if (!force && before != null && ct != null && fitKeyOf(before) != fitKeyOf(next) &&
             FlexPainter.refuses(before, next, ct, assets)
         ) {
             full = true
-            return
+            return false
         }
         if (settling && force) {
             startSpec = next
             spec = next
-            return
+            return true
         }
+        // [continuous] changes close together (see UndoStack) make one undo step.
         if (before != null && before != next && !(join && history.canUndo)) history.push(before, continuous)
         spec = next
+        return true
+    }
+    fun commit(next: FlexSpec, continuous: Boolean = false, join: Boolean = false, force: Boolean = false) {
+        tryCommit(next, continuous, join, force)
     }
     /** [continuous]: changes that follow each other closely (a slider, a dragged handle) are one undo step. */
     fun update(continuous: Boolean = false, transform: (FlexSpec) -> FlexSpec) {
@@ -330,7 +337,7 @@ internal fun FlexPresetEditor(
             }
             run.finish(if (result != null && result.changed && spec == sp) ({ if (spec == sp) commit(result.spec, join = join, force = true) }) else null)
             if (result == null) {
-                if (!quiet) Toast.makeText(context, "Couldn't align the card", Toast.LENGTH_SHORT).show()
+                if (!quiet) Toast.makeText(context, "Couldn't align the poster", Toast.LENGTH_SHORT).show()
             } else if (spec == sp || spec == result.spec) {
                 if (!quiet) Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                 then?.invoke(result)
@@ -391,7 +398,7 @@ internal fun FlexPresetEditor(
         updateStyle { it.copy(photoUri = uri.toString(), bgMode = FlexBgMode.PHOTO) }
     }
 
-    val pagerState = rememberPagerState(initialPage = PAGE_CARD, pageCount = { FlexEditorPages.size })
+    val pagerState = rememberPagerState(initialPage = PAGE_POSTER, pageCount = { FlexEditorPages.size })
     val bar = rememberSubPageBar(pagerState, FlexEditorPages)
     val ready = spec != null && content != null
 
@@ -417,27 +424,35 @@ internal fun FlexPresetEditor(
         if (dirty) askDiscard = true else onClose()
     }
 
-    val editSpec = spec
-    val editContent = content
-    val editBlock = editingId?.takeIf { id -> editSpec?.blocks?.any { it.id == id } == true }
-    BackHandler(enabled = editBlock == null) { requestClose() }
-    if (editBlock != null && editSpec != null && editContent != null) {
-        // A block's own edit page: it works on a copy and hands it back on Done.
-        key(editBlock) {
-            FlexEditPage(
-                startId = editBlock,
-                initial = editSpec,
-                content = editContent,
-                onDone = { edited, last ->
-                    commit(edited)
-                    selectedBlock = last.takeIf { id -> edited.blocks.any { it.id == id } }
-                    editingId = null
-                },
-                onFinish = { editingId = null },
-                onHome = onHome,
-                onOpenSettings = onOpenSettings
-            )
+    // After a card was added the Add screen is gone and the pages are back: show the poster with the new card selected.
+    LaunchedEffect(adding, goPoster) {
+        if (goPoster && !adding) {
+            goPoster = false
+            pagerState.scrollToPage(PAGE_POSTER)
         }
+    }
+
+    BackHandler(enabled = !adding) { requestClose() }
+    val addSpec = spec
+    val addContent = content
+    if (adding && addSpec != null && addContent != null) {
+        FlexAddPage(
+            spec = addSpec,
+            content = addContent,
+            onAdd = { draft, newId ->
+                // A refused add leaves the poster as it was (the full dialog tells why) and the popup open.
+                val done = tryCommit(draft)
+                if (done) {
+                    selectedBlock = newId
+                    adding = false
+                    goPoster = true
+                }
+                done
+            },
+            onBack = { adding = false },
+            onHome = onHome,
+            onOpenSettings = onOpenSettings
+        )
     } else {
         ScreenScaffold(
             title = name.ifBlank { "New preset" },
@@ -490,7 +505,7 @@ internal fun FlexPresetEditor(
                                     }
                                 )
                             }
-                            PAGE_CARD -> FlexViewPage(
+                            PAGE_POSTER -> FlexViewPage(
                                 spec = sp,
                                 content = ct,
                                 assets = assets,
@@ -499,12 +514,19 @@ internal fun FlexPresetEditor(
                                 onCard = { card -> commit(card) },
                                 selectedId = selectedBlock,
                                 onSelect = { selectedBlock = it },
-                                onEdit = { id ->
-                                    selectedBlock = id
-                                    editingId = id
+                                panel = { id ->
+                                    FlexCardConfig(
+                                        blockId = id,
+                                        spec = sp,
+                                        content = ct,
+                                        assets = assets,
+                                        mode = FlexConfigMode.PANEL,
+                                        onChange = { continuous, transform ->
+                                            update(continuous = continuous, transform = transform)
+                                        },
+                                        onSelect = { selectedBlock = it }
+                                    )
                                 },
-                                update = { transform -> update(transform = transform) },
-                                reorder = { transform -> update(continuous = true, transform = transform) },
                                 canUndo = history.canUndo,
                                 canRedo = history.canRedo,
                                 onUndo = { undo() },
@@ -527,18 +549,20 @@ internal fun FlexPresetEditor(
                                 aligning = aligning,
                                 veiled = veil.up
                             )
-                            else -> FlexAddPage(
+                            else -> FlexCardsPage(
                                 spec = sp,
                                 content = ct,
+                                assets = assets,
+                                plan = pl,
+                                selectedId = selectedBlock,
                                 bottom = bottom,
-                                onAdd = { next, newId ->
-                                    commit(next)
-                                    // A refused add leaves the card as it was (the full dialog tells why).
-                                    if (spec == next) {
-                                        selectedBlock = newId
-                                        scope.launch { pagerState.animateScrollToPage(PAGE_CARD) }
-                                    }
-                                }
+                                onPick = { id ->
+                                    selectedBlock = id
+                                    scope.launch { pagerState.animateScrollToPage(PAGE_POSTER) }
+                                },
+                                onAdd = { adding = true },
+                                update = { transform -> update(transform = transform) },
+                                reorder = { transform -> update(continuous = true, transform = transform) }
                             )
                         }
                     }

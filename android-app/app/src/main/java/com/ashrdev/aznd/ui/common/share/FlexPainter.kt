@@ -413,7 +413,7 @@ object FlexPainter {
     const val VISIBLE_AREA_PLOT = 0.10f
 
     internal fun visibleArea(type: FlexBlockType): Float = when (type) {
-        FlexBlockType.CHART, FlexBlockType.CALENDAR -> VISIBLE_AREA_PLOT
+        FlexBlockType.GRAPH, FlexBlockType.CALENDAR -> VISIBLE_AREA_PLOT
         else -> VISIBLE_AREA
     }
 
@@ -1339,7 +1339,7 @@ object FlexPainter {
         return FlexAutoResult(chosen.spec, true, message, others)
     }
 
-    /** The least Module size best fit chooses (a card already set lower keeps its own as the least): the smallest text stays as large as the person's size and [MIN_TILE_SCALE] allow. */
+    /** The least Module size best fit chooses (a card the person set lower is not rescaled at all): the smallest text stays as large as [MIN_TILE_SCALE] allows. */
     private const val WAND_MIN = 0.8f
 
     /** How many Module sizes best fit tries between its least and [FLEX_MODULE_MAX] (besides the card's own). */
@@ -1350,15 +1350,17 @@ object FlexPainter {
      * Layout section, saved with the card's style) that [TileScale] finds leaves the least of the card empty with
      * nothing clipped or hidden, for the tiling [found] (laid out again at each size, which is cheap next to the search
      * that found it). A size at which text would be drawn smaller than [MIN_TILE_SCALE] of the person's own
-     * size is not tried. A fixed card size only: a Free size card grows with its content. And only while the Module size is
-     * still its default ([TileScale.mayRescale]): a size the person set with the slider is kept, the wand only rearranges.
+     * size is not tried. A fixed card size only: a Free size card grows with its content. And only while the person has
+     * not moved the Module size slider ([FlexStyle.moduleScaleSet]): a size they set is kept, the wand only rearranges.
+     * A size best fit chose earlier is not theirs, so it does not lock the card (nor lower the floors, which are the
+     * default size's).
      */
     private fun scaled(spec: FlexSpec, found: Found, content: FlexContent, assets: FlexAssets, reading: List<Int>): Found {
         if (spec.style.aspect == FlexAspect.FREE) return found
         val base = spec.style.moduleScale
-        if (!TileScale.mayRescale(base, FLEX_MODULE_DEFAULT)) return found
-        val sizes = TileScale.candidates(base, min(base, WAND_MIN), FLEX_MODULE_MAX, WAND_TRIES)
-        val least = MIN_TILE_SCALE * min(1f, base)
+        if (spec.style.moduleScaleSet) return found
+        val sizes = TileScale.candidates(base, WAND_MIN, FLEX_MODULE_MAX, WAND_TRIES)
+        val least = MIN_TILE_SCALE
         val pick = TileScale.choose(sizes, base) { size ->
             val next = found.spec.copy(style = found.spec.style.copy(moduleScale = size))
             val p = plan(next, content, assets)
@@ -1388,6 +1390,7 @@ object FlexPainter {
     private const val CHART_PLOT_H = 120f
     private const val CHART_AXIS_W = 84f
     private const val CHART_DATES_H = 40f
+    private const val GRAPH_SWATCH = 30f
 
     private fun photoBitmap(c: Ctx, b: FlexBlock, ct: FlexContent): Bitmap? = when (b.type) {
         FlexBlockType.MODEL -> ct.modelUri?.let { c.assets.images[it] }
@@ -1435,18 +1438,20 @@ object FlexPainter {
             val sz = FlexCalendarShape.of(calendarView(ct, b).zoom, c.panelPad(), calendarHead(c, b, ct), b.flag, scaleOf(c, b))
             DrawableShape(ct.calendars.isNotEmpty(), sz.ratio, sz.ratioMin, sz.ratioMax, sz.minW, sz.minH, NO_CAP, max(max(CHART_MAX_H * 1.2f, sz.naturalH * 1.3f), sz.minH), greedy = false, crops = false)
         }
-        FlexBlockType.CHART -> {
-            // A chart stretches to its cell (within a sensible range of shapes) instead of being fitted by text scaling;
-            // its labels keep their size, so it has a least size at which they still read.
+        FlexBlockType.GRAPH -> {
+            // A graph stretches to its cell (within a sensible range of shapes) instead of being fitted by text scaling;
+            // its labels keep their size, so it has a least size at which they still read. One that is not set up yet (or
+            // has nothing in its range) is still a tile: it draws a muted note in the same room.
+            val g = graphData(b, ct)
             val k = scaleOf(c, b)
             val pad = c.panelPad()
-            val kicker = if (ct.chartLabel.isNotBlank()) c.lineH(c.kicker()) + 14f else 0f
-            val labelW = if (ct.chartLabel.isNotBlank()) c.kicker().measureText(ct.chartLabel.uppercase()) else 0f
-            val axisW = if (b.flag) CHART_AXIS_W else 0f
+            val head = graphHeadH(c, g.series.size)
+            val labelW = graphHeadW(c, g)
+            val axisW = if (b.flag) CHART_AXIS_W * (if (g.series.size > 1) 2 else 1) else 0f
             val datesH = if (b.flag) CHART_DATES_H else 0f
             val minW = (max(axisW + CHART_PLOT_W, labelW) + 2 * pad) * k
-            val minH = (kicker + CHART_PLOT_H + datesH + 2 * pad) * k
-            DrawableShape(ct.chart.isNotEmpty(), CHART_RATIO, 0.9f, 5f, minW, minH, NO_CAP, max(CHART_MAX_H, minH), greedy = false, crops = false)
+            val minH = (head + CHART_PLOT_H + datesH + 2 * pad) * k
+            DrawableShape(true, CHART_RATIO, 0.9f, 5f, minW, minH, NO_CAP, max(CHART_MAX_H, minH), greedy = false, crops = false)
         }
         // Not a drawable: nothing to draw as one.
         else -> DrawableShape(false, 1f, 1f, 1f, 0f, 0f, NO_CAP, NO_CAP, greedy = false, crops = false)
@@ -1459,7 +1464,7 @@ object FlexPainter {
     private fun drawDrawable(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
         when (b.type) {
             FlexBlockType.PHOTO -> drawPhoto(c, b, ct, w, h)
-            FlexBlockType.CHART -> chart(c, b, ct, w, h)
+            FlexBlockType.GRAPH -> graph(c, b, ct, w, h)
             FlexBlockType.CALENDAR -> calendar(c, b, ct, w, h)
             FlexBlockType.MODEL -> drawModel(c, b, ct, w, h)
             else -> Unit
@@ -2311,7 +2316,9 @@ object FlexPainter {
         val sizes = cols.map { statSize(c, sb, it) }
         // A flow has no designed column count to keep: it is a sentence that breaks where it must.
         val designed = if (sb.separator != null) 1 else cols[0]
-        return StatShape(cols, FloatArray(cols.size) { sizes[it][0] * k }, FloatArray(cols.size) { sizes[it][1] * k }, designed, FlexTileRules.reflowKeep)
+        // A grid's empty slots are room the tile does not use (see [StatShape.emptyShare]); a flow has none.
+        val slots = if (sb.separator != null) 0 else sb.cells.size
+        return StatShape(cols, FloatArray(cols.size) { sizes[it][0] * k }, FloatArray(cols.size) { sizes[it][1] * k }, designed, FlexTileRules.reflowKeep, slots)
     }
 
     /**
@@ -2376,9 +2383,11 @@ object FlexPainter {
     /** What a statistic block shows, as cells. Null when there is nothing to show. */
     private fun statBlock(c: Ctx, b: FlexBlock, ct: FlexContent): StatBlock? = when (b.type) {
         FlexBlockType.STREAKS -> streaks(c, b, ct)
-        FlexBlockType.TOP_SET -> topSet(c, b, ct)
-        FlexBlockType.ONE_RM -> oneRm(c, b, ct)
-        FlexBlockType.SESSION_STATS -> sessionStats(c, b, ct)
+        FlexBlockType.WORKOUT_STATS -> when (b.stat) {
+            FlexWorkoutStat.TOP_SET -> topSet(c, b, ct)
+            FlexWorkoutStat.ONE_RM -> oneRm(c, b, ct)
+            FlexWorkoutStat.SESSION -> sessionStats(c, b, ct)
+        }
         else -> null
     }
 
@@ -2729,101 +2738,244 @@ object FlexPainter {
         }
     }
 
-    // ---- Chart ----
+    // ---- Graph ----
 
-    /** The chart drawn into its whole tile, [w] by [h]: the plot stretches to the room left by its labels, which keep their size. */
-    private fun chart(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
-        val pts = ct.chart.sortedBy { it.timeMs }
-        if (pts.isEmpty() || c.dry) return
+    /** What a Graph card plots: the series it picked that have points in its range (up to two), oldest point first. */
+    private class GraphData(val picked: Boolean, val series: List<FlexGraphSeries>, val points: List<List<FlexChartPoint>>)
+
+    private fun graphData(b: FlexBlock, ct: FlexContent): GraphData {
+        val ids = b.graph.variables.take(2)
+        val cutoff = b.graph.range.days?.let { System.currentTimeMillis() - it * 86_400_000L }
+        val series = ArrayList<FlexGraphSeries>(2)
+        val points = ArrayList<List<FlexChartPoint>>(2)
+        for (id in ids) {
+            val g = ct.graphs.firstOrNull { it.id == id } ?: continue
+            val inRange = g.points.filter { cutoff == null || it.timeMs >= cutoff }.sortedBy { it.timeMs }
+            if (inRange.isEmpty()) continue
+            series.add(g)
+            points.add(inRange)
+        }
+        return GraphData(ids.isNotEmpty(), series, points)
+    }
+
+    private fun graphTitle(s: FlexGraphSeries): String = (if (s.unit.isBlank()) s.label else "${s.label} (${s.unit})").uppercase()
+
+    /** The colour of each plotted series: the accent, and for a second one a colour that stands apart from it. */
+    private fun graphColors(st: FlexStyle): List<Int> {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(st.accent, hsv)
+        val second = if (hsv[1] < 0.25f) 0xFFFFB020.toInt() else {
+            hsv[0] = (hsv[0] + 150f) % 360f
+            hsv[1] = max(hsv[1], 0.55f)
+            hsv[2] = max(hsv[2], 0.85f)
+            Color.HSVToColor(hsv)
+        }
+        return listOf(st.accent, second)
+    }
+
+    /** The height of the graph's heading: its one title, or a line for each of two series (a legend). 0 when nothing is plotted. */
+    private fun graphHeadH(c: Ctx, n: Int): Float = when (n) {
+        0 -> 0f
+        1 -> c.lineH(c.kicker()) + 14f
+        else -> n * (c.lineH(c.kicker()) + 4f) + 10f
+    }
+
+    private fun graphHeadW(c: Ctx, g: GraphData): Float {
+        val p = c.kicker()
+        val widest = g.series.maxOfOrNull { p.measureText(graphTitle(it)) } ?: 0f
+        return if (g.series.size > 1) widest + GRAPH_SWATCH + 12f else widest
+    }
+
+    /** The graph drawn into its whole tile, [w] by [h]: the plot stretches to the room left by its labels, which keep their size. */
+    private fun graph(c: Ctx, b: FlexBlock, ct: FlexContent, w: Float, h: Float) {
+        if (c.dry) return
+        val g = graphData(b, ct)
         val pad = c.panelPad()
         c.panelRect(0f, 0f, w, h)
         val ix = pad
         val iw = w - 2 * pad
+        if (g.series.isEmpty()) {
+            graphEmpty(c, if (g.picked) "No data in this range" else "Pick what to graph", ix, pad, iw, h - 2 * pad)
+            return
+        }
+        val colors = graphColors(c.st)
         var top = pad
-        if (ct.chartLabel.isNotBlank()) top += aligned(c, ct.chartLabel.uppercase(), c.kicker(), ix, iw, top) + 14f
+        if (g.series.size == 1) {
+            top += aligned(c, graphTitle(g.series[0]), c.kicker(), ix, iw, top) + 14f
+        } else {
+            val swatch = Paint(Paint.ANTI_ALIAS_FLAG)
+            g.series.forEachIndexed { i, s ->
+                val p = c.ink(28f, true, colors[i], 1f, 0.12f)
+                swatch.color = colors[i]
+                val mid = top + c.lineH(p) / 2f
+                c.canvas.drawRoundRect(RectF(ix, mid - 4f, ix + GRAPH_SWATCH, mid + 4f), 4f, 4f, swatch)
+                c.line(graphTitle(s), p, ix + GRAPH_SWATCH + 12f, top, Paint.Align.LEFT)
+                top += c.lineH(p) + 4f
+            }
+            top += 10f
+        }
+        val two = g.series.size > 1
         val axisW = if (b.flag) CHART_AXIS_W else 0f
+        val rightW = if (b.flag && two) CHART_AXIS_W else 0f
         val datesH = if (b.flag) CHART_DATES_H else 0f
         val plotH = (h - pad - datesH - top).coerceAtLeast(1f)
-        drawChart(c, pts, ix + axisW, top, (iw - axisW).coerceAtLeast(1f), plotH, b.variant == 1, b.flag)
+        drawGraph(c, g, colors, ix + axisW, top, (iw - axisW - rightW).coerceAtLeast(1f), plotH, b.flag)
     }
 
-    private fun drawChart(
-        c: Ctx, pts: List<FlexChartPoint>, left: Float, top: Float, width: Float, height: Float,
-        bars: Boolean, labels: Boolean
-    ) {
+    /** The muted note of a graph with nothing to draw, in the middle of its plot room [w] by [h] at [x], [y]. */
+    private fun graphEmpty(c: Ctx, text: String, x: Float, y: Float, w: Float, h: Float) {
+        val st = c.st
+        val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = st.textColor
+            alpha = 22
+            strokeWidth = 2f
+        }
+        for (i in 0..3) {
+            val gy = y + h * i / 3f
+            c.canvas.drawLine(x, gy, x + w, gy, grid)
+        }
+        val p = c.ink(34f, false, st.textColor, 0.55f)
+        c.line(text, p, x + w / 2f, y + (h - c.lineH(p)) / 2f, Paint.Align.CENTER)
+    }
+
+    /** Date labels under a graph: day and month, or month and year when it spans most of a year. */
+    private fun graphDate(ms: Long, long: Boolean): String =
+        if (long) SimpleDateFormat("MMM yy", Locale.getDefault()).format(Date(ms)) else fmtDay(ms)
+
+    /** A number on a graph's axis, short enough for its label room. */
+    private fun axisNum(v: Double): String {
+        val a = abs(v)
+        return when {
+            a >= 100_000.0 -> "${(v / 1000.0).roundToLong()}k"
+            a >= 10_000.0 -> "${one(v / 1000.0)}k"
+            a >= 100.0 -> v.roundToLong().toString()
+            else -> one(v)
+        }
+    }
+
+    /**
+     * One or two series over a shared time axis. Each has its own value scale (the left labels belong to the first,
+     * the right ones to the second, in its colour), so two things of different units can be compared by their shape.
+     */
+    private fun drawGraph(c: Ctx, g: GraphData, colors: List<Int>, left: Float, top: Float, width: Float, height: Float, labels: Boolean) {
         val st = c.st
         val canvas = c.canvas
-        val n = pts.size
-        val minV = pts.minOf { it.value }
-        val maxV = pts.maxOf { it.value }
-        val lo: Double
-        val hi: Double
-        if (bars) {
-            lo = 0.0
-            hi = maxV * 1.1
-        } else {
-            val span = (maxV - minV).takeIf { it > 0.0 } ?: max(maxV * 0.1, 1.0)
-            lo = minV - span * 0.15
-            hi = maxV + span * 0.15
-        }
-        val range = (hi - lo).takeIf { it > 0.0 } ?: 1.0
-        fun yOf(v: Double): Float = top + height - (((v - lo) / range) * height).toFloat()
-        fun xOf(i: Int): Float = if (n == 1) left + width / 2f else left + width * i / (n - 1).toFloat()
+        val two = g.series.size > 1
+        val t0 = g.points.minOf { it.first().timeMs }
+        val t1 = g.points.maxOf { it.last().timeMs }
+        val span = (t1 - t0).toDouble()
 
-        // Grid
+        // Bars: as wide as the closest two of their days allow, side by side when two series are bars.
+        val barSeries = g.series.indices.filter { g.series[it].bars }
+        var gap = Long.MAX_VALUE
+        for (i in barSeries) {
+            val pts = g.points[i]
+            for (k in 1 until pts.size) {
+                val d = pts[k].timeMs - pts[k - 1].timeMs
+                if (d > 0L) gap = min(gap, d)
+            }
+        }
+        val ip0 = 14f
+        fun barTotal(inner: Float): Float =
+            if (gap == Long.MAX_VALUE || span <= 0.0) 40f else (inner * gap / span.toFloat() * 0.7f).coerceIn(4f, 70f)
+        val ip = ip0 + if (barSeries.isEmpty()) 0f else barTotal(width - 2 * ip0) / 2f
+        val inner = (width - 2 * ip).coerceAtLeast(1f)
+        val barW = barTotal(inner)
+        fun xOf(t: Long): Float = if (span <= 0.0) left + width / 2f else left + ip + (inner * ((t - t0) / span)).toFloat()
+
+        // Each series' own value scale.
+        val lows = DoubleArray(g.series.size)
+        val highs = DoubleArray(g.series.size)
+        g.series.forEachIndexed { i, s ->
+            val vals = g.points[i]
+            val minV = vals.minOf { it.value }
+            val maxV = vals.maxOf { it.value }
+            if (s.bars || s.startAtZero) {
+                lows[i] = min(0.0, minV)
+                highs[i] = if (maxV > 0.0) maxV * 1.1 else 1.0
+            } else {
+                val sp = (maxV - minV).takeIf { it > 0.0 } ?: max(maxV * 0.1, 1.0)
+                lows[i] = minV - sp * 0.15
+                highs[i] = maxV + sp * 0.15
+            }
+        }
+        fun yOf(i: Int, v: Double): Float {
+            val r = (highs[i] - lows[i]).takeIf { it > 0.0 } ?: 1.0
+            return top + height - (((v - lows[i]) / r) * height).toFloat()
+        }
+
         val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = st.textColor
             alpha = 36
             strokeWidth = 2f
         }
-        for (g in 0..3) {
-            val gy = top + height * g / 3f
+        for (gl in 0..3) {
+            val gy = top + height * gl / 3f
             canvas.drawLine(left, gy, left + width, gy, grid)
         }
 
-        val accent = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = st.accent }
-        if (bars) {
-            val slot = width / n
-            val bw = slot * 0.6f
-            pts.forEachIndexed { i, p ->
-                val cx = left + slot * (i + 0.5f)
-                val r = RectF(cx - bw / 2f, yOf(p.value), cx + bw / 2f, top + height)
-                canvas.drawRoundRect(r, 6f, 6f, accent)
+        g.series.forEachIndexed { i, s ->
+            val pts = g.points[i]
+            val n = pts.size
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors[i] }
+            if (s.bars) {
+                val each = barW / barSeries.size
+                val slot = barSeries.indexOf(i)
+                val base = yOf(i, 0.0.coerceIn(lows[i], highs[i]))
+                pts.forEach { p ->
+                    val cx = xOf(p.timeMs) + (slot - (barSeries.size - 1) / 2f) * each
+                    val y = yOf(i, p.value)
+                    val r = RectF(cx - each / 2f, min(y, base), cx + each / 2f, max(y, base))
+                    canvas.drawRoundRect(r, min(6f, each / 2f), min(6f, each / 2f), paint)
+                }
+            } else {
+                val line = Path()
+                pts.forEachIndexed { k, p ->
+                    val px = xOf(p.timeMs)
+                    val py = yOf(i, p.value)
+                    if (k == 0) line.moveTo(px, py) else line.lineTo(px, py)
+                }
+                if (n > 1) {
+                    if (!two) {
+                        val area = Path(line).apply {
+                            lineTo(xOf(pts.last().timeMs), top + height)
+                            lineTo(xOf(pts.first().timeMs), top + height)
+                            close()
+                        }
+                        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = colors[i]
+                            alpha = 40
+                        }
+                        canvas.drawPath(area, fill)
+                    }
+                    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = colors[i]
+                        style = Paint.Style.STROKE
+                        strokeWidth = 7f
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                    }
+                    canvas.drawPath(line, stroke)
+                }
+                pts.forEach { p -> canvas.drawCircle(xOf(p.timeMs), yOf(i, p.value), if (n > 24) 5f else 9f, paint) }
             }
-        } else {
-            val line = Path()
-            pts.forEachIndexed { i, p -> if (i == 0) line.moveTo(xOf(i), yOf(p.value)) else line.lineTo(xOf(i), yOf(p.value)) }
-            if (n > 1) {
-                val area = Path(line).apply {
-                    lineTo(xOf(n - 1), top + height)
-                    lineTo(xOf(0), top + height)
-                    close()
-                }
-                val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = st.accent
-                    alpha = 40
-                }
-                canvas.drawPath(area, fill)
-                val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = st.accent
-                    style = Paint.Style.STROKE
-                    strokeWidth = 7f
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
-                }
-                canvas.drawPath(line, stroke)
-            }
-            pts.forEachIndexed { i, p -> canvas.drawCircle(xOf(i), yOf(p.value), if (n > 24) 5f else 9f, accent) }
         }
 
         if (labels) {
+            g.series.forEachIndexed { i, _ ->
+                val p = if (two) c.ink(24f, false, colors[i], 0.9f) else c.ink(24f, false, st.textColor, 0.65f)
+                val range = highs[i] - lows[i]
+                val align = if (i == 0) Paint.Align.RIGHT else Paint.Align.LEFT
+                val lx = if (i == 0) left - 12f else left + width + 12f
+                c.line(axisNum(highs[i]), p, lx, top - 4f, align)
+                c.line(axisNum(lows[i] + range / 2.0), p, lx, top + height / 2f - c.lineH(p) / 2f, align)
+                c.line(axisNum(if (g.series[i].bars || g.series[i].startAtZero) lows[i] else max(lows[i], 0.0)), p, lx, top + height - c.lineH(p) + 4f, align)
+            }
             val p = c.ink(24f, false, st.textColor, 0.65f)
-            c.line(one(hi), p, left - 12f, top - 4f, Paint.Align.RIGHT)
-            c.line(one(lo + range / 2.0), p, left - 12f, top + height / 2f - c.lineH(p) / 2f, Paint.Align.RIGHT)
-            c.line(one(max(lo, 0.0)), p, left - 12f, top + height - c.lineH(p) + 4f, Paint.Align.RIGHT)
+            val long = span > 300 * 86_400_000.0
             val dateTop = top + height + 10f
-            c.line(fmtDay(pts.first().timeMs), p, left, dateTop, Paint.Align.LEFT)
-            if (n > 1) c.line(fmtDay(pts.last().timeMs), p, left + width, dateTop, Paint.Align.RIGHT)
+            c.line(graphDate(t0, long), p, left, dateTop, Paint.Align.LEFT)
+            if (t1 > t0) c.line(graphDate(t1, long), p, left + width, dateTop, Paint.Align.RIGHT)
         }
     }
 

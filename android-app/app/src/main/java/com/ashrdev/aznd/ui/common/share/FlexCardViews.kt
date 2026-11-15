@@ -427,27 +427,35 @@ internal fun LookTab(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                DropdownField("Card size", FlexAspect.entries, st.aspect, { it.label }) { picked ->
+                DropdownField("Poster size", FlexAspect.entries, st.aspect, { it.label }) { picked ->
                     style { it.copy(aspect = picked) }
                 }
                 Text(
                     when {
                         st.aspect == FlexAspect.FREE -> "Grows or shrinks with the content, so nothing is squeezed."
-                        st.layoutMode == FlexLayoutMode.FREE -> "Blocks off the card's edges are cut off."
-                        else -> "Holds as much as fits without squeezing; the card tells you when it is full."
+                        st.layoutMode == FlexLayoutMode.FREE -> "Cards off the poster's edges are cut off."
+                        else -> "Holds as much as fits without squeezing; the poster tells you when it is full."
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LabeledSlider(
-                    "Module size",
-                    "$base%",
-                    st.moduleScale,
-                    FLEX_MODULE_MIN..FLEX_MODULE_MAX
-                ) { v -> style { it.copy(moduleScale = (v * 20f).roundToInt() / 20f) } }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        LabeledSlider(
+                            "Card size",
+                            "$base%",
+                            st.moduleScale,
+                            FLEX_MODULE_MIN..FLEX_MODULE_MAX
+                        ) { v -> style { it.copy(moduleScale = (v * 20f).roundToInt() / 20f, moduleScaleSet = true) } }
+                    }
+                    // Moving the slider fixes the size; Auto gives it back to best fit.
+                    if (st.moduleScaleSet) {
+                        TextButton(onClick = { style { it.copy(moduleScale = FLEX_MODULE_DEFAULT, moduleScaleSet = false) } }) { Text("Auto") }
+                    }
+                }
                 Text(
-                    if (st.layoutMode == FlexLayoutMode.SPLIT) "The size every block starts from. Tiles then grow or shrink it together to fill the card; smaller fits more blocks."
-                    else "How big every block is drawn. Smaller fits more blocks.",
+                    if (st.layoutMode == FlexLayoutMode.SPLIT) "The size every card starts from. Tiles then grow or shrink it together to fill the poster; smaller fits more cards."
+                    else "How big every card is drawn. Smaller fits more cards.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -531,11 +539,11 @@ internal fun LookTab(
             }
         }
         item {
-            FlexFoldSection("Card", "Corners ${st.cardRadius} · watermark ${if (st.watermark) st.watermarkAlign.label.lowercase() else "off"}") {
+            FlexFoldSection("Poster", "Corners ${st.cardRadius} · watermark ${if (st.watermark) st.watermarkAlign.label.lowercase() else "off"}") {
                 LabeledSlider("Corner radius", "${st.cardRadius}", st.cardRadius.toFloat(), 0f..160f) { v ->
                     style { it.copy(cardRadius = v.roundToInt()) }
                 }
-                Text("Card border", style = MaterialTheme.typography.labelMedium)
+                Text("Poster border", style = MaterialTheme.typography.labelMedium)
                 ChipChoice(BorderKind.entries, st.borderKind, { it.label }) { picked -> style { it.copy(borderKind = picked) } }
                 val cardLine = st.borderKind == BorderKind.LINE
                 LabeledSlider(if (cardLine) "Line thickness" else "Border", if (st.borderWidth == 0) "off" else "${st.borderWidth}", st.borderWidth.toFloat(), 0f..48f) { v ->

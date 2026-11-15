@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.Dp
+import com.ashrdev.aznd.ui.components.Button
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,10 +52,52 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.common.tiling.TileTree
 
 /**
- * The card's blocks as a compact list under the card on the Flex page (this used to be the Content page).
- * Switch a block on or off, drag the handle (or hold the row) to reorder, tap a row to select it on the card;
- * the selected row shows its Edit button. Which block is selected is shared with the card above.
- * The order here is the order of the tiles (left to right, top to bottom): reordering swaps the blocks between tiles.
+ * The Cards page of the preset editor: an Add button over the poster's cards as a list. Switch a card on or off, drag
+ * the handle (or hold the row) to reorder, tap a row to open that card's settings on the Poster page ([onPick]).
+ */
+@Composable
+internal fun FlexCardsPage(
+    spec: FlexSpec,
+    content: FlexContent,
+    assets: FlexAssets,
+    plan: FlexPlan,
+    selectedId: Int?,
+    bottom: Dp,
+    onPick: (Int) -> Unit,
+    onAdd: () -> Unit,
+    update: ((FlexSpec) -> FlexSpec) -> Unit,
+    reorder: ((FlexSpec) -> FlexSpec) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add a card")
+        }
+        BlockListPanel(
+            spec = spec,
+            content = content,
+            assets = assets,
+            plan = plan,
+            selectedId = selectedId,
+            onSelect = { id -> if (id != null) onPick(id) },
+            update = update,
+            reorder = reorder,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(bottom))
+    }
+}
+
+/**
+ * The poster's cards as a compact list. The order here is the order of the tiles (left to right, top to bottom):
+ * reordering swaps the cards between tiles.
  */
 @Composable
 internal fun BlockListPanel(
@@ -61,7 +107,6 @@ internal fun BlockListPanel(
     plan: FlexPlan,
     selectedId: Int?,
     onSelect: (Int?) -> Unit,
-    onEdit: (Int) -> Unit,
     update: ((FlexSpec) -> FlexSpec) -> Unit,
     reorder: ((FlexSpec) -> FlexSpec) -> Unit,
     modifier: Modifier = Modifier
@@ -101,8 +146,7 @@ internal fun BlockListPanel(
                     content = content,
                     plan = plan,
                     selected = selectedId == block.id,
-                    onSelect = { onSelect(if (selectedId == block.id) null else block.id) },
-                    onEdit = { onEdit(block.id) },
+                    onSelect = { onSelect(block.id) },
                     onEnabled = { on ->
                         update { sp -> sp.copy(blocks = sp.blocks.map { if (it.id == block.id) it.copy(enabled = on) else it }) }
                     },
@@ -129,7 +173,6 @@ private fun BlockRow(
     plan: FlexPlan,
     selected: Boolean,
     onSelect: () -> Unit,
-    onEdit: () -> Unit,
     onEnabled: (Boolean) -> Unit,
     /** Put on the row: hold it, then drag the block to a new place. */
     dragModifier: Modifier = Modifier,
@@ -160,7 +203,7 @@ private fun BlockRow(
                 Text(type.label, style = MaterialTheme.typography.titleMedium)
                 val note = when {
                     !content.has(type) -> "Nothing to show here"
-                    block.enabled && block.id in plan.hidden -> "Not shown: this card cannot fit any more content"
+                    block.enabled && block.id in plan.hidden -> "Not shown: the poster cannot fit any more content"
                     else -> null
                 }
                 if (note != null) {
@@ -169,12 +212,6 @@ private fun BlockRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-            }
-            // Tapping a block (here or on the card) offers its edit page.
-            if (selected) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit ${type.label}")
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.common.share
 
+import android.content.Context
 import android.net.Uri
 import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.SetMode
@@ -58,8 +59,10 @@ private fun block(
     variant: Int = 0,
     limit: Int = 3,
     flag: Boolean = true,
-    text: String = ""
-) = FlexBlock(id = id, type = type, enabled = enabled, variant = variant, keys = null, limit = limit, text = text, flag = flag)
+    text: String = "",
+    stat: FlexWorkoutStat = FlexWorkoutStat.TOP_SET,
+    graph: FlexGraphConfig = FlexGraphConfig()
+) = FlexBlock(id = id, type = type, enabled = enabled, variant = variant, keys = null, limit = limit, text = text, flag = flag, stat = stat, graph = graph)
 
 /**
  * The card a preset starts with, before the person changes anything. A workout or a streak day that has pictures
@@ -120,8 +123,8 @@ private fun FlexPreset.baseSpec(content: FlexContent): FlexSpec = when (this) {
         listOf(
             block(1, FlexBlockType.HEADER),
             block(2, FlexBlockType.STREAKS, variant = 0, limit = 3),
-            block(3, FlexBlockType.ONE_RM, variant = 1, limit = 3),
-            block(4, FlexBlockType.TOP_SET, variant = 1, limit = 2),
+            block(3, FlexBlockType.WORKOUT_STATS, variant = 1, limit = 3, stat = FlexWorkoutStat.ONE_RM),
+            block(4, FlexBlockType.WORKOUT_STATS, variant = 1, limit = 2, stat = FlexWorkoutStat.TOP_SET),
             block(5, FlexBlockType.PHOTO, enabled = false),
             block(6, FlexBlockType.TEXT, enabled = false, text = "Stay consistent.")
         )
@@ -136,8 +139,8 @@ private fun FlexPreset.baseSpec(content: FlexContent): FlexSpec = when (this) {
             } else base,
             listOf(
                 block(1, FlexBlockType.HEADER),
-                block(2, FlexBlockType.SESSION_STATS, variant = 0),
-                block(3, FlexBlockType.TOP_SET, variant = 0, limit = 1),
+                block(2, FlexBlockType.WORKOUT_STATS, variant = 0, stat = FlexWorkoutStat.SESSION),
+                block(3, FlexBlockType.WORKOUT_STATS, variant = 0, limit = 1, stat = FlexWorkoutStat.TOP_SET),
                 block(4, FlexBlockType.EXERCISES, variant = 1, limit = 6, flag = false),
                 block(5, FlexBlockType.PHOTO, enabled = false),
                 block(6, FlexBlockType.TEXT, enabled = false, text = "Another one done.")
@@ -158,9 +161,16 @@ private fun FlexPreset.baseSpec(content: FlexContent): FlexSpec = when (this) {
         flexStyleOf(FlexPalettes.Ocean, FlexAspect.PORTRAIT),
         listOf(
             block(1, FlexBlockType.HEADER, variant = 2),
-            block(2, FlexBlockType.ONE_RM, variant = 0, limit = 1),
-            block(3, FlexBlockType.CHART, variant = 0),
-            block(4, FlexBlockType.TOP_SET, enabled = false, variant = 1, limit = 1)
+            block(2, FlexBlockType.WORKOUT_STATS, variant = 0, limit = 1, stat = FlexWorkoutStat.ONE_RM),
+            // The exercise's own 1RM history (the loader puts it first among the graphs); empty until there is one.
+            block(
+                3, FlexBlockType.GRAPH, variant = 0,
+                graph = FlexGraphConfig(
+                    variables = listOfNotNull(content.graphs.firstOrNull { it.group == FlexGraphLoader.GROUP_EXERCISE }?.id),
+                    range = FlexGraphRange.ALL
+                )
+            ),
+            block(4, FlexBlockType.WORKOUT_STATS, enabled = false, variant = 1, limit = 1, stat = FlexWorkoutStat.TOP_SET)
         )
     )
 
@@ -196,13 +206,21 @@ object FlexContentLoader {
         b: Long,
         s: String,
         workout: WorkoutViewModel,
-        streaks: StreakViewModel
-    ): FlexContent = when (preset) {
-        FlexPreset.HOME -> home(workout, streaks)
-        FlexPreset.WORKOUT -> workoutSession(workout, a)
-        FlexPreset.ROUTINE -> routine(workout, a)
-        FlexPreset.EXERCISE -> exercise(workout, a, b)
-        FlexPreset.STREAK_DAY -> streakDay(streaks, a, s)
+        streaks: StreakViewModel,
+        /** Any context: where the Graph series (food, body, workout history) are read from. Null falls back to the one [FlexFonts] was given. */
+        context: Context? = null
+    ): FlexContent {
+        val content = when (preset) {
+            FlexPreset.HOME -> home(workout, streaks)
+            FlexPreset.WORKOUT -> workoutSession(workout, a)
+            FlexPreset.ROUTINE -> routine(workout, a)
+            FlexPreset.EXERCISE -> exercise(workout, a, b)
+            FlexPreset.STREAK_DAY -> streakDay(streaks, a, s)
+        }
+        val ctx = context ?: FlexFonts.appContext ?: return content
+        val all = FlexGraphLoader.load(ctx, streaks)
+        // A screen's own series (the exercise being shared) come first.
+        return content.copy(graphs = (content.graphs + all).distinctBy { it.id })
     }
 
     private fun date(ms: Long): String = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(ms))
@@ -353,8 +371,13 @@ object FlexContentLoader {
             lifts = listOfNotNull(
                 best?.let { FlexLiftItem(data.name, it.topSetWeight, it.topSetReps, it.topSetRpe, it.e1rm, it.startedAt) }
             ),
-            chart = points.map { FlexChartPoint(it.startedAt, it.e1rm) },
-            chartLabel = "Estimated 1RM (kg)"
+            graphs = listOf(
+                FlexGraphSeries(
+                    id = FlexGraphLoader.exerciseId(data.name), label = "${data.name} 1RM", unit = "kg", bars = false,
+                    group = FlexGraphLoader.GROUP_EXERCISE, points = points.map { FlexChartPoint(it.startedAt, it.e1rm) },
+                    startAtZero = false
+                )
+            ).filter { it.points.isNotEmpty() }
         )
     }
 
