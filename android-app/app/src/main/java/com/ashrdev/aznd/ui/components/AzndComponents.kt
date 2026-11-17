@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.ashrdev.aznd.ui.theme.AzndStyle
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.azndFill
 import com.ashrdev.aznd.ui.theme.drawTaperLine
@@ -72,7 +73,6 @@ fun Card(
     val border = style.edge(style.cardBorder, style.cardBorderLine)
     val line = style.underline(style.cardBorder, style.cardBorderLine, style.cardCorner.dp)
     val fill = style.fill(if (highlight) ThemeColor.HIGHLIGHT else ThemeColor.CARD)
-    val scheme = MaterialTheme.colorScheme
     if (colors == null && !fill.isPlain) {
         // The card itself is see-through; the fill is painted behind it.
         val shape = CardDefaults.shape
@@ -81,7 +81,7 @@ fun Card(
             shape = shape,
             colors = CardDefaults.cardColors(
                 containerColor = Color.Transparent,
-                contentColor = if (highlight) scheme.onPrimaryContainer else scheme.onSurface
+                contentColor = if (highlight) style.onHighlight else style.onCard
             ),
             border = border,
             content = content
@@ -90,7 +90,7 @@ fun Card(
         androidx.compose.material3.Card(
             modifier = modifier.then(line),
             colors = colors ?: if (highlight) {
-                CardDefaults.cardColors(containerColor = scheme.primaryContainer)
+                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             } else {
                 CardDefaults.cardColors()
             },
@@ -260,7 +260,7 @@ private fun CustomOutlinedField(
         onValueChange = onValueChange,
         modifier = modifier
             // Room above the box for the label when it floats up onto the border.
-            .then(if (label != null) Modifier.padding(top = 8.dp) else Modifier)
+            .then(if (label != null) Modifier.padding(top = Space.sm) else Modifier)
             .defaultMinSize(minWidth = 280.dp, minHeight = 56.dp),
         textStyle = textStyle.merge(TextStyle(color = textColor)),
         cursorBrush = SolidColor(scheme.primary),

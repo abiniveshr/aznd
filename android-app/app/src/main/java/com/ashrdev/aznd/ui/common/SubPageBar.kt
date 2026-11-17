@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -22,8 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.themedFill
 import kotlinx.coroutines.launch
@@ -64,7 +66,7 @@ fun SubPageTabs(bar: SubPageBar, modifier: Modifier = Modifier) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = Space.md)
             .height(TabsHeight)
     ) {
         val tabWidth = maxWidth / count
@@ -76,23 +78,29 @@ fun SubPageTabs(bar: SubPageBar, modifier: Modifier = Modifier) {
                 }
                 .width(tabWidth)
                 .fillMaxHeight()
-                .padding(3.dp)
+                .padding(Space.xs)
                 .clip(style.buttonShape)
                 .themedFill(ThemeColor.HIGHLIGHT)
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
             bar.pages.forEachIndexed { index, page ->
-                val selected = bar.position().roundToInt() == index
-                val tint by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    label = "subPageTint"
-                )
-                ActionTile(icon = page.icon, label = page.title, tint = tint) {
-                    bar.onSelect(index)
-                }
+                SubPageTab(bar, index, page)
             }
         }
+    }
+}
+
+// One tab. "Selected" is derived, so a swipe recomposes only the two tabs whose state flips.
+@Composable
+private fun RowScope.SubPageTab(bar: SubPageBar, index: Int, page: BarPage) {
+    val selected by remember(bar, index) { derivedStateOf { bar.position().roundToInt() == index } }
+    val tint by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "subPageTint"
+    )
+    ActionTile(icon = page.icon, label = page.title, tint = tint) {
+        bar.onSelect(index)
     }
 }

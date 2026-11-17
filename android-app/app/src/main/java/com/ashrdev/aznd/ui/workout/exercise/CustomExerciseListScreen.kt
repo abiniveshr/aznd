@@ -36,6 +36,7 @@ import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Lists the user's custom exercises. Tap a card or the pencil to edit, the bin to delete (with a
@@ -85,7 +86,7 @@ fun CustomExerciseListScreen(
         third = ThirdAction(icon = Icons.Default.Add, label = "Add exercise", onClick = onAdd)
     ) { padding ->
         if (items.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.fillMaxSize().padding(Space.xl), contentAlignment = Alignment.TopCenter) {
                 Text(
                     "No custom exercises yet — tap Add exercise to create one.",
                     style = MaterialTheme.typography.bodyMedium
@@ -95,16 +96,16 @@ fun CustomExerciseListScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding() + 16.dp
+                    start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding() + Space.lg
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(Space.md)
             ) {
                 items(items, key = { it.id }) { e ->
                     Card(modifier = Modifier.fillMaxWidth().clickable { onEdit(e.id) }) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(Space.md),
+                            modifier = Modifier.padding(start = Space.md, top = Space.sm, bottom = Space.sm, end = Space.xs)
                         ) {
                             MuscleBadge(e.primaryMuscle, e.photoPath, size = 48.dp)
                             Column(Modifier.weight(1f)) {

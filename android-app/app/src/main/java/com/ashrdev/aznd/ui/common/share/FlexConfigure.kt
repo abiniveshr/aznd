@@ -60,6 +60,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 /*
  * Configure: the step-by-step popup that asks what each card of a poster shows, before the poster is used.
@@ -170,7 +171,7 @@ internal fun FlexConfigureDialog(
             contentColor = MaterialTheme.colorScheme.onBackground
         ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = Space.xs)) {
                     IconButton(onClick = onCancel) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
                     Text("Set up your poster", style = MaterialTheme.typography.titleLarge)
                 }
@@ -182,8 +183,8 @@ internal fun FlexConfigureDialog(
                         .weight(1f)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = Space.lg, vertical = Space.md),
+                    verticalArrangement = Arrangement.spacedBy(Space.md)
                 ) {
                     Text(
                         "Card ${index + 1} of ${steps.size} · ${stepName(block)}",
@@ -201,8 +202,8 @@ internal fun FlexConfigureDialog(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(onClick = { goBack() }, enabled = index > 0) { Text("Back") }
@@ -227,7 +228,7 @@ internal fun FlexConfigureDialog(
 private fun PreviewArea(shot: PreviewShot?, currentId: Int) {
     val primary = MaterialTheme.colorScheme.primary
     Box(
-        modifier = Modifier.fillMaxWidth().height(230.dp).padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().height(230.dp).padding(horizontal = Space.lg, vertical = Space.xs),
         contentAlignment = Alignment.Center
     ) {
         if (shot == null) {
@@ -271,7 +272,7 @@ internal fun FlexDataChoice(
     graphRangeOnly: Boolean = false
 ) {
     val need = block.dataNeed() ?: return
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.md)) {
         when (need) {
             FlexDataNeed.TITLE -> FlexTitlePicker(block, binding, onChange)
             FlexDataNeed.TEXT -> FlexTextPicker(block, binding, onChange)

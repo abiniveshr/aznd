@@ -36,6 +36,7 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The app's one date-range picker (state lives in [DateRangeState], see [rememberDateRangeState]).
@@ -55,8 +56,8 @@ fun DateRangeSelector(
     availableMonths: Collection<MonthKey> = emptyList(),
     kinds: List<DateRangeKind> = DateRangeKind.entries
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             items(kinds, key = { it.name }) { kind ->
                 FilterChip(
                     selected = state.kind == kind,
@@ -115,7 +116,7 @@ private fun MonthStepper(state: DateRangeState, availableMonths: Collection<Mont
             modifier = Modifier
                 .clip(MaterialTheme.shapes.small)
                 .clickable { pickerOpen = true }
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = Space.md, vertical = Space.sm)
         )
         IconButton(onClick = { state.month = month.next() }, enabled = month < last) {
             Icon(Icons.Default.ChevronRight, contentDescription = "Next month")
@@ -139,7 +140,7 @@ private fun YearStepper(state: DateRangeState, availableMonths: Collection<Month
         Text(
             year.toString(),
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = Space.md, vertical = Space.sm)
         )
         IconButton(onClick = { state.year = year + 1 }, enabled = year < years.last()) {
             Icon(Icons.Default.ChevronRight, contentDescription = "Next year")
@@ -203,12 +204,12 @@ fun CustomRangeRow(
     }
 
     if (stacked) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.sm), modifier = Modifier.fillMaxWidth()) {
             fromButton(Modifier.fillMaxWidth())
             toButton(Modifier.fillMaxWidth())
         }
     } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), modifier = Modifier.fillMaxWidth()) {
             fromButton(Modifier.weight(1f))
             toButton(Modifier.weight(1f))
         }

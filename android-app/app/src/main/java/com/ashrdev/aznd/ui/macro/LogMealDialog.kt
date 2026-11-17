@@ -27,6 +27,7 @@ import com.ashrdev.aznd.data.macro.Ingredient
 import com.ashrdev.aznd.domain.macro.MacroStats
 import com.ashrdev.aznd.ui.common.DropdownField
 import com.ashrdev.aznd.ui.components.OutlinedTextField
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * "Log meal": type a meal in (calories optional, worked out from the macros when empty), tap a
@@ -73,11 +74,11 @@ fun LogMealDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(Space.sm)
             ) {
                 if (dayNote != null) Text(dayNote, style = MaterialTheme.typography.titleSmall)
                 if (recents.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                         items(recents, key = { it.id }) { r ->
                             FilterChip(
                                 selected = false,
@@ -98,7 +99,7 @@ fun LogMealDialog(
                     value = name, onValueChange = { name = it },
                     label = { Text("Meal (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     OutlinedTextField(
                         value = kcal, onValueChange = { kcal = it; error = null },
                         label = { Text("kcal") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f)
@@ -108,7 +109,7 @@ fun LogMealDialog(
                         label = { Text("Protein g") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f)
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     OutlinedTextField(
                         value = carbs, onValueChange = { carbs = it; error = null },
                         label = { Text("Carbs g") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f)
@@ -127,7 +128,7 @@ fun LogMealDialog(
                         optionText = { it.name },
                         onSelect = { picked = it }
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                         OutlinedTextField(
                             value = grams, onValueChange = { grams = it; error = null },
                             label = { Text("Grams") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f)

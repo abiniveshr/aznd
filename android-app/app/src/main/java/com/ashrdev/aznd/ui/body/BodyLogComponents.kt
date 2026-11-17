@@ -29,6 +29,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 private fun sameDay(a: Long, b: Long): Boolean {
     val ca = Calendar.getInstance().apply { timeInMillis = a }
@@ -62,8 +63,8 @@ fun LogEntryCard(
     var error by remember { mutableStateOf<String?>(null) }
 
     Card(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 OutlinedTextField(
                     value = text,
                     onValueChange = {

@@ -3,6 +3,7 @@ package com.ashrdev.aznd.ui.dashboard
 import com.ashrdev.aznd.ui.common.share.FlexFont
 import com.ashrdev.aznd.ui.common.tiling.TileNode
 import com.ashrdev.aznd.ui.theme.BorderKind
+import com.ashrdev.aznd.ui.theme.FillAnchor
 import com.ashrdev.aznd.ui.theme.FillBase
 import com.ashrdev.aznd.ui.theme.FillStyle
 import com.ashrdev.aznd.ui.theme.GradientKind
@@ -164,6 +165,8 @@ data class DashLook(
     /** An advanced gradient (any number of colours). Null = the two-colour one from [bgA], [bgB] and [gradientAngle]. */
     val bgGradient: GradientSpec? = null,
     val bgPatterns: List<PatternSpec> = emptyList(),
+    val bgGradientAnchor: FillAnchor = FillAnchor.ELEMENT,
+    val bgPatternAnchor: FillAnchor = FillAnchor.SCREEN,
     val photoUri: String? = null,
     val photoBlur: Float = 0.3f,
     val photoDim: Float = 0.4f,
@@ -192,7 +195,9 @@ data class DashLook(
     fun backgroundFill(): FillStyle = FillStyle(
         base = if (bgMode == DashBgMode.GRADIENT) FillBase.GRADIENT else FillBase.SOLID,
         gradient = bgGradient ?: GradientSpec.of(GradientKind.LINEAR, gradientAngle, bgA, bgB),
-        patterns = bgPatterns
+        patterns = bgPatterns,
+        gradientAnchor = bgGradientAnchor,
+        patternAnchor = bgPatternAnchor
     )
 
     /** What changes the size of a tile's content, so its layout must be worked out again. */

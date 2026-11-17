@@ -42,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,7 @@ import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedTextField
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_LOOK = 0
 private const val PAGE_PRESETS = 1
@@ -89,6 +91,7 @@ fun DashboardSettingsScreen(
     onOpenSettings: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = PAGE_PRESETS) { SettingsPages.size }
+    DisposableEffect(store) { onDispose { store.flush() } }
     val subPages = rememberSubPageBar(pagerState, SettingsPages)
     // Dialogs: naming a new preset (and whether it then becomes a page), renaming, deleting, picking.
     var creating by remember { mutableStateOf<Boolean?>(null) }
@@ -243,8 +246,8 @@ private fun PresetList(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = bottom + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.md, bottom = bottom + Space.lg),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "intro") {
             Text(
@@ -259,10 +262,10 @@ private fun PresetList(
             var menu by remember { mutableStateOf(false) }
             Card(modifier = Modifier.fillMaxWidth().clickable { onEdit(p.id) }, highlight = page >= 0) {
                 Row(
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+                    modifier = Modifier.padding(start = Space.lg, top = Space.sm, bottom = Space.sm, end = Space.xs),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Column(modifier = Modifier.weight(1f).padding(vertical = Space.sm)) {
                         Text(p.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             presetSummary(p, page),
@@ -332,8 +335,8 @@ private fun ActivePagesList(store: DashboardStore, bottom: Dp, onChange: (Int) -
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = bottom + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.md, bottom = bottom + Space.lg),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "intro") {
             Text(
@@ -348,7 +351,7 @@ private fun ActivePagesList(store: DashboardStore, bottom: Dp, onChange: (Int) -
             ReorderableItem(reorder, id) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier.dragReorderOnLongPress(reorder, id).padding(horizontal = 4.dp, vertical = 2.dp),
+                        modifier = Modifier.dragReorderOnLongPress(reorder, id).padding(horizontal = Space.xs, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -356,7 +359,7 @@ private fun ActivePagesList(store: DashboardStore, bottom: Dp, onChange: (Int) -
                             contentDescription = "Drag to reorder",
                             modifier = Modifier.dragReorderHandle(reorder, id).size(40.dp).padding(8.dp)
                         )
-                        Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                        Column(modifier = Modifier.weight(1f).padding(vertical = Space.sm)) {
                             Text("${index + 1}. ${p.name}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 if (p.widgets.size == 1) "1 widget" else "${p.widgets.size} widgets",
@@ -416,7 +419,7 @@ private fun PresetPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(p.id) }
-                            .padding(vertical = 10.dp)
+                            .padding(vertical = Space.md)
                     ) {
                         Text(p.name, style = MaterialTheme.typography.titleSmall)
                         Text(
@@ -436,7 +439,7 @@ private fun PresetPickerDialog(
                 if (canCreate) {
                     TextButton(onClick = onNew) {
                         Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(Space.sm))
                         Text("New preset")
                     }
                 }
@@ -455,7 +458,7 @@ private fun NewPresetDialog(suggested: String, onDismiss: () -> Unit, onCreate: 
         onDismissRequest = onDismiss,
         title = { Text("New preset") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(DashDefaults.NAME_MAX) },
@@ -464,7 +467,7 @@ private fun NewPresetDialog(suggested: String, onDismiss: () -> Unit, onCreate: 
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text("Start with", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     for (s in DashPresetStart.entries) {
                         FilterChip(selected = s == start, onClick = { start = s }, label = { Text(s.label) })
                     }

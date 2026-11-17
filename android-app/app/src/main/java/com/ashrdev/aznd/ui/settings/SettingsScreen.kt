@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,6 +26,7 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
 import com.ashrdev.aznd.ui.workout.WorkoutSettingsSection
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun SettingsScreen(
@@ -33,6 +35,7 @@ fun SettingsScreen(
     onOpenSettings: () -> Unit,
     onOpenAppearance: () -> Unit,
     onOpenDashboard: () -> Unit,
+    onOpenPerformance: () -> Unit,
     workoutSettings: WorkoutSettingsStore
 ) {
     ScreenScaffold(
@@ -45,8 +48,8 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding()),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             SettingsRow(
                 icon = Icons.Default.Palette,
@@ -59,6 +62,12 @@ fun SettingsScreen(
                 title = "Dashboard",
                 subtitle = "Widgets, order, sizes and what each one shows",
                 onClick = onOpenDashboard
+            )
+            SettingsRow(
+                icon = Icons.Default.Speed,
+                title = "Performance",
+                subtitle = "Theme patterns and body model",
+                onClick = onOpenPerformance
             )
             WorkoutSettingsSection(workoutSettings)
         }
@@ -80,11 +89,11 @@ private fun SettingsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(Space.lg))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)

@@ -52,6 +52,7 @@ import com.ashrdev.aznd.ui.workout.connectorInfo
 import com.ashrdev.aznd.ui.workout.exercise.ExercisePicker
 import com.ashrdev.aznd.ui.workout.exercise.MuscleBadge
 import com.ashrdev.aznd.ui.workout.treeConnector
+import com.ashrdev.aznd.ui.theme.Space
 
 /** Everything the builder UI can ask for; BuilderViewModel.actions implements it. All are instant, inline edits. */
 class BuilderActions(
@@ -99,7 +100,7 @@ fun LazyListScope.builderItems(
         }
     }
     item(key = "add-exercise") {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
             OutlinedButton(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) {
                 Text("Add exercise")
             }
@@ -130,10 +131,10 @@ private fun ExerciseCard(
     val exercise = card.exerciseId?.let { byId[it] }
     Card(modifier = Modifier.fillMaxWidth().then(dragModifier)) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(Space.md),
+            verticalArrangement = Arrangement.spacedBy(Space.sm)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 if (exercise != null) MuscleBadge(exercise.primaryMuscle, exercise.photoPath)
                 ExercisePicker(
                     selected = exercise,
@@ -147,7 +148,7 @@ private fun ExerciseCard(
                         contentDescription = "Drag to reorder",
                         modifier = handleModifier
                             .size(40.dp)
-                            .padding(8.dp)
+                            .padding(Space.sm)
                     )
                 }
                 if (card.exerciseId == null) {
@@ -201,11 +202,11 @@ private fun SetRowLine(
             .fillMaxWidth()
             .padding(start = Indent * depth)
             .then(nested),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(Space.sm)
     ) {
         if (row.kind == SetKind.SUPERSET) {
             // A superset part has its own exercise dropdown (closed until tapped).
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 if (exercise != null) MuscleBadge(exercise.primaryMuscle, exercise.photoPath, size = 28.dp)
                 ExercisePicker(
                     selected = exercise,
@@ -255,7 +256,7 @@ private fun TargetField(row: SetRow, seconds: Boolean, onText: (String) -> Unit,
         label = { Text(if (seconds) "Target s" else "Target reps") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-        modifier = modifier.padding(end = 4.dp)
+        modifier = modifier.padding(end = Space.xs)
     )
 }
 

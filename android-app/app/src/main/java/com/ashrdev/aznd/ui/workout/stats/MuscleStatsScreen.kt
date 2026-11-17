@@ -24,7 +24,8 @@ import com.ashrdev.aznd.domain.workout.displayName
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.StatsGraph
 import com.ashrdev.aznd.ui.common.rememberGraphRangeState
-import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.StatTile
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Statistics of ONE muscle group (Dashboard -> Muscle data). Two numbers for the chosen time
@@ -49,9 +50,9 @@ fun MuscleStatsScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding() + 16.dp
+                start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding() + Space.lg
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.lg)
         ) {
             val list = sessions
             when {
@@ -69,9 +70,9 @@ fun MuscleStatsScreen(
                         val now = System.currentTimeMillis()
                         val shown = GraphWindow.select(list, range, now) { it.finishedAt }
                         val weeks = GraphWindow.windowWeeks(list, range, now) { it.finishedAt }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                            StatCard("Sets per week", GraphWindow.formatValue(shown.sumOf { it.sets } / weeks), Modifier.weight(1f))
-                            StatCard("Total volume", "${GraphWindow.formatValue(shown.sumOf { it.volumeKg })} kg", Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
+                            StatTile("Sets per week", GraphWindow.formatValue(shown.sumOf { it.sets } / weeks), Modifier.weight(1f))
+                            StatTile("Total volume", "${GraphWindow.formatValue(shown.sumOf { it.volumeKg })} kg", Modifier.weight(1f))
                         }
                     }
                     item {
@@ -101,16 +102,6 @@ fun MuscleStatsScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge)
         }
     }
 }

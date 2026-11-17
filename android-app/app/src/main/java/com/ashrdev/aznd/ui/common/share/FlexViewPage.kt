@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +85,7 @@ import com.ashrdev.aznd.ui.common.tiling.TileSnap
 import com.ashrdev.aznd.ui.common.tiling.TileSnapped
 import com.ashrdev.aznd.ui.common.tiling.TileTree
 import com.ashrdev.aznd.ui.common.tiling.dropSpot
+import com.ashrdev.aznd.ui.theme.Space
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -436,30 +438,38 @@ internal fun FlexViewPage(
     var full by remember(panelId != null) { mutableStateOf(false) }
     // Registered after the close handler above, so it runs first: back from the full panel goes to half, not out.
     BackHandler(enabled = panelId != null && full) { full = false }
-    val share by animateFloatAsState(
-        targetValue = if (panelId == null) 1f else if (full) 0f else 0.5f,
-        animationSpec = tween(PANEL_MS),
-        label = "flexPosterShare"
-    )
+    // The poster's share of the page is read in layout, so the animation moves no composition. The poster stays
+    // composed until it has closed up completely.
+    val targetShare = if (panelId == null) 1f else if (full) 0f else 0.5f
+    val share = remember { Animatable(targetShare) }
+    var posterOn by remember { mutableStateOf(targetShare > 0.01f) }
+    LaunchedEffect(targetShare) {
+        if (targetShare > 0.01f) posterOn = true
+        share.animateTo(targetShare, tween(PANEL_MS))
+        if (targetShare <= 0.01f) posterOn = false
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = Space.lg)
     ) {
-        if (panelId == null) FlexWarning(spec, plan, Modifier.padding(top = 4.dp))
+        if (panelId == null) FlexWarning(spec, plan, Modifier.padding(top = Space.xs))
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            val posterHeight = maxHeight * share
             Column(modifier = Modifier.fillMaxSize()) {
                 // Not composed while the panel is full (no poster to draw or touch, and a box of no height to avoid).
-                if (share > 0.01f) BoxWithConstraints(
+                if (posterOn || targetShare > 0.01f) BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(posterHeight)
+                        .layout { measurable, constraints ->
+                            val h = (constraints.maxHeight * share.value).roundToInt().coerceIn(0, constraints.maxHeight)
+                            val placeable = measurable.measure(constraints.copy(minHeight = h, maxHeight = h))
+                            layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                        }
                         // A tap beside the poster (the poster itself takes its own taps) closes the card's settings.
                         .pointerInput(Unit) { detectTapGestures { selectNow(null) } }
                 ) {
@@ -624,7 +634,7 @@ internal fun FlexViewPage(
                         hidden = dragging != null,
                         modifier = Modifier
                             .matchParentSize()
-                            .padding(4.dp)
+                            .padding(Space.xs)
                     )
                 }
 
@@ -680,7 +690,7 @@ internal fun FlexViewPage(
                                     maxLines = 1,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .padding(start = 4.dp)
+                                        .padding(start = Space.xs)
                                 )
                                 if (mode == FlexLayoutMode.FREE && position > 0) {
                                     IconButton(onClick = { onLayer(block.id, false) }, enabled = position > 1) {

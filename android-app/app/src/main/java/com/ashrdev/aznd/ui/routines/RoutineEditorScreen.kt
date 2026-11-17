@@ -70,6 +70,7 @@ import com.ashrdev.aznd.ui.streaks.StreakPreviewHeader
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.streaks.WeekdayPicker
 import kotlinx.coroutines.launch
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_IMAGE = 0
 private const val PAGE_ROUTINE = 1
@@ -296,7 +297,7 @@ private fun RoutineDetailsForm(draft: RoutineDraft, workouts: List<WorkoutWithEx
                 }
             }
             RoutineFrequency.CUSTOM -> {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     Text("Every", style = MaterialTheme.typography.titleMedium)
                     OutlinedTextField(
                         value = draft.everyText,

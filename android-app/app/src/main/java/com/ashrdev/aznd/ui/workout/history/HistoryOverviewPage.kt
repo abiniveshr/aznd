@@ -47,19 +47,21 @@ import com.ashrdev.aznd.ui.calendar.monthKeyOf
 import com.ashrdev.aznd.ui.calendar.rememberCalendarState
 import com.ashrdev.aznd.ui.common.StatsGraph
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.StatTile
 import com.ashrdev.aznd.ui.workout.formatClock
 import com.ashrdev.aznd.ui.workout.formatDuration
+import com.ashrdev.aznd.ui.theme.Space
 
-private val SidePadding = 16.dp
+private val SidePadding: Dp get() = Space.lg
 
 // The stat tiles have a fixed height so the page's total height is known up front: the month
 // calendar is then sized to exactly the space left, and nothing needs scrolling.
 private val TileHeight = 88.dp
-private val TileGap = 12.dp
-private val StatsHeight = TileHeight * 2 + TileGap
+private val TileGap: Dp get() = Space.md
+private val StatsHeight: Dp get() = TileHeight * 2 + TileGap
 
 // Gap between the calendar and the tiles.
-private val SectionGap = 16.dp
+private val SectionGap: Dp get() = Space.lg
 
 private val CalendarHeaderHeight = 48.dp
 
@@ -88,14 +90,14 @@ internal fun HistoryOverviewPage(
     var graphOpen by rememberSaveable { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val gridBudget = (maxHeight - 8.dp - bottomPadding - StatsHeight - SectionGap - CalendarHeaderHeight)
+        val gridBudget = (maxHeight - Space.sm - bottomPadding - StatsHeight - SectionGap - CalendarHeaderHeight)
             .coerceAtLeast(160.dp)
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = SidePadding, end = SidePadding, top = 8.dp, bottom = bottomPadding),
+                .padding(start = SidePadding, end = SidePadding, top = Space.sm, bottom = bottomPadding),
             verticalArrangement = Arrangement.spacedBy(SectionGap)
         ) {
             ZoomCalendar(
@@ -157,7 +159,7 @@ private fun DayPopup(
             } else {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(Space.sm)
                 ) {
                     sessions.forEach { item ->
                         key(item.session.id) {
@@ -177,7 +179,7 @@ private fun DaySessionCard(item: SessionWithSets, onClick: () -> Unit) {
     val exercises = item.sets.map { it.exerciseName }.distinct()
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(Space.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -213,15 +215,13 @@ private fun StatsGrid(stats: HistoryStats, onOpenWeeklyGraph: () -> Unit) {
             StatTile(
                 label = "Total sessions",
                 value = stats.totalSessions.toString(),
-                detail = null,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).height(TileHeight)
             )
             StatTile(
                 label = "Sessions per week",
                 value = GraphWindow.formatValue(stats.sessionsPerWeek),
-                detail = "tap for graph",
-                modifier = Modifier.weight(1f),
-                onClick = onOpenWeeklyGraph
+                supporting = "tap for graph",
+                modifier = Modifier.weight(1f).height(TileHeight).clickable(onClick = onOpenWeeklyGraph)
             )
         }
         Row(
@@ -231,58 +231,15 @@ private fun StatsGrid(stats: HistoryStats, onOpenWeeklyGraph: () -> Unit) {
             StatTile(
                 label = "Most done workout",
                 value = stats.topWorkout?.name ?: "—",
-                detail = stats.topWorkout?.let { "${it.count} sessions" },
-                modifier = Modifier.weight(1f)
+                supporting = stats.topWorkout?.let { "${it.count} sessions" },
+                modifier = Modifier.weight(1f).height(TileHeight)
             )
             StatTile(
                 label = "Most done exercise",
                 value = stats.topExercise?.name ?: "—",
-                detail = stats.topExercise?.let { "in ${it.count} sessions" },
-                modifier = Modifier.weight(1f)
+                supporting = stats.topExercise?.let { "in ${it.count} sessions" },
+                modifier = Modifier.weight(1f).height(TileHeight)
             )
-        }
-    }
-}
-
-@Composable
-private fun StatTile(
-    label: String,
-    value: String,
-    detail: String?,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
-) {
-    Card(
-        modifier = modifier
-            .height(TileHeight)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                value,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (detail != null) {
-                Text(
-                    detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
     }
 }
@@ -324,7 +281,7 @@ private fun FrequencyGraphDialog(sessions: List<SessionWithSets>, onDismiss: () 
                     bordered = false
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(end = 8.dp, bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(end = Space.sm, bottom = Space.sm),
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) { Text("Close") }

@@ -24,9 +24,11 @@ import com.ashrdev.aznd.domain.streaks.TrackMode
 import com.ashrdev.aznd.domain.streaks.computeCurrentStreak
 import com.ashrdev.aznd.domain.streaks.computeStreakStats
 import com.ashrdev.aznd.domain.streaks.dayKeysBetween
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -65,10 +67,12 @@ class StreakViewModel(
 
     val streaksWithCounts: StateFlow<List<StreakWithCount>> = snapshot
         .map { s -> s?.let { counts(it) }.orEmpty() }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val routines: StateFlow<List<RoutineStatus>> = snapshot
         .map { s -> s?.let { routineStatuses(it) }.orEmpty() }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val streaksWithSavedDays: StateFlow<List<StreakEntity>> = dao.getStreaksWithSavedDays()

@@ -67,6 +67,7 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import java.util.Calendar
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 const val STREAK_QUOTE_LIMIT = 80
 const val DEFAULT_REMINDER_MINUTE = 20 * 60
@@ -135,14 +136,14 @@ fun EditorColumn(bottomPadding: Dp, content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) { content() }
 }
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = Space.xs))
 }
 
 @Composable
@@ -173,14 +174,14 @@ fun ImagesPage(
     EditorColumn(bottomPadding) {
         SectionTitle("Banner")
         StreakBannerImage(bannerUri = bannerUri, onClick = { bannerPicker.launch() })
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             OutlinedButton(onClick = { bannerPicker.launch() }) { Text(if (bannerUri != null) "Replace banner" else "Add banner") }
             if (bannerUri != null) TextButton(onClick = { onBanner(null) }) { Text("Remove") }
         }
         SectionTitle("Logo")
         Row(verticalAlignment = Alignment.CenterVertically) {
             StreakLogo(photoUri = photoUri, size = 80.dp, modifier = Modifier.clickable { logoPicker.launch() })
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(Space.lg))
             Column {
                 OutlinedButton(onClick = { logoPicker.launch() }) { Text(if (photoUri != null) "Replace logo" else "Add logo") }
                 if (photoUri != null) TextButton(onClick = { onLogo(null) }) { Text("Remove logo") }
@@ -216,11 +217,11 @@ fun TrackModeOptions(selected: TrackMode, onSelect: (TrackMode) -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .selectable(selected = mode == selected, onClick = { onSelect(mode) })
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = Space.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RadioButton(selected = mode == selected, onClick = { onSelect(mode) })
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Space.sm))
                 Column(Modifier.weight(1f)) {
                     Text(mode.label, style = MaterialTheme.typography.bodyLarge)
                     Hint(mode.blurb)
@@ -249,7 +250,7 @@ fun MilestonesEditor(milestones: SnapshotStateList<Int>, enabled: Boolean = true
         ) { Text("Reset to default") }
     }
     if (milestones.isEmpty()) Hint("No milestones. Add one below.")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         milestones.forEach { days ->
             Surface(
                 shape = RoundedCornerShape(50),
@@ -259,10 +260,10 @@ fun MilestonesEditor(milestones: SnapshotStateList<Int>, enabled: Boolean = true
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+                    modifier = Modifier.padding(start = Space.md, end = Space.sm, top = Space.sm, bottom = Space.sm)
                 ) {
                     Text("$days", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(Space.xs))
                     Icon(Icons.Default.Close, contentDescription = "Remove $days", modifier = Modifier.size(16.dp))
                 }
             }
@@ -271,7 +272,7 @@ fun MilestonesEditor(milestones: SnapshotStateList<Int>, enabled: Boolean = true
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         OutlinedTextField(
             value = input,
@@ -340,7 +341,7 @@ fun NotificationsEditor(
 private fun ReminderRow(r: ReminderDraft, onRemove: () -> Unit) {
     val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(Space.md), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = {
                     TimePickerDialog(
@@ -351,7 +352,7 @@ private fun ReminderRow(r: ReminderDraft, onRemove: () -> Unit) {
                         DateFormat.is24HourFormat(context)
                     ).show()
                 }) { Text(formatMinute(context, r.minuteOfDay)) }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Space.sm))
                 Text(Weekdays.label(r.weekdays), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onRemove) { Icon(Icons.Default.Delete, contentDescription = "Remove reminder") }
             }
@@ -369,7 +370,7 @@ private fun ReminderRow(r: ReminderDraft, onRemove: () -> Unit) {
 
 @Composable
 fun WeekdayPicker(mask: Int, onChange: (Int) -> Unit, emptyMeansAll: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), modifier = Modifier.fillMaxWidth()) {
         Weekdays.SHORT.forEachIndexed { i, label ->
             val on = (emptyMeansAll && mask == 0) || mask and Weekdays.bit(i) != 0
             FilterChip(

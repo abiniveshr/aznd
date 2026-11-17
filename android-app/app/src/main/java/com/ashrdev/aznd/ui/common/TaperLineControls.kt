@@ -25,10 +25,11 @@ import com.ashrdev.aznd.ui.theme.TaperRegion
 import com.ashrdev.aznd.ui.theme.TaperShape
 import com.ashrdev.aznd.ui.theme.drawTaperLine
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun TaperLineControls(line: TaperLine, color: Color, onChange: (TaperLine) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -39,14 +40,14 @@ fun TaperLineControls(line: TaperLine, color: Color, onChange: (TaperLine) -> Un
                 }
         )
         Text("Taper", style = MaterialTheme.typography.labelMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             TaperShape.entries.forEach { s ->
                 FilterChip(selected = line.shape == s, onClick = { onChange(line.copy(shape = s)) }, label = { Text(s.label) })
             }
         }
         if (line.shape != TaperShape.FLAT) {
             Text("Taper region", style = MaterialTheme.typography.labelMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 TaperRegion.entries.forEach { r ->
                     FilterChip(selected = line.region == r, onClick = { onChange(line.copy(region = r)) }, label = { Text(r.label) })
                 }

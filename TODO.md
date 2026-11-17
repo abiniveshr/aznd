@@ -1,0 +1,17 @@
+- enable/disable individual features in settings (potentially make an installer that allows to download only certain features)
+- change the default theme to be less sloppy and add preset colour themes for popular colours (white,pink,red,blue,green,orange,yellow) and deep/bright options for each
+- make sure the image system for saved workouts and streaks work. if not, fix it. it was a little lost during a feature  redo so beware.
+- calculated from should be a toggle for all options not just the list view in Flex
+- add a sizing feature where individual features can be sized in the flex page (tap to show sizing, long press to drag/drop, and make the drag drop animation better by making the dragged object float with the hand and the moving objects animate.)
+- add a performance setting in the settings tab to enable/disable certain animations
+- add share features with apt presets using flex, also be able to share workout formats as importable data. assign aznd to .aznddata, .azndtheme files that work with the import/export
+- change per workout preset history screen: center is calendar view with 2 modes and total sessions, sessions per week, , swipe right for full history, filterable by date use already existing common modules. swipe left to 
+- add third slide in workout stats
+- while in edit mode for a panel of the dashboard, the bottom bar should be: left: size and position, right: a relevant modifier, eg: pick exercises for exercise related stuff, center: 
+- in the discipline screen, make calendar view that shows a score depicted by alpha of highlight which is based on   how many streak/routines were followed that day. only daily/hourly stuff counts per day, the views should be daily which is the zoomable calendar we have, weekly which is a bar plot, monthly which is another bar plot. each score is affected by smaller units ie daily values affect monthly but not by bigger values ie monthly does not affect daily.
+- freestyle workout does not show in history
+- workout view from history rework
+- themes cleanup (have patterns and mono options and colours are independent)
+- dashboard defaults
+- widgets
+- rename to flex

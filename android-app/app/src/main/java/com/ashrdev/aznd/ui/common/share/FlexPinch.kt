@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.theme.Space
 
 @Stable
 internal class FlexPinch {
@@ -113,7 +114,7 @@ internal fun FlexPinchBox(
                 shadowElevation = 6.dp,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(6.dp)
+                    .padding(Space.sm)
             ) {
                 IconButton(onClick = { pinch.reset() }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit the card")

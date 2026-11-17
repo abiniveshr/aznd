@@ -22,6 +22,7 @@ import com.ashrdev.aznd.ui.streaks.CheckInButton
 import com.ashrdev.aznd.ui.streaks.DayAction
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.streaks.TrackedDetailScreen
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * One routine, in the same shared view as a streak: Progress | Details | Calendar. A routine that is
@@ -95,7 +96,7 @@ fun RoutineDetailScreen(
             if (control != null || linked != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Space.md)
                 ) {
                     if (linked != null) {
                         OutlinedButton(onClick = { onSaveDay(linked.id, today) }, modifier = Modifier.weight(1f)) { Text("Save today") }

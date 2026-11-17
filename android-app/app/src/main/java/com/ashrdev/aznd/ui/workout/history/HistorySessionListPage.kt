@@ -64,6 +64,7 @@ import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.workout.formatTimestamp
+import com.ashrdev.aznd.ui.theme.Space
 
 // The popup never changes size: whichever filter category is open scrolls inside the space left.
 private val FilterDialogHeight = 480.dp
@@ -174,7 +175,7 @@ internal fun HistorySessionListPage(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = Space.lg, end = Space.lg, top = Space.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -184,7 +185,7 @@ internal fun HistorySessionListPage(
             )
             OutlinedButton(onClick = { filterOpen = true }) {
                 Icon(Icons.Default.FilterList, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(Space.sm))
                 Text(if (activeCount == 0) "Filters" else "Filters ($activeCount)")
             }
         }
@@ -194,8 +195,8 @@ internal fun HistorySessionListPage(
             shown.isEmpty() -> EmptyNote("No sessions match these filters.")
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = bottomPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.md, bottom = bottomPadding),
+                verticalArrangement = Arrangement.spacedBy(Space.md)
             ) {
                 items(shown, key = { it.session.id }) { item ->
                     SessionListCard(
@@ -211,7 +212,7 @@ internal fun HistorySessionListPage(
 
 @Composable
 private fun EmptyNote(text: String) {
-    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopStart) {
+    Box(modifier = Modifier.fillMaxSize().padding(Space.xl), contentAlignment = Alignment.TopStart) {
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
@@ -226,7 +227,7 @@ private fun SessionListCard(item: SessionWithSets, onClick: () -> Unit, onDelete
     val exerciseCount = item.sets.map { it.exerciseName }.distinct().size
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = Space.lg, top = Space.sm, bottom = Space.sm, end = Space.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -287,9 +288,9 @@ private fun HistoryFilterDialog(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(modifier = Modifier.fillMaxSize().padding(Space.lg)) {
                 Text("Filter sessions", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(Space.sm))
 
                 Column(modifier = Modifier.weight(1f)) {
                     FilterSection(
@@ -322,7 +323,7 @@ private fun HistoryFilterDialog(
                                 dates.kind = if (dates.kind == kind) DateRangeKind.ALL else kind
                             }
                             if (kind == DateRangeKind.CUSTOM && dates.kind == DateRangeKind.CUSTOM) {
-                                Box(modifier = Modifier.padding(start = 40.dp, bottom = 8.dp)) {
+                                Box(modifier = Modifier.padding(start = 40.dp, bottom = Space.sm)) {
                                     CustomRangeRow(dates, stacked = true)
                                 }
                             }
@@ -344,7 +345,7 @@ private fun HistoryFilterDialog(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = Space.sm),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -372,7 +373,7 @@ private fun ColumnScope.FilterSection(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onToggle)
-            .padding(horizontal = 4.dp, vertical = 12.dp),
+            .padding(horizontal = Space.xs, vertical = Space.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -406,7 +407,7 @@ private fun CheckRow(label: String, checked: Boolean, onToggle: () -> Unit) {
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(Space.md))
         Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }

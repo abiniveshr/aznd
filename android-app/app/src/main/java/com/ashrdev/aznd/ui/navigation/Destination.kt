@@ -115,6 +115,7 @@ sealed class Destination(val route: String) {
         fun createRoute(page: Int) = "body_page/$page"
     }
     object DashboardSettings : Destination("dashboard_settings")
+    object Performance : Destination("performance")
     // Edit mode for one dashboard page. [widget]: open its options on the Tuning page
     // (ADD_WIDGET: open the add-widget picker there); -1 opens on the live tiling.
     object DashboardEdit : Destination("dashboard_edit/{presetId}?widget={widget}") {

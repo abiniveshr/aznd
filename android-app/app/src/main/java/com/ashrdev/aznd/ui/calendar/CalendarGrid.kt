@@ -1,44 +1,48 @@
 package com.ashrdev.aznd.ui.calendar
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
@@ -63,8 +67,9 @@ internal fun cellSizeFor(view: CalendarView, width: Dp, height: Dp): Dp {
 internal fun naturalGridHeight(width: Dp): Dp =
     MonthLabelHeight + (width - WeekdayLabelWidth) / CalendarView(CalendarZoom.MONTH, 0, 1).columns * 7
 
+/** How round the cells' corners are, as a percent (0..50) of the cell's side; follows the buttons' corners. */
 @Composable
-internal fun rememberCellShape(): Shape {
+internal fun rememberCellCornerPercent(): Int {
     val base = LocalAzndStyle.current.buttonShape
     val density = LocalDensity.current
     return remember(base, density) {
@@ -75,8 +80,14 @@ internal fun rememberCellShape(): Shape {
             ?: 0f
         val clamped = cornerDp.coerceIn(0f, MAX_BUTTON_CORNER_DP)
         val percent = (clamped / ReferenceButtonHeight.value * 100f).coerceIn(0f, 50f)
-        RoundedCornerShape(percent = percent.roundToInt())
+        percent.roundToInt()
     }
+}
+
+@Composable
+internal fun rememberCellShape(): Shape {
+    val percent = rememberCellCornerPercent()
+    return remember(percent) { RoundedCornerShape(percent = percent) }
 }
 
 @Composable
@@ -95,14 +106,34 @@ internal fun CalendarGrid(
     onPinch: (zoomIn: Boolean, near: MonthKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = rememberCalendarColors()
     val today = todayDayKey()
-    val layout = remember(view.year, firstDayOfWeek) { YearLayout(view.year, firstDayOfWeek) }
-    val bands = remember(layout, view) { layout.bandsFor(view) }
-    val monthNames = remember(view.year) { (1..12).map { MonthKey(view.year, it).shortName() } }
-    val labelStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+    val layout = remember(view.year, firstDayOfWeek) { YearLayout.of(view.year, firstDayOfWeek) }
+    val plan = remember(view, firstDayOfWeek) { CalendarGridPlan(view, firstDayOfWeek) }
+    val bands = plan.bands
+    val description = remember(view) { "Calendar, ${view.title()}" }
+    val measurer = rememberTextMeasurer()
+    val typography = MaterialTheme.typography
+    val labelStyle = remember(typography) { typography.labelSmall.copy(fontSize = 10.sp) }
+    val monthLabels = remember(measurer, labelStyle, view.year) {
+        (1..12).map { measurer.measure(MonthKey(view.year, it).shortName(), style = labelStyle, softWrap = false, maxLines = 1) }
+    }
+    val letterLabels = remember(measurer, labelStyle) {
+        weekdayLetters.map { measurer.measure(it, style = labelStyle) }
+    }
+    val numberStyle = LocalTextStyle.current
+    val cornerPercent = rememberCellCornerPercent()
     val hover = remember { DayHoverState() }
-    val shape = rememberCellShape()
+    val showHover = dayTooltip != null
+    val badgePainter = remember { VectorBadgePainter() }
+    val currentDecorate = rememberUpdatedState(decorate)
+    val decorations = remember(plan) {
+        derivedStateOf {
+            val decorateDay = currentDecorate.value
+            val slots = plan.slots
+            ArrayList<DayDecoration>(slots.size).also { out -> for (slot in slots) out.add(decorateDay(slot.dayKey)) }
+        }
+    }
     LaunchedEffect(view) { hover.clear() }
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth().height(gridHeight)) {
@@ -110,42 +141,51 @@ internal fun CalendarGrid(
         val cellGap = (cell * 0.06f).coerceIn(1.dp, 3.dp)
         val bandHeight = MonthLabelHeight + cell * 7
         val everyWeekday = cell >= NumberMinCell
+        val widest = plan.weekCounts.maxOrNull() ?: view.columns
+        val gridWidth = cell * widest
+        val totalHeight = bandHeight * bands.size + BandGap * (bands.size - 1)
+        val numbers = remember(measurer, numberStyle, cell) {
+            DayNumberLayouts(measurer, numberStyle, (cell.value * 0.38f).coerceAtMost(14f).sp)
+        }
 
-        val geometry = GridGeometry(bands, layout, first, last, cell, bandHeight, cellGap)
-        val hitTest: DayHitTest = { position, _, density -> geometry.hit(position, density) }
+        val geometry = remember(bands, layout, first, last, cell, bandHeight, cellGap) {
+            GridGeometry(bands, layout, first, last, cell, bandHeight, cellGap)
+        }
+        val hitTest = remember<DayHitTest>(geometry) { { position, _, density -> geometry.hit(position, density) } }
+        val paint = GridPaint(
+            plan = plan,
+            colors = colors,
+            cell = cell,
+            bandHeight = bandHeight,
+            cellGap = cellGap,
+            cornerPercent = cornerPercent,
+            today = today,
+            selectedDay = selectedDay,
+            selectable = selectable,
+            firstMonth = first.year * 12 + first.month,
+            lastMonth = last.year * 12 + last.month,
+            monthLabels = monthLabels,
+            numbers = numbers,
+            badges = badgePainter
+        )
 
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics { contentDescription = description },
+            contentAlignment = Alignment.Center
+        ) {
             Row {
-                Column(
-                    modifier = Modifier.width(WeekdayLabelWidth),
-                    verticalArrangement = Arrangement.spacedBy(BandGap)
-                ) {
-                    bands.forEach { _ ->
-                        Column {
-                            Spacer(modifier = Modifier.height(MonthLabelHeight))
-                            for (row in 0 until 7) {
-                                Box(
-                                    modifier = Modifier.size(WeekdayLabelWidth, cell),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    if (everyWeekday || row % 2 == 1) {
-                                        Text(
-                                            weekdayLetters[(firstDayOfWeek - 1 + row) % 7],
-                                            style = labelStyle,
-                                            color = colors.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                Canvas(modifier = Modifier.size(WeekdayLabelWidth, totalHeight)) {
+                    drawWeekdayLetters(plan, letterLabels, colors.onSurfaceVariant, firstDayOfWeek, cell, bandHeight, everyWeekday)
                 }
 
                 Box(
                     modifier = Modifier
+                        .size(gridWidth, totalHeight)
                         .dayGestures(
                             hover = hover,
-                            showHover = dayTooltip != null,
+                            showHover = showHover,
                             hitTest = hitTest,
                             onTap = onDayTap,
                             onDoubleTap = onDayDoubleTap
@@ -154,53 +194,8 @@ internal fun CalendarGrid(
                             onPinch(zoomIn, geometry.monthNear(centroid, density))
                         }
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(BandGap)) {
-                        bands.forEach { band ->
-                            Column {
-                                Row {
-                                    for (week in band.startWeek..band.endWeek) {
-                                        val monthIndex = band.months
-                                            .firstOrNull { layout.monthStartWeek[it - 1] == week }
-                                            ?.minus(1) ?: -1
-                                        Box(modifier = Modifier.size(cell, MonthLabelHeight)) {
-                                            if (monthIndex >= 0) {
-                                                Text(
-                                                    monthNames[monthIndex],
-                                                    style = labelStyle,
-                                                    color = colors.onSurfaceVariant,
-                                                    maxLines = 1,
-                                                    softWrap = false,
-                                                    modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                Row {
-                                    for (week in band.startWeek..band.endWeek) {
-                                        Column {
-                                            for (row in 0 until 7) {
-                                                val dayKey = band.dayKeyAt(layout, week, row)
-                                                Box(modifier = Modifier.size(cell).padding(cellGap)) {
-                                                    if (dayKey != null) {
-                                                        CalendarCell(
-                                                            dayKey = dayKey,
-                                                            cellSize = cell,
-                                                            shape = shape,
-                                                            decoration = decorate(dayKey),
-                                                            reachable = monthKeyOf(dayKey) in first..last,
-                                                            isToday = dayKey == today,
-                                                            isSelected = selectable && dayKey == selectedDay,
-                                                            hover = if (dayTooltip != null) hover else null
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawDays(paint, if (showHover) hover.day else null, decorations.value)
                     }
                     DayHoverOverlay(hover, dayTooltip)
                 }
@@ -233,8 +228,9 @@ private class GridGeometry(
         ) {
             return@with null
         }
-        val dayKey = band.dayKeyAt(layout, band.startWeek + col, row)
-        if (dayKey == null || monthKeyOf(dayKey) !in first..last) return@with null
+        val week = band.startWeek + col
+        val dayKey = band.dayKeyAt(layout, week, row)
+        if (dayKey == null || MonthKey(layout.year, layout.monthAt(week, row)) !in first..last) return@with null
         val left = col * cellPx + gapPx
         val top = bandIndex * bandPx + labelPx + row * cellPx + gapPx
         DayHit(
@@ -257,126 +253,224 @@ private class GridGeometry(
         val col = (position.x / cellPx).toInt().coerceIn(0, band.weekCount - 1)
         val row = ((position.y - bandIndex * bandPx - labelPx) / cellPx).toInt().coerceIn(0, 6)
         val week = band.startWeek + col
-        val month = band.dayKeyAt(layout, week, row)?.let { monthKeyOf(it).month }
-            ?: (0 until 7).firstNotNullOfOrNull { r -> band.dayKeyAt(layout, week, r) }?.let { monthKeyOf(it).month }
+        val month = monthIn(band, week, row)
+            ?: (0 until 7).firstNotNullOfOrNull { r -> monthIn(band, week, r) }
             ?: band.months.first
         MonthKey(layout.year, month).coerceIn(first, last)
     }
+
+    private fun monthIn(band: YearBand, week: Int, row: Int): Int? =
+        layout.monthAt(week, row).takeIf { it in band.months }
 }
 
-@Composable
-private fun CalendarCell(
-    dayKey: String,
-    cellSize: Dp,
-    shape: Shape,
-    decoration: DayDecoration,
-    reachable: Boolean,
-    isToday: Boolean,
-    isSelected: Boolean,
-    hover: DayHoverState?
+/** Everything one draw of the day cells needs besides the hovered day and the decorations, which are read live. */
+private class GridPaint(
+    val plan: CalendarGridPlan,
+    val colors: CalendarColors,
+    val cell: Dp,
+    val bandHeight: Dp,
+    val cellGap: Dp,
+    val cornerPercent: Int,
+    val today: String,
+    val selectedDay: String?,
+    val selectable: Boolean,
+    val firstMonth: Int,
+    val lastMonth: Int,
+    val monthLabels: List<TextLayoutResult>,
+    val numbers: DayNumberLayouts,
+    val badges: VectorBadgePainter
+)
+
+/** Day numbers 1-31 measured once per style; the colour is given when drawing. */
+private class DayNumberLayouts(private val measurer: TextMeasurer, base: TextStyle, fontSize: TextUnit) {
+    private val styles = arrayOf(
+        base.copy(fontSize = fontSize),
+        base.copy(fontSize = fontSize, fontWeight = FontWeight.Bold),
+        base.copy(fontSize = fontSize, fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline)
+    )
+    private val cache = arrayOfNulls<TextLayoutResult>(styles.size * 32)
+
+    fun get(day: Int, bold: Boolean, underline: Boolean): TextLayoutResult {
+        val kind = if (underline) 2 else if (bold) 1 else 0
+        val index = kind * 32 + day
+        return cache[index] ?: measurer.measure(
+            text = day.toString(),
+            style = styles[kind],
+            overflow = TextOverflow.Clip,
+            softWrap = false,
+            maxLines = 1
+        ).also { cache[index] = it }
+    }
+}
+
+/** A text the way Text lays it out in a box: placed at the start or centred, and cut at the box if it does not fit. */
+private fun DrawScope.drawTextIn(
+    layout: TextLayoutResult,
+    color: Color,
+    left: Float,
+    top: Float,
+    boxWidth: Float,
+    boxHeight: Float,
+    centerX: Boolean,
+    centerY: Boolean
 ) {
-    val showSelected by remember(hover, dayKey, isSelected) {
-        derivedStateOf {
-            val hoveredDay = hover?.day
-            if (hoveredDay != null) hoveredDay == dayKey else isSelected
+    val textWidth = layout.size.width.toFloat()
+    val textHeight = layout.size.height.toFloat()
+    val w = minOf(textWidth, boxWidth)
+    val h = minOf(textHeight, boxHeight)
+    val x = left + if (centerX) (boxWidth - w) / 2f else 0f
+    val y = top + if (centerY) (boxHeight - h) / 2f else 0f
+    if (textWidth > boxWidth || textHeight > boxHeight) {
+        clipRect(x, y, x + w, y + h) { drawText(layout, color = color, topLeft = Offset(x, y)) }
+    } else {
+        drawText(layout, color = color, topLeft = Offset(x, y))
+    }
+}
+
+/** What Modifier.border draws for a rounded shape: a stroke kept inside the shape's edge. */
+private fun DrawScope.drawCellBorder(color: Color, left: Float, top: Float, side: Float, percent: Int, strokePx: Float) {
+    val radius = side * percent / 100f
+    if (strokePx * 2f > side) {
+        drawRoundRect(color, Offset(left, top), Size(side, side), CornerRadius(radius))
+        return
+    }
+    val half = strokePx / 2f
+    drawRoundRect(
+        color,
+        Offset(left + half, top + half),
+        Size(side - strokePx, side - strokePx),
+        CornerRadius((radius - half).coerceAtLeast(0f)),
+        style = Stroke(strokePx)
+    )
+}
+
+private fun DrawScope.drawWeekdayLetters(
+    plan: CalendarGridPlan,
+    letters: List<TextLayoutResult>,
+    color: Color,
+    firstDayOfWeek: Int,
+    cell: Dp,
+    bandHeight: Dp,
+    everyWeekday: Boolean
+) {
+    val cellPx = cell.toPx()
+    val bandPx = (bandHeight + BandGap).toPx()
+    val labelPx = MonthLabelHeight.toPx()
+    for (band in plan.bands.indices) {
+        for (row in 0 until 7) {
+            if (!everyWeekday && row % 2 != 1) continue
+            val top = band * bandPx + labelPx + row * cellPx
+            drawTextIn(
+                letters[(firstDayOfWeek - 1 + row) % 7], color,
+                0f, top, WeekdayLabelWidth.toPx(), cellPx, centerX = false, centerY = true
+            )
         }
     }
-    val colors = MaterialTheme.colorScheme
-    val base = colors.onSurface.copy(alpha = if (reachable) 0.08f else 0.03f)
-    val hasFill = decoration.fill != DayFill.None
-    val fillColor = decoration.fill.resolveColor()
-    val fillText = decoration.fill.defaultTextColor()
-    val showNumber = cellSize >= NumberMinCell
-    val showBadges = cellSize >= BadgeMinCell
-    val ring = if (cellSize < 16.dp) 1.5.dp else 2.dp
-    val outlineColor = decoration.outlineColor ?: colors.primary
-    val innerRing = showSelected && decoration.outline && cellSize >= InnerRingMinCell
+}
 
-    val borderWidth: Dp
-    val borderColor: Color
-    when {
-        innerRing -> {
-            borderWidth = ring
-            borderColor = outlineColor
-        }
-        showSelected -> {
-            borderWidth = ring
-            borderColor = colors.onSurface
-        }
-        decoration.outline -> {
-            borderWidth = ring
-            borderColor = outlineColor
-        }
-        isToday && !showNumber -> {
-            borderWidth = 1.dp
-            borderColor = colors.onSurface.copy(alpha = 0.6f)
-        }
-        else -> {
-            borderWidth = 0.dp
-            borderColor = Color.Transparent
-        }
+private fun DrawScope.drawDays(g: GridPaint, hovered: String?, decorations: List<DayDecoration>) {
+    val cellPx = g.cell.toPx()
+    val bandPx = (g.bandHeight + BandGap).toPx()
+    val labelPx = MonthLabelHeight.toPx()
+    val gapPx = g.cellGap.toPx()
+    val inner = cellPx - gapPx * 2f
+    val colors = g.colors
+    val showNumber = g.cell >= NumberMinCell
+    val showBadges = g.cell >= BadgeMinCell
+    val ring = if (g.cell < 16.dp) 1.5.dp else 2.dp
+    val ringPx = ring.toPx()
+    val innerRingAllowed = g.cell >= InnerRingMinCell
+    val reachableBase = colors.onSurface.copy(alpha = 0.08f)
+    val unreachableBase = colors.onSurface.copy(alpha = 0.03f)
+    val todayRing = colors.onSurface.copy(alpha = 0.6f)
+    val corner = CornerRadius(inner * g.cornerPercent / 100f)
+    val dotPx = (g.cell * 0.12f).coerceIn(3.dp, 5.dp).toPx()
+    val symbolPx = (g.cell * 0.24f).coerceIn(8.dp, 12.dp).toPx()
+    val insetPx = (g.cell * 0.08f).coerceIn(2.dp, 4.dp).toPx()
+
+    for (label in g.plan.labels) {
+        drawTextIn(
+            g.monthLabels[label.month - 1], colors.onSurfaceVariant,
+            label.col * cellPx, label.band * bandPx, Float.POSITIVE_INFINITY, labelPx,
+            centerX = false, centerY = false
+        )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(shape)
-                .background(base)
-                .then(if (hasFill) Modifier.background(fillColor) else Modifier)
-                .then(if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, shape) else Modifier),
-            contentAlignment = Alignment.Center
-        ) {
-            if (showNumber) {
-                val textColor = decoration.textColor ?: if (hasFill) fillText else colors.onSurface
-                Text(
-                    text = dayOfMonthOf(dayKey).toString(),
-                    color = if (reachable) textColor else textColor.copy(alpha = 0.4f),
-                    fontSize = (cellSize.value * 0.38f).coerceAtMost(14f).sp,
-                    fontWeight = if (isToday || showSelected) FontWeight.Bold else null,
-                    textDecoration = if (isToday) TextDecoration.Underline else null,
-                    maxLines = 1,
-                    softWrap = false
-                )
+    val slots = g.plan.slots
+    for (i in slots.indices) {
+        val slot = slots[i]
+        val decoration = decorations[i]
+        val left = slot.col * cellPx + gapPx
+        val top = slot.band * bandPx + labelPx + slot.row * cellPx + gapPx
+        val monthIndex = g.plan.view.year * 12 + slot.month
+        val reachable = monthIndex in g.firstMonth..g.lastMonth
+        val isToday = slot.dayKey == g.today
+        val isSelected = g.selectable && slot.dayKey == g.selectedDay
+        val showSelected = if (hovered != null) hovered == slot.dayKey else isSelected
+
+        val hasFill = decoration.fill != DayFill.None
+        val fillColor = colors.fillColor(decoration.fill)
+        val outlineColor = decoration.outlineColor ?: colors.primary
+        val innerRing = showSelected && decoration.outline && innerRingAllowed
+
+        var borderPx = 0f
+        var borderColor = Color.Transparent
+        when {
+            innerRing -> {
+                borderPx = ringPx
+                borderColor = outlineColor
+            }
+            showSelected -> {
+                borderPx = ringPx
+                borderColor = colors.onSurface
+            }
+            decoration.outline -> {
+                borderPx = ringPx
+                borderColor = outlineColor
+            }
+            isToday && !showNumber -> {
+                borderPx = 1.dp.toPx()
+                borderColor = todayRing
             }
         }
 
-        if (innerRing) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(ring + 1.dp)
-                    .border(1.5.dp, colors.onSurface, shape)
+        val origin = Offset(left, top)
+        val cellSize = Size(inner, inner)
+        drawRoundRect(if (reachable) reachableBase else unreachableBase, origin, cellSize, corner)
+        if (hasFill) drawRoundRect(fillColor, origin, cellSize, corner)
+
+        if (showNumber) {
+            val textColor = decoration.textColor ?: if (hasFill) colors.fillTextColor(decoration.fill) else colors.onSurface
+            drawTextIn(
+                g.numbers.get(slot.dayOfMonth, isToday || showSelected, isToday),
+                if (reachable) textColor else textColor.copy(alpha = 0.4f),
+                left, top, inner, inner, centerX = true, centerY = true
             )
         }
 
+        if (borderPx > 0f) drawCellBorder(borderColor, left, top, inner, g.cornerPercent, borderPx)
+
+        if (innerRing) {
+            val pad = (ring + 1.dp).toPx()
+            drawCellBorder(colors.onSurface, left + pad, top + pad, inner - pad * 2f, g.cornerPercent, 1.5.dp.toPx())
+        }
+
         if (showBadges) {
-            val dotSize = (cellSize * 0.12f).coerceIn(3.dp, 5.dp)
-            val symbolSize = (cellSize * 0.24f).coerceIn(8.dp, 12.dp)
-            val inset = (cellSize * 0.08f).coerceIn(2.dp, 4.dp)
-            decoration.badges.forEach { badge ->
-                val alignment = when (badge.position) {
-                    BadgePosition.TOP_START -> Alignment.TopStart
-                    BadgePosition.TOP_END -> Alignment.TopEnd
-                    BadgePosition.BOTTOM_CENTER -> Alignment.BottomCenter
+            for (badge in decoration.badges) {
+                val size = if (badge is DayBadge.Dot) dotPx else symbolPx
+                val x = left + when (badge.position) {
+                    BadgePosition.TOP_START -> insetPx
+                    BadgePosition.TOP_END -> inner - insetPx - size
+                    BadgePosition.BOTTOM_CENTER -> (inner - size) / 2f
+                }
+                val y = top + when (badge.position) {
+                    BadgePosition.TOP_START, BadgePosition.TOP_END -> insetPx
+                    BadgePosition.BOTTOM_CENTER -> inner - insetPx - size
                 }
                 when (badge) {
-                    is DayBadge.Dot -> Box(
-                        modifier = Modifier
-                            .align(alignment)
-                            .padding(inset)
-                            .size(dotSize)
-                            .clip(CircleShape)
-                            .background(badge.color)
-                    )
-                    is DayBadge.Symbol -> Icon(
-                        imageVector = badge.icon,
-                        contentDescription = null,
-                        tint = badge.tint,
-                        modifier = Modifier
-                            .align(alignment)
-                            .padding(inset)
-                            .size(symbolSize)
+                    is DayBadge.Dot -> drawCircle(badge.color, size / 2f, Offset(x + size / 2f, y + size / 2f))
+                    is DayBadge.Symbol -> g.badges.draw(
+                        this, badge.icon, if (badge.tint.isSpecified) badge.tint else colors.onSurface, x, y, size
                     )
                 }
             }

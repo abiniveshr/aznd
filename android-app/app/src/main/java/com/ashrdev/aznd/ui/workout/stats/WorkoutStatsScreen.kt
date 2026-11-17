@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val STATS_WORKOUT = 0
 private const val STATS_EXERCISES = 1
@@ -48,7 +49,7 @@ fun WorkoutStatsPages(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 24.dp, top = 8.dp)
+                        .padding(start = Space.lg, end = Space.xl, top = Space.sm)
                 )
                 Box(Modifier.weight(1f)) {
                     if (page == STATS_WORKOUT) {
@@ -69,7 +70,7 @@ fun WorkoutStatsPages(
             position = { pager.currentPage + pager.currentPageOffsetFraction },
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(end = 4.dp, bottom = bottomPadding)
+                .padding(end = Space.xs, bottom = bottomPadding)
         )
     }
 }
@@ -86,7 +87,7 @@ private fun StatsPage(
             Text(
                 "No exercises in this workout yet.",
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier.padding(Space.xl)
             )
         } else if (graphViewModel != null) {
             WorkoutGraphSection(graphViewModel, Modifier.fillMaxSize())

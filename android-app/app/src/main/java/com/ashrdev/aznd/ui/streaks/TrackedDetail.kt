@@ -41,6 +41,7 @@ import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.AlertDialog
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_GRAPH = 0
 private const val PAGE_DETAILS = 1
@@ -176,8 +177,8 @@ private fun CalendarPage(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         StreakCalendar(
             startDate = startDate,

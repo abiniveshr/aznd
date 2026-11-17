@@ -24,7 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Two-part page: [top] hugs the top, [bottom] (your calendar) is pinned to the bottom edge.
@@ -44,12 +44,12 @@ fun BottomAnchoredPage(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = viewport)
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
+                .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = top)
-            Spacer(modifier = Modifier.height(16.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = bottom)
+            Column(verticalArrangement = Arrangement.spacedBy(Space.md), content = top)
+            Spacer(modifier = Modifier.height(Space.lg))
+            Column(verticalArrangement = Arrangement.spacedBy(Space.md), content = bottom)
         }
     }
 }

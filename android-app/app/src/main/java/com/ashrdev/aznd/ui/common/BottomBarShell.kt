@@ -1,7 +1,6 @@
 package com.ashrdev.aznd.ui.common
 
 import com.ashrdev.aznd.ui.theme.taperEdge
-import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
@@ -40,6 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -53,18 +54,23 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.manage.LocalManageData
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.azndFill
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 val HandleAreaHeight = 20.dp
 val TabsHeight = 56.dp
-val BarBottomMargin = 8.dp
+val BarBottomMargin: Dp get() = Space.sm
 private const val FLING_VELOCITY = 800f
 
 private val TrayMotion = spring<Float>(
@@ -74,36 +80,15 @@ private val TrayMotion = spring<Float>(
 
 /**
  * Pull-up state, clamped to 0..1 so a bouncy spring can never leave a dim scrim half-drawn.
- * [openInitially] starts the bar already pulled up (see [TrayMemory]).
+ * [openInitially] starts the bar already pulled up.
  */
 @Composable
 fun rememberTrayState(openInitially: Boolean = false): Animatable<Float, AnimationVector1D> =
     remember { Animatable(if (openInitially) 1f else 0f).also { it.updateBounds(0f, 1f) } }
 
-/**
- * Lets "Back" keep the bar pulled up on the screen it returns to, so several Backs in a row are
- * one tap each. The Back button calls [mark]; the next screen that is created within a moment
- * calls [consume] and starts pulled up. Anything else (Home, a plain navigation) never marks, and
- * a mark that nobody picked up expires on its own, so an unrelated screen can't open by accident.
- */
+/** The bar no longer stays pulled up across screens; kept so Home can still reset it. */
 object TrayMemory {
-    private const val WINDOW_MS = 1500L
-    private var markedAt = 0L
-
-    fun mark() {
-        markedAt = SystemClock.uptimeMillis()
-    }
-
-    fun clear() {
-        markedAt = 0L
-    }
-
-    /** True once if a Back press just happened; the mark is used up either way. */
-    fun consume(): Boolean {
-        val hit = markedAt != 0L && SystemClock.uptimeMillis() - markedAt < WINDOW_MS
-        markedAt = 0L
-        return hit
-    }
+    fun clear() {}
 }
 
 suspend fun Animatable<Float, AnimationVector1D>.settleTo(target: Float) {
@@ -120,7 +105,7 @@ fun bottomBarHeight(hasMainRow: Boolean = true): Dp {
 
 // How much space a page must leave at the bottom so nothing hides behind the closed bar.
 @Composable
-fun bottomBarClearance(hasMainRow: Boolean = true): Dp = bottomBarHeight(hasMainRow) + 16.dp
+fun bottomBarClearance(hasMainRow: Boolean = true): Dp = bottomBarHeight(hasMainRow) + Space.lg
 
 // Shared shell: rounded-top surface, drag-to-reveal handle, and the Home / Settings / Manage data
 // row. `row1` is whatever a screen wants as its main row (always visible); null leaves just the
@@ -138,14 +123,14 @@ fun BottomBarShell(
     onShare: (() -> Unit)? = null,
     row1: (@Composable () -> Unit)? = null
 ) {
-    val openManageData = LocalManageData.current
     val style = LocalAzndStyle.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val trayHeightPx = with(density) { TabsHeight.toPx() }
 
     val dragState = rememberDraggableState { delta ->
-        scope.launch {
+        // Undispatched so the snap runs inside the input event instead of a frame later.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             tray.snapTo((tray.value - delta / trayHeightPx).coerceIn(0f, 1f))
         }
     }
@@ -175,7 +160,7 @@ fun BottomBarShell(
         shape = shape,
         // Flat colour underneath (it also casts the shadow); the gradient / pattern fill is painted over it.
         color = style.bottomBar,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        contentColor = style.onBottomBar,
         shadowElevation = 12.dp
     ) {
         Column(
@@ -221,81 +206,113 @@ fun BottomBarShell(
 
             row1?.invoke()
 
-            val trayHeight = with(density) { (trayHeightPx * tray.value).toDp() }
-            // The row below is laid out at full height even while the tray is closed (it only gets clipped), and
-            // clipping hides it without stopping touches: its tiles would still catch taps over the main row and
-            // below the bar. So they only respond once the tray is all the way open.
-            val trayOpen = tray.value >= TRAY_OPEN_FOR_TAPS
-            Box(
+            QuickActionTray(
+                tray = tray,
+                trayHeightPx = trayHeightPx,
+                onHome = onHome,
+                onShare = onShare,
+                onOpenSettings = onOpenSettings,
+                settingsEnabled = settingsEnabled,
+                manageDataEnabled = manageDataEnabled,
+                collapseTray = ::collapseTray
+            )
+        }
+    }
+}
+
+// The pulled-up row. Its revealed height follows the tray in the layout phase, and the tap gate is a
+// derived flag, so a drag only re-lays-out and clips; nothing here recomposes while it moves.
+@Composable
+private fun QuickActionTray(
+    tray: Animatable<Float, AnimationVector1D>,
+    trayHeightPx: Float,
+    onHome: (() -> Unit)?,
+    onShare: (() -> Unit)?,
+    onOpenSettings: () -> Unit,
+    settingsEnabled: Boolean,
+    manageDataEnabled: Boolean,
+    collapseTray: () -> Unit
+) {
+    val openManageData = LocalManageData.current
+    // The row below is laid out at full height even while the tray is closed (it only gets clipped), and
+    // clipping hides it without stopping touches: its tiles would still catch taps over the main row and
+    // below the bar. So they only respond once the tray is all the way open.
+    val trayOpen by remember(tray) { derivedStateOf { tray.value >= TRAY_OPEN_FOR_TAPS } }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .layout { measurable, constraints ->
+                val h = (trayHeightPx * tray.value).roundToInt()
+                    .coerceIn(constraints.minHeight, constraints.maxHeight)
+                val placeable = measurable.measure(
+                    Constraints(constraints.minWidth, constraints.maxWidth, h, h)
+                )
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
+            .clipToBounds()
+    ) {
+        // Full size always; the box above just uncovers it from the top downwards.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .requiredHeight(TabsHeight)
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(trayHeight)
-                    .clipToBounds()
+                    .height(TabsHeight)
+                    .padding(horizontal = Space.md)
             ) {
-                // Full size always; the box above just uncovers it from the top downwards.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .requiredHeight(TabsHeight)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(TabsHeight)
-                            .padding(horizontal = 12.dp)
-                    ) {
-                        val mutedTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        if (onHome != null) {
-                            ActionTile(
-                                icon = Icons.Default.Home,
-                                label = "Home",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                onClick = if (trayOpen) {
-                                    {
-                                        collapseTray()
-                                        onHome()
-                                    }
-                                } else null
-                            )
-                        }
-                        if (onHome == null && onShare != null) {
-                            ActionTile(
-                                icon = Icons.Default.Share,
-                                label = "Share",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                onClick = if (trayOpen) {
-                                    {
-                                        collapseTray()
-                                        onShare()
-                                    }
-                                } else null
-                            )
-                        }
-                        // Grayed out and inert while you're already inside Settings.
-                        ActionTile(
-                            icon = Icons.Default.Settings,
-                            label = "Settings",
-                            tint = if (settingsEnabled) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
-                            onClick = if (trayOpen && settingsEnabled) {
-                                {
-                                    collapseTray()
-                                    onOpenSettings()
-                                }
-                            } else null
-                        )
-                        ActionTile(
-                            icon = Icons.Default.ImportExport,
-                            label = "Manage data",
-                            tint = if (manageDataEnabled && openManageData != null) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
-                            onClick = if (trayOpen && manageDataEnabled && openManageData != null) {
-                                {
-                                    collapseTray()
-                                    openManageData.openForCurrentScreen()
-                                }
-                            } else null
-                        )
-                    }
+                val mutedTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                if (onHome != null) {
+                    ActionTile(
+                        icon = Icons.Default.Home,
+                        label = "Home",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        onClick = if (trayOpen) {
+                            {
+                                collapseTray()
+                                onHome()
+                            }
+                        } else null
+                    )
                 }
+                if (onHome == null && onShare != null) {
+                    ActionTile(
+                        icon = Icons.Default.Share,
+                        label = "Share",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        onClick = if (trayOpen) {
+                            {
+                                collapseTray()
+                                onShare()
+                            }
+                        } else null
+                    )
+                }
+                // Grayed out and inert while you're already inside Settings.
+                ActionTile(
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    tint = if (settingsEnabled) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
+                    onClick = if (trayOpen && settingsEnabled) {
+                        {
+                            collapseTray()
+                            onOpenSettings()
+                        }
+                    } else null
+                )
+                ActionTile(
+                    icon = Icons.Default.ImportExport,
+                    label = "Manage data",
+                    tint = if (manageDataEnabled && openManageData != null) MaterialTheme.colorScheme.onSurfaceVariant else mutedTint,
+                    onClick = if (trayOpen && manageDataEnabled && openManageData != null) {
+                        {
+                            collapseTray()
+                            openManageData.openForCurrentScreen()
+                        }
+                    } else null
+                )
             }
         }
     }
@@ -318,7 +335,7 @@ fun RowScope.ActionTile(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .padding(3.dp)
+            .padding(Space.xs)
             .clip(style.buttonShape)
             .then(clickModifier),
         horizontalAlignment = Alignment.CenterHorizontally,

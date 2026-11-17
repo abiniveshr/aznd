@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
 import com.ashrdev.aznd.data.workout.ExerciseSetPoint
+import com.ashrdev.aznd.data.workout.SetMode
 import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.ExerciseWithSets
 import com.ashrdev.aznd.data.workout.TrainingRepository
@@ -21,12 +22,14 @@ import com.ashrdev.aznd.domain.workout.SetRow
 import com.ashrdev.aznd.domain.workout.SetTree
 import com.ashrdev.aznd.ui.workout.stats.SessionE1rmPoint
 import com.ashrdev.aznd.ui.workout.stats.buildSessionE1rmPoints
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class TopExerciseStat(
     val workoutId: Long,
@@ -52,7 +55,7 @@ class WorkoutViewModel(
     val activeSession: StateFlow<ActiveSessionInfo?> =
         combine(training.observeActiveSession(), workouts) { session, workouts ->
             session?.let { s ->
-                if (s.workoutId == EMPTY_WORKOUT_ID) return@let ActiveSessionInfo(s.workoutId, "Empty workout", s.startedAt)
+                if (s.workoutId == EMPTY_WORKOUT_ID) return@let ActiveSessionInfo(s.workoutId, "Freestyle", s.startedAt)
                 workouts.firstOrNull { it.workout.id == s.workoutId }
                     ?.let { ActiveSessionInfo(s.workoutId, it.workout.name, s.startedAt) }
             }
@@ -103,17 +106,8 @@ class WorkoutViewModel(
         dao.getExerciseHistory(workoutId, exerciseName)
 
     // Best estimated-1RM set per exercise, across every workout, heaviest first.
-    suspend fun getTopExercises(limit: Int = 3): List<TopExerciseStat> {
-        val workouts = dao.getAllWorkoutsWithExercisesOnce()
-        return workouts
-            .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.workout.id, ews.exercise.id, ews.exercise.name) } }
-            .mapNotNull { (workoutId, exerciseId, exerciseName) ->
-                val best = buildSessionE1rmPoints(dao.getExerciseHistory(workoutId, exerciseName))
-                    .maxByOrNull { it.e1rm }
-                best?.let { TopExerciseStat(workoutId, exerciseId, exerciseName, it) }
-            }
-            .sortedByDescending { it.bestPoint.e1rm }
-            .take(limit)
+    suspend fun getTopExercises(limit: Int = 3): List<TopExerciseStat> = withContext(Dispatchers.Default) {
+        topExercisesOf(dao.getAllWorkoutsWithExercisesOnce(), dao.getSessionsOnce(), limit)
     }
 
     fun saveWorkout(
@@ -181,6 +175,31 @@ class WorkoutViewModel(
             exercises = training.exercisesById(rows.mapNotNull { it.exerciseId })
         )
     }
+}
+
+/**
+ * The best estimated-1RM set per exercise of every workout, heaviest first, worked out from sessions
+ * that are already loaded (one pass, no query per exercise).
+ */
+fun topExercisesOf(workouts: List<WorkoutWithExercises>, sessions: List<SessionWithSets>, limit: Int): List<TopExerciseStat> {
+    val points = HashMap<Pair<Long, String>, MutableList<ExerciseSetPoint>>()
+    // Oldest first, as the per-exercise history query returns them.
+    for (s in sessions.sortedBy { it.session.startedAt }) {
+        for (set in s.sets) {
+            if (set.mode != SetMode.REPS) continue
+            points.getOrPut(s.session.workoutId to set.exerciseName) { ArrayList() }
+                .add(ExerciseSetPoint(s.session.id, s.session.startedAt, set.value, set.weight, set.rpe))
+        }
+    }
+    return workouts
+        .flatMap { rws -> rws.exercises.map { ews -> Triple(rws.workout.id, ews.exercise.id, ews.exercise.name) } }
+        .mapNotNull { (workoutId, exerciseId, exerciseName) ->
+            val raw = points[workoutId to exerciseName] ?: return@mapNotNull null
+            buildSessionE1rmPoints(raw).maxByOrNull { it.e1rm }
+                ?.let { TopExerciseStat(workoutId, exerciseId, exerciseName, it) }
+        }
+        .sortedByDescending { it.bestPoint.e1rm }
+        .take(limit)
 }
 
 class WorkoutViewModelFactory(

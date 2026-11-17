@@ -10,26 +10,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.domain.GraphMode
 import com.ashrdev.aznd.ui.common.CompareGraph
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.StatsGraph
 import com.ashrdev.aznd.ui.common.ThirdAction
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun rememberDashboardModes(viewModel: DashboardViewModel, sessions: List<SessionWithSets>): List<GraphMode> {
-    val food by viewModel.food.collectAsState()
-    val weights by viewModel.weights.collectAsState()
-    val measurements by viewModel.measurements.collectAsState()
-    val burnt by viewModel.burntByDay.collectAsState()
-    return remember(food, weights, measurements, sessions, burnt) {
-        DashboardSeries.modes(food, weights, measurements, sessions, burnt)
-    }
+    // Used until the dashboard's own sources are bound (they are, from Home).
+    LaunchedEffect(viewModel, sessions) { viewModel.seedSessions(sessions) }
+    val modes by viewModel.modes.collectAsState()
+    return modes
 }
 
 @Composable
@@ -53,7 +50,7 @@ fun DashboardGraphScreen(
     ) { padding ->
         val modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = padding.calculateBottomPadding() + 12.dp)
+            .padding(start = Space.lg, end = Space.lg, top = Space.md, bottom = padding.calculateBottomPadding() + Space.md)
         when {
             shown.isEmpty() -> Box(modifier, contentAlignment = Alignment.Center) {
                 Text(

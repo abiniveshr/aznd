@@ -45,6 +45,8 @@ import com.ashrdev.aznd.ui.manage.ManageDataScreen
 import com.ashrdev.aznd.ui.manage.ManageDataViewModel
 import com.ashrdev.aznd.ui.manage.ManagePage
 import com.ashrdev.aznd.ui.navigation.Destination
+import com.ashrdev.aznd.ui.settings.PerformanceScreen
+import com.ashrdev.aznd.ui.settings.PerformanceStore
 import com.ashrdev.aznd.ui.settings.SettingsScreen
 import com.ashrdev.aznd.ui.settings.AppearanceScreen
 import com.ashrdev.aznd.data.workout.TrainingRepository
@@ -84,7 +86,7 @@ import com.ashrdev.aznd.ui.routines.RoutineEditorScreen
 import com.ashrdev.aznd.ui.routines.RoutinesScreen
 import com.ashrdev.aznd.data.routines.TrackingSource
 import com.ashrdev.aznd.reminders.ReminderScheduler
-import com.ashrdev.aznd.ui.theme.AzndTheme
+import com.ashrdev.aznd.ui.theme.ThemeHost
 import com.ashrdev.aznd.ui.theme.ThemeStore
 import com.ashrdev.aznd.ui.workout.stats.ExerciseProgressScreen
 import com.ashrdev.aznd.ui.workout.history.WorkoutHistoryListScreen
@@ -103,6 +105,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        PerformanceStore.init(this)
         ThemeStore.init(this)
         val database = AppDatabase.getInstance(this)
         val dao = database.workoutDao()
@@ -119,7 +122,7 @@ class MainActivity : ComponentActivity() {
         ReminderScheduler.syncAsync(applicationContext)
         val dataTransfer = DataTransfer(DataRegistry.create(this, database, trainingRepository, macroTargets))
         setContent {
-            AzndTheme {
+            ThemeHost {
                 CompositionLocalProvider(LocalGraphRangeStore provides graphRange) {
                   val navController = rememberNavController()
                   val workoutViewModel: WorkoutViewModel =
@@ -215,7 +218,15 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = openSettings,
                                 onOpenAppearance = { navigateTo(Destination.Appearance.route) },
                                 onOpenDashboard = { navigateTo(Destination.DashboardSettings.route) },
+                                onOpenPerformance = { navigateTo(Destination.Performance.route) },
                                 workoutSettings = workoutSettings
+                            )
+                        }
+                        composable(Destination.Performance.route) {
+                            PerformanceScreen(
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings
                             )
                         }
                         composable(Destination.Appearance.route) {
@@ -450,7 +461,7 @@ class MainActivity : ComponentActivity() {
                         ) { backStackEntry ->
                             val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
                             val workoutName by produceState(initialValue = "", workoutId) {
-                                value = if (workoutId == EMPTY_WORKOUT_ID) "Empty workout"
+                                value = if (workoutId == EMPTY_WORKOUT_ID) "Freestyle"
                                 else workoutViewModel.getWorkout(workoutId)?.workout?.name.orEmpty()
                             }
                             val loggerVm: LoggerViewModel =
@@ -462,7 +473,15 @@ class MainActivity : ComponentActivity() {
                                 onFinished = goBack,
                                 onBack = goBack,
                                 onHome = goHome,
-                                onOpenSettings = openSettings
+                                onOpenSettings = openSettings,
+                                // The share screen takes the logger's place, so Back from it lands where Finish would.
+                                onShare = { historyId ->
+                                    navigateTo(
+                                        FlexPreset.WORKOUT.route(a = historyId),
+                                        popUpToRoute = Destination.WorkoutSession.route,
+                                        popUpInclusive = true
+                                    )
+                                }
                             )
                         }
                         composable(

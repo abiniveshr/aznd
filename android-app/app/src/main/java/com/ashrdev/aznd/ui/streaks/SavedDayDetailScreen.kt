@@ -31,6 +31,7 @@ import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.common.PhotoCard
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val REMARK_LIMIT = 50
 
@@ -116,9 +117,9 @@ fun SavedDayDetailScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+                start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding()
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             if (isExisting) {
                 item {
@@ -146,7 +147,7 @@ fun SavedDayDetailScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Add photo")
                     }
                 }

@@ -57,6 +57,7 @@ import com.ashrdev.aznd.ui.components.Card
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The ONE time-window setting every graph in the app shares (Recent 5 ... Max). Create a single
@@ -126,13 +127,13 @@ fun StatsGraph(
 
     val body: @Composable () -> Unit = {
         Column(
-            (if (bordered) Modifier else modifier).then(if (fillHeight) Modifier.fillMaxSize() else Modifier).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            (if (bordered) Modifier else modifier).then(if (fillHeight) Modifier.fillMaxSize() else Modifier).padding(Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             if (title != null) Text(title, style = MaterialTheme.typography.titleMedium)
 
             if (modes.size > 1 && !(canCompare && comparing)) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     items(modes, key = { it.id }) { m ->
                         FilterChip(selected = m.id == mode.id, onClick = { modeId = m.id }, label = { Text(m.label) })
                     }

@@ -45,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * "New exercise" / "Edit exercise" form, reached from the Custom exercises list (three-dot menu on the
@@ -106,8 +107,8 @@ fun CustomExerciseFormScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding() + 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding() + Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Space.lg)
         ) {
             OutlinedTextField(
                 value = form.name,
@@ -119,7 +120,7 @@ fun CustomExerciseFormScreen(
             ErrorText(errors, FormError.NAME_BLANK, FormError.NAME_TAKEN)
 
             Section("Type")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 ExerciseType.entries.forEach { t ->
                     FilterChip(
                         selected = form.type == t,
@@ -154,7 +155,7 @@ fun CustomExerciseFormScreen(
                     enabled = form.maxMuscles < Muscle.COUNT
                 ) { Icon(Icons.Default.Add, contentDescription = "Allow more muscles") }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 Muscle.entries.forEach { m ->
                     FilterChip(
                         selected = m in form.muscles,
@@ -193,7 +194,7 @@ fun CustomExerciseFormScreen(
             }
 
             Section("Photo (optional)")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                 MuscleBadge(form.primary ?: Muscle.CHEST, form.photoPath, size = 72.dp)
                 OutlinedButton(onClick = { picker.launch() }) {
                     Text(if (form.photoPath == null) "Add photo" else "Change photo")

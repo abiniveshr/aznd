@@ -48,6 +48,7 @@ import com.ashrdev.aznd.ui.components.OutlinedTextField
 import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 /*
  * The settings of one card (one FlexBlock) on a poster: the "rules in card edit".
@@ -143,7 +144,7 @@ internal fun FlexCardConfig(
 
     // The folds' open state is kept per card: another card starts with its folds as new.
     key(blockId) {
-        Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.md)) {
             if (block == null) {
                 ConfigHint("This card is no longer on the poster.")
             } else {
@@ -236,8 +237,8 @@ internal fun FlexCardConfig(
                     "$where · ${(block.size * 100).roundToInt()}%",
                     initiallyOpen = firstOpen && !hasOwn
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Space.lg), verticalAlignment = Alignment.Top) {
+                        Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                             ConfigLabel("Align")
                             FlexAlignPad(block.hAlign, block.vAlign) { h, v -> edit { it.copy(hAlign = h, vAlign = v) } }
                         }
@@ -255,18 +256,18 @@ internal fun FlexCardConfig(
                 // 3. On the poster: duplicate / delete (Delete asks first).
                 if (mode == FlexConfigMode.PANEL) {
                     FlexFoldSection("Card", "Duplicate or delete") {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                             TextButton(
                                 onClick = { addAfter { from, id -> from.copy(id = id) } },
-                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                contentPadding = PaddingValues(horizontal = Space.sm)
                             ) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(Space.sm))
                                 Text("Duplicate")
                             }
                             TextButton(
                                 onClick = { confirmDelete = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                contentPadding = PaddingValues(horizontal = Space.sm)
                             ) {
                                 Icon(
                                     Icons.Default.Delete,
@@ -274,7 +275,7 @@ internal fun FlexCardConfig(
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(Space.sm))
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -353,7 +354,7 @@ private fun StyleChoice(labels: List<String>, variant: Int, onPick: (Int) -> Uni
     if (labels.size < 2) return
     val current = variant.coerceIn(0, labels.lastIndex)
     if (labels.size <= 4) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             ConfigLabel("Style")
             FlexSegmented(labels.indices.toList(), current, { labels[it] }, onSelect = onPick)
         }
@@ -408,7 +409,7 @@ private fun WorkoutStatsOptions(
     val next = stats.firstOrNull { s ->
         spec.blocks.none { it.type == FlexBlockType.WORKOUT_STATS && it.stat == s }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.Bottom) {
         Box(modifier = Modifier.weight(1f)) {
             DropdownField("Shows", choices, stat, { it.label }) { s ->
                 // Each stat has its own looks: keep the look's number when the new stat has it, else its last.
@@ -417,7 +418,7 @@ private fun WorkoutStatsOptions(
         }
         OutlinedButton(onClick = { next?.let(onAddStat) }, enabled = next != null) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(Space.sm))
             Text("Add another")
         }
     }
@@ -488,7 +489,7 @@ private fun GraphOptions(
     ) { picked ->
         editGraph { g -> g.copy(variables = listOfNotNull(picked.id, g.variables.getOrNull(1)?.takeIf { it != picked.id })) }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
         Box(modifier = Modifier.weight(1f)) {
             FlexPickField(
                 label = "Compare with",
@@ -557,7 +558,7 @@ private fun CalendarOptions(
             placeholder = picked == null
         ) { s -> edit { it.copy(source = s.key) } }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
         ConfigLabel("Shows a")
         FlexSegmented(listOf(CalendarZoom.MONTH, CalendarZoom.QUADRANT, CalendarZoom.YEAR), view.zoom, { zoomName(it) }) { zoom ->
             // A card on the screen's own month keeps following it; a picked period moves to the one of the new mode that holds it.
@@ -569,7 +570,7 @@ private fun CalendarOptions(
             }
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
         Box(modifier = Modifier.weight(1f)) {
             DropdownField("Year", flexCalendarYears(first, last, view.year), view.year, { it.toString() }) { y ->
                 edit { it.copy(year = y, index = view.index) }
@@ -609,7 +610,7 @@ private fun CalendarOptions(
     Box {
         OutlinedButton(onClick = { menu = true }, enabled = choices.isNotEmpty()) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(Space.sm))
             Text("Add another ${zoomName(view.zoom).lowercase()}")
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -637,10 +638,10 @@ private fun PhotoPick(block: FlexBlock, edit: (continuous: Boolean, (FlexBlock) 
         val uriText = uri.toString()
         edit(false) { it.copy(keys = listOf(uriText), text = if (it.text == FLEX_SCREEN_PHOTO) "" else it.text) }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = { picker.launch() }) {
             Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(Space.sm))
             Text("Choose photo")
         }
         if (block.keys != null) {

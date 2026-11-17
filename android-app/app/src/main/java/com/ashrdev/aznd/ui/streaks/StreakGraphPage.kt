@@ -16,9 +16,12 @@ import com.ashrdev.aznd.domain.GraphPoint
 import com.ashrdev.aznd.domain.GraphStyle
 import com.ashrdev.aznd.domain.PointTint
 import com.ashrdev.aznd.domain.streaks.StreakStats
-import com.ashrdev.aznd.domain.streaks.parseKey
+import com.ashrdev.aznd.domain.streaks.epochDayOfKey
+import com.ashrdev.aznd.domain.streaks.localMidnightMillis
 import com.ashrdev.aznd.domain.streaks.shortDate
 import com.ashrdev.aznd.ui.common.StatsGraph
+import java.util.Calendar
+import com.ashrdev.aznd.ui.theme.Space
 
 private fun dayText(n: Int) = "$n day${if (n == 1) "" else "s"}"
 
@@ -30,8 +33,8 @@ fun StreakGraphPage(stats: StreakStats, milestones: List<Int>, bottomPadding: Dp
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         StatsGraph(
             modes = modes,
@@ -49,7 +52,8 @@ fun StreakGraphPage(stats: StreakStats, milestones: List<Int>, bottomPadding: Dp
  */
 fun streakGraphModes(stats: StreakStats, milestones: List<Int>): List<GraphMode> {
     val milestoneSet = milestones.toSet()
-    val times = stats.days.map { parseKey(it).timeInMillis }
+    val cal = Calendar.getInstance()
+    val times = LongArray(stats.days.size) { localMidnightMillis(epochDayOfKey(stats.days[it]), cal) }
 
     val progress = ArrayList<GraphPoint>()
     for (i in stats.days.indices) {

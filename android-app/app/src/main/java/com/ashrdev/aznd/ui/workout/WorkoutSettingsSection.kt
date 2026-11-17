@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.data.workout.WorkoutSettings
 import com.ashrdev.aznd.data.workout.WorkoutSettingsStore
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Settings section for workout logging preferences (RPE tracking, target reps).
@@ -39,7 +40,7 @@ fun WorkoutSettingsSwitches(
     onTargetReps: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.md)) {
         Text("Workout", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
         SwitchCard(
             title = "Track RPE",
@@ -62,7 +63,7 @@ private fun SwitchCard(title: String, subtitle: String, checked: Boolean, onChan
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

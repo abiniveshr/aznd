@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 /** The preview is drawn once at this short side, whatever size is picked for the export. */
 private const val PREVIEW_SHORT = 720
@@ -158,8 +159,8 @@ internal fun FlexExportScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(start = Space.lg, end = Space.lg, top = Space.sm, bottom = padding.calculateBottomPadding() + Space.md),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             Box(
                 modifier = Modifier
@@ -192,7 +193,7 @@ internal fun FlexExportScreen(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                 FLEX_EXPORT_SIZES.forEach { size ->
                     FilterChip(
                         selected = short == size,
@@ -201,7 +202,7 @@ internal fun FlexExportScreen(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                 FlexImageFormat.entries.forEach { f ->
                     FilterChip(
                         selected = format == f,
@@ -216,7 +217,7 @@ internal fun FlexExportScreen(
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Share") }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = { export { uri -> saveImageToDevice(context, uri) } },
                     enabled = !busy,

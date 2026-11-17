@@ -10,8 +10,10 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -27,6 +29,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import com.ashrdev.aznd.ui.settings.PatternMode
+import com.ashrdev.aznd.ui.settings.PerformanceStore
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -42,7 +47,9 @@ import kotlin.math.sin
  * A pattern is one field laid over the whole screen (or the whole Flex card), and each element is a window onto it:
  * the tiles start at the screen's corner, not at each element's own. Two cards with the same pattern therefore show
  * different pieces of it and the pattern runs on from one to the next. (Starting every element's pattern at its own
- * corner made every card show the same piece of the tile.) Gradients are the opposite: each one spans its own element.
+ * corner made every card show the same piece of the tile.) That is the default ([FillAnchor.SCREEN]); with
+ * [FillAnchor.ELEMENT] a pattern starts at its element's corner. Gradients default to the opposite: each one spans its own
+ * element, and can span the screen instead.
  */
 object FillRender {
 
@@ -102,8 +109,9 @@ object FillRender {
      */
     fun movablePatternLayers(p: PatternSpec, density: Float): List<MovablePattern> {
         if (p.kind == PatternKind.NONE) return emptyList()
-        return PatternMath.placed(p.kind, p.scale, density).map { layer ->
-            val tile = PatternTiles.tile(p.kind, p.tint, p.seed + layer.seedShift)
+        // A layer whose tile is not ready yet (it is being made in the background) is left out for now.
+        return PatternMath.placed(p.kind, p.scale, density).mapNotNull { layer ->
+            val tile = PatternTiles.tile(p.kind, p.tint, p.seed + layer.seedShift) ?: return@mapNotNull null
             val shader = BitmapShader(tile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
             val m = Matrix()
             m.setScale(layer.scaleX, layer.scaleY)
@@ -120,7 +128,9 @@ object FillRender {
      * Fills a rounded rect on [canvas]: base colour or gradient, then the pattern. [alpha] (0..1) fades
      * the whole fill, like the opacity of a Flex panel. The gradient spans [rect]; the pattern is a window onto a
      * field that starts at ([fieldX], [fieldY]) in the canvas's coordinates (the card's corner, for Flex), so panels
-     * on one card continue the same pattern instead of each starting it again at its own corner.
+     * on one card continue the same pattern instead of each starting it again at its own corner. With
+     * [FillAnchor.ELEMENT] the pattern starts at [rect]'s corner instead; with a [FillAnchor.SCREEN] gradient and a positive
+     * [fieldW] and [fieldH] the gradient spans that field instead of [rect].
      */
     fun drawRoundRect(
         canvas: Canvas,
@@ -131,28 +141,52 @@ object FillRender {
         density: Float,
         alpha: Float = 1f,
         fieldX: Float = 0f,
-        fieldY: Float = 0f
+        fieldY: Float = 0f,
+        fieldW: Float = 0f,
+        fieldH: Float = 0f
     ) {
         val a = (alpha.coerceIn(0f, 1f) * 255f).roundToInt()
         if (a <= 0) return
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        // A canvas copies the paint when it records a draw, so one paint per thread can be set up again for every call.
+        val paints = paintsOfThread.get()!!
+        val paint = paints.base
+        paint.reset()
+        paint.isAntiAlias = true
         if (style.base == FillBase.GRADIENT) {
-            paint.shader = gradientShader(style.gradient, rect)
+            val spanField = style.gradientAnchor == FillAnchor.SCREEN && fieldW > 0f && fieldH > 0f
+            paint.shader = gradientShader(style.gradient, if (spanField) RectF(fieldX, fieldY, fieldX + fieldW, fieldY + fieldH) else rect)
         } else {
             paint.color = baseColor
         }
         paint.alpha = a
         canvas.drawRoundRect(rect, radius, radius, paint)
+        paint.shader = null
 
         // Patterns go on one over the other, first in the list lowest.
-        for (p in style.activePatterns) {
-            for ((shader, share) in patternLayers(p, density, fieldX, fieldY)) {
-                val over = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-                over.shader = shader
-                over.alpha = (p.intensity.coerceIn(0f, 1f) * share * a).roundToInt()
+        val active = style.activePatterns
+        if (active.isEmpty()) return
+        val over = paints.over
+        for (p in active) {
+            for (layer in movablePatternLayers(p, density)) {
+                if (style.patternAnchor == FillAnchor.ELEMENT) layer.anchorAt(rect.left, rect.top) else layer.anchorAt(fieldX, fieldY)
+                over.reset()
+                over.isAntiAlias = true
+                over.isFilterBitmap = true
+                over.shader = layer.shader
+                over.alpha = (p.intensity.coerceIn(0f, 1f) * layer.share * a).roundToInt()
                 canvas.drawRoundRect(rect, radius, radius, over)
+                over.shader = null
             }
         }
+    }
+
+    private class Paints {
+        val base = Paint()
+        val over = Paint()
+    }
+
+    private val paintsOfThread = object : ThreadLocal<Paints>() {
+        override fun initialValue(): Paints = Paints()
     }
 }
 
@@ -192,50 +226,108 @@ private fun patternOverlays(p: PatternSpec, density: Float): List<PatternOverlay
         PatternOverlay(layer, brush, (p.intensity * layer.share).coerceIn(0f, 1f))
     }
 
+private class FieldGradientBrush(private val g: GradientSpec, private val fieldW: Float, private val fieldH: Float) : ShaderBrush() {
+    private var shader: Shader? = null
+    private val base = Matrix().also {
+        if (g.kind == GradientKind.SWEEP) it.postRotate(g.angle.toFloat(), max(fieldW, 1f) * g.centerX, max(fieldH, 1f) * g.centerY)
+    }
+    private val scratch = Matrix()
+
+    private fun made(): Shader = shader ?: FillRender.gradientShader(g, RectF(0f, 0f, fieldW, fieldH)).also { shader = it }
+
+    override fun createShader(size: Size): Shader = made()
+
+    fun moveTo(x: Float, y: Float) {
+        scratch.set(base)
+        scratch.postTranslate(-x, -y)
+        made().setLocalMatrix(scratch)
+    }
+}
+
 /**
  * Paints [fill] behind this element, clipped to [shape]. A plain colour is a normal background; gradients
  * and patterns are drawn once per size and cached. Null does nothing.
  *
- * A gradient spans this element. A pattern does not start at the element's corner: it is one field laid over the
- * whole screen (the root of the composition), and this element shows the piece of it under it. So the same pattern
- * on two cards shows two different pieces, and a card that scrolls or moves slides over a pattern that stays put.
- * The element's position is read only when drawing, so moving it redraws it and recomposes nothing. Fills without a
- * pattern are drawn as they always were, without watching the position.
+ * A pattern with [FillAnchor.SCREEN] (the default) is one field laid over the whole screen (the root of the
+ * composition), and this element shows the piece of it under it: the same pattern on two cards shows two different
+ * pieces, and a card that scrolls or moves slides over a pattern that stays put. With [FillAnchor.ELEMENT] it starts at
+ * the element's corner and moves with it. A gradient spans its own element, or with [FillAnchor.SCREEN] the whole screen
+ * ([LocalFillField]). A pattern whose [ScreenBakes] bake is in memory is drawn from the bake; while its set is required
+ * and not baked yet only the base is drawn; otherwise the tiles are drawn live. The element's position is read only
+ * when drawing, and only when an anchor in play is [FillAnchor.SCREEN].
  */
-fun Modifier.azndFill(fill: ResolvedFill?, shape: Shape = RectangleShape): Modifier {
+fun Modifier.azndFill(fill: ResolvedFill?, shape: Shape = RectangleShape, preview: Boolean = false): Modifier {
     if (fill == null) return this
-    if (fill.isPlain) return this.background(fill.base, shape)
+    val mode = if (preview) PatternMode.LIVE else PerformanceStore.patternMode
     val style = fill.style
     val base = fill.base
-    if (style.activePatterns.isEmpty()) {
+    val set = if (mode == PatternMode.OFF) null else ScreenBakes.setOf(style)
+    val gradient = style.base == FillBase.GRADIENT
+    if (!gradient && set == null) return this.background(base, shape)
+    val screenGradient = gradient && style.gradientAnchor == FillAnchor.SCREEN
+    val screenPattern = set != null && style.patternAnchor == FillAnchor.SCREEN
+    if (set == null && !screenGradient) {
         return this.drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
-            val baseBrush: Brush = if (style.base == FillBase.GRADIENT) gradientBrush(style.gradient) else SolidColor(base)
+            val baseBrush: Brush = gradientBrush(style.gradient)
             onDrawBehind {
                 drawOutline(outline, baseBrush)
             }
         }
     }
     return this.composed {
+        val field = LocalFillField.current
+        val useField = screenGradient && field.width > 0 && field.height > 0
+        val watch = useField || screenPattern
         val corner = remember { mutableStateOf(Offset.Zero) }
-        Modifier
-            .onGloballyPositioned { coordinates ->
+        val watcher = if (watch) {
+            Modifier.onGloballyPositioned { coordinates ->
                 val at = coordinates.positionInRoot()
                 if (at != corner.value) corner.value = at
             }
-            .drawWithCache {
-                val outline = shape.createOutline(size, layoutDirection, this)
-                val baseBrush: Brush = if (style.base == FillBase.GRADIENT) gradientBrush(style.gradient) else SolidColor(base)
-                val overlays = style.activePatterns.flatMap { p -> patternOverlays(p, density) }
-                onDrawBehind {
-                    val origin = corner.value
-                    drawOutline(outline, baseBrush)
-                    for (overlay in overlays) {
-                        overlay.layer.anchorAt(-origin.x, -origin.y)
-                        drawOutline(outline, overlay.brush, alpha = overlay.alpha)
+        } else {
+            Modifier
+        }
+        watcher.drawWithCache {
+            val outline = shape.createOutline(size, layoutDirection, this)
+            val fieldBrush = if (useField) FieldGradientBrush(style.gradient, field.width.toFloat(), field.height.toFloat()) else null
+            val baseBrush: Brush = when {
+                !gradient -> SolidColor(base)
+                fieldBrush != null -> fieldBrush
+                else -> gradientBrush(style.gradient)
+            }
+            val bakeSize = if (set != null && mode == PatternMode.BAKED) ScreenBakes.size else null
+            val bake = if (set != null && bakeSize != null) ScreenBakes.bakeFor(set, bakeSize) else null
+            val bakeShader = if (bake != null) BitmapShader(bake, Shader.TileMode.MIRROR, Shader.TileMode.MIRROR) else null
+            val bakeBrush: Brush? = if (bakeShader != null) {
+                object : ShaderBrush() {
+                    override fun createShader(size: Size): Shader = bakeShader
+                }
+            } else {
+                null
+            }
+            val live = set != null && bake == null && (mode == PatternMode.LIVE || !ScreenBakes.isRequired(set))
+            val overlays = if (live && set != null) set.flatMap { p -> patternOverlays(p, density) } else emptyList()
+            val bakeMatrix = Matrix()
+            onDrawBehind {
+                val origin = if (watch) corner.value else Offset.Zero
+                fieldBrush?.moveTo(origin.x, origin.y)
+                drawOutline(outline, baseBrush)
+                if (bakeShader != null && bakeBrush != null) {
+                    if (screenPattern) {
+                        bakeMatrix.setTranslate(-origin.x.roundToInt().toFloat(), -origin.y.roundToInt().toFloat())
+                    } else {
+                        bakeMatrix.reset()
                     }
+                    bakeShader.setLocalMatrix(bakeMatrix)
+                    drawOutline(outline, bakeBrush)
+                }
+                for (overlay in overlays) {
+                    if (screenPattern) overlay.layer.anchorAt(-origin.x, -origin.y) else overlay.layer.anchorAt(0f, 0f)
+                    drawOutline(outline, overlay.brush, alpha = overlay.alpha)
                 }
             }
+        }
     }
 }
 
@@ -249,8 +341,12 @@ fun Modifier.themedFill(element: ThemeColor, shape: Shape = RectangleShape): Mod
 // ---------------------------------------------------------------------------------------------
 
 /**
- * The seamless bitmaps patterns repeat (worked out by [PatternMath]). A tile holds the pattern at full strength (light
- * and dark as alpha, or the pattern colour); the fill's intensity fades it when drawn. Made on first use and kept.
+ * The seamless bitmaps patterns repeat (worked out by [PatternMath], kept on disk by [PatternBake]). A tile holds the
+ * pattern at full strength (light and dark as alpha, or the pattern colour); the fill's intensity fades it when drawn.
+ *
+ * The main thread never makes or reads a tile: [tile] gives null there until a background job has put it in memory, and
+ * the Compose state it reads then tells the draw that asked to run again. Other threads (Flex export, thumbnails)
+ * get the tile at once, made on the spot if need be.
  */
 object PatternTiles {
     /** Least recently used tiles go first (the biggest are 512 × 512), so memory stays bounded. */
@@ -259,13 +355,92 @@ object PatternTiles {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?): Boolean = size > MAX_TILES
     }
 
-    @Synchronized
-    fun tile(kind: PatternKind, tint: Int, seed: Int): Bitmap {
-        val key = "${kind.name}|${if (kind.tinted) tint and 0xFFFFFF else 0}|$seed"
-        cache[key]?.let { return it }
-        val p = PatternMath.pixels(kind, tint, seed)
+    /** Guards [cache] and [inFlight]; never held while a tile is made, so the main thread does not wait on a bake. */
+    private val lock = Any()
+
+    /** One tile at a time is made, so two askers for the same tile make it once. */
+    private val genLock = Any()
+    private val inFlight = HashSet<String>()
+
+    /** Goes up whenever a tile arrives in memory; a draw that found a tile missing has read it and runs again. */
+    private val arrivals = mutableIntStateOf(0)
+
+    private val worker = ScheduledThreadPoolExecutor(1) { r ->
+        Thread(r, "pattern-tiles").apply {
+            isDaemon = true
+            priority = Thread.MIN_PRIORITY
+        }
+    }
+
+    private fun onMainThread(): Boolean = Looper.myLooper() == Looper.getMainLooper()
+
+    private fun watchArrivals(): Int = arrivals.intValue
+
+    private fun cached(name: String): Bitmap? = synchronized(lock) { cache[name] }
+
+    /**
+     * The tile, or null on the main thread while it is not in memory yet (a job is started to bring it, and the caller
+     * is told when it arrives, if it is drawing inside a Compose draw or cache block).
+     */
+    fun tile(kind: PatternKind, tint: Int, seed: Int): Bitmap? {
+        val name = PatternBake.nameOf(kind, tint, seed)
+        cached(name)?.let { return it }
+        if (!onMainThread()) return obtain(kind, tint, seed, name)
+        // Read before looking again: a tile that lands in between is then seen, not missed.
+        watchArrivals()
+        cached(name)?.let { return it }
+        request(kind, tint, seed, name)
+        return null
+    }
+
+    /** Starts bringing the tiles into memory (from disk, or made and baked) without waiting for them. */
+    fun prefetch(tiles: Collection<PatternBake.TileKey>) {
+        for (t in tiles) {
+            val name = t.name
+            if (cached(name) == null) request(t.kind, t.tint, t.seed, name)
+        }
+    }
+
+    /** True while the tile called [name] is being loaded or made, so its file must not be deleted. */
+    internal fun isBusy(name: String): Boolean = synchronized(lock) { name in inFlight }
+
+    /** Runs [task] on the tile worker after [delayMs], behind the tiles already queued. */
+    internal fun background(delayMs: Long, task: Runnable) {
+        worker.schedule(task, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
+    private fun request(kind: PatternKind, tint: Int, seed: Int, name: String) {
+        synchronized(lock) { if (!inFlight.add(name)) return }
+        worker.execute {
+            var arrived = false
+            try {
+                arrived = produce(kind, tint, seed, name) != null
+            } catch (_: Throwable) {
+                // Out of memory or a bad disk: the layer stays out until something asks again.
+            } finally {
+                synchronized(lock) { inFlight.remove(name) }
+                if (arrived) {
+                    synchronized(lock) { arrivals.intValue = arrivals.intValue + 1 }
+                }
+            }
+        }
+    }
+
+    private fun obtain(kind: PatternKind, tint: Int, seed: Int, name: String): Bitmap? {
+        val mine = synchronized(lock) { inFlight.add(name) }
+        try {
+            return produce(kind, tint, seed, name)
+        } finally {
+            if (mine) synchronized(lock) { inFlight.remove(name) }
+        }
+    }
+
+    /** Loads the tile from its file, or works it out and bakes it, and keeps it in memory. */
+    private fun produce(kind: PatternKind, tint: Int, seed: Int, name: String): Bitmap? = synchronized(genLock) {
+        cached(name)?.let { return@synchronized it }
+        val p = PatternBake.load(name) ?: PatternMath.pixels(kind, tint, seed).also { PatternBake.save(name, it) }
         val made = Bitmap.createBitmap(p.px, p.w, p.h, Bitmap.Config.ARGB_8888)
-        cache[key] = made
-        return made
+        synchronized(lock) { cache[name] = made }
+        made
     }
 }

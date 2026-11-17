@@ -174,6 +174,7 @@ object FlexFonts {
     @Volatile
     private var assets: AssetManager? = null
     private val cache = ConcurrentHashMap<String, Typeface>()
+    private val system = ConcurrentHashMap<Int, Typeface>()
 
     /** The application context of the last [attach]: lets the content loader reach the app's data without a screen handing it over. */
     @Volatile
@@ -183,6 +184,12 @@ object FlexFonts {
     fun attach(context: Context) {
         appContext = context.applicationContext
         if (assets == null) assets = context.applicationContext.assets
+    }
+
+    /** [FlexFont.face] with the system faces kept too, so a draw does not build them again. */
+    internal fun face(font: FlexFont, bold: Boolean): Typeface {
+        if (font.asset == null) return system.getOrPut(font.ordinal * 2 + (if (bold) 1 else 0)) { font.face(bold) }
+        return load(font, bold) ?: face(FlexFont.SANS, bold)
     }
 
     internal fun load(font: FlexFont, bold: Boolean): Typeface? {

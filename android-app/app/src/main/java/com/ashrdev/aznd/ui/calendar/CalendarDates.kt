@@ -1,18 +1,20 @@
 package com.ashrdev.aznd.ui.calendar
 
-import java.text.SimpleDateFormat
+import com.ashrdev.aznd.domain.streaks.LocalFormat
+import com.ashrdev.aznd.domain.streaks.dayKeyOfMillis
+import com.ashrdev.aznd.domain.streaks.epochDayOrNull
+import com.ashrdev.aznd.domain.streaks.noonOfEpochDay
+import com.ashrdev.aznd.domain.streaks.todayKey
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
 // Everything in the calendar package talks in "day keys": plain "yyyy-MM-dd" strings, the same
 // format the streak code already stores. They sort correctly as text, so `a < b` just works.
 
-private val dayKeyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-private val longDayFormat = SimpleDateFormat("EEE d MMM yyyy", Locale.getDefault())
-private val monthTitleFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-private val monthShortFormat = SimpleDateFormat("MMM", Locale.getDefault())
-private val monthNameFormat = SimpleDateFormat("MMMM", Locale.getDefault())
+private val longDayFormat = LocalFormat("EEE d MMM yyyy")
+private val monthTitleFormat = LocalFormat("MMMM yyyy")
+private val monthShortFormat = LocalFormat("MMM")
+private val monthNameFormat = LocalFormat("MMMM")
 
 /** A calendar month. [month] is 1..12. */
 data class MonthKey(val year: Int, val month: Int) : Comparable<MonthKey> {
@@ -42,9 +44,9 @@ data class MonthKey(val year: Int, val month: Int) : Comparable<MonthKey> {
         String.format(Locale.US, "%04d-%02d-%02d", year, month, dayOfMonth)
 }
 
-fun todayDayKey(): String = dayKeyFormat.format(Date())
+fun todayDayKey(): String = todayKey()
 
-fun dayKeyOf(millis: Long): String = dayKeyFormat.format(Date(millis))
+fun dayKeyOf(millis: Long): String = dayKeyOfMillis(millis)
 
 fun monthKeyOf(dayKey: String): MonthKey =
     MonthKey(dayKey.substring(0, 4).toInt(), dayKey.substring(5, 7).toInt())
@@ -53,8 +55,10 @@ fun currentMonth(): MonthKey = monthKeyOf(todayDayKey())
 
 fun dayOfMonthOf(dayKey: String): Int = dayKey.substring(8, 10).toInt()
 
-fun formatDayLong(dayKey: String): String =
-    runCatching { longDayFormat.format(dayKeyFormat.parse(dayKey)!!) }.getOrDefault(dayKey)
+fun formatDayLong(dayKey: String): String {
+    val day = epochDayOrNull(dayKey) ?: return dayKey
+    return longDayFormat.format(noonOfEpochDay(day))
+}
 
 /** Every month from [start] to [end], inclusive. Empty if [start] is after [end]. */
 fun monthRange(start: MonthKey, end: MonthKey): List<MonthKey> {

@@ -47,6 +47,9 @@ class PatternLayer(val scaleX: Float, val scaleY: Float, val rotate: Float, val 
 
 object PatternMath {
 
+    /** Bump when the pattern maths changes so old bakes are rebuilt (see [PatternBake]). */
+    const val GENERATOR_VERSION: Int = 1
+
     /**
      * How [kind] is laid on a surface (see the file comment): the small organic patterns three times, each copy turned
      * and scaled by amounts that share no period, so no copy of one layer lines up with another and none carries more

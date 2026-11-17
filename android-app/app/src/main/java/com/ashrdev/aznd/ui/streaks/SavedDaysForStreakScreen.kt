@@ -34,6 +34,7 @@ import com.ashrdev.aznd.ui.calendar.rememberCalendarState
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun SavedDaysForStreakScreen(
@@ -123,7 +124,7 @@ private fun SavedDayCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -137,7 +138,7 @@ private fun SavedDayCard(
                     Text(
                         day.remark,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 6.dp)
+                        modifier = Modifier.padding(top = Space.sm)
                     )
                 }
             }

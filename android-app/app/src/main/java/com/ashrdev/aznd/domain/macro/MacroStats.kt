@@ -2,6 +2,7 @@ package com.ashrdev.aznd.domain.macro
 
 import com.ashrdev.aznd.domain.workout.SessionStat
 import java.util.Calendar
+import java.util.TimeZone
 
 /** One logged food, free of the Room entity. */
 data class FoodLog(
@@ -31,15 +32,37 @@ object MacroStats {
     fun kcalFromMacros(proteinG: Double, carbsG: Double, fatG: Double): Double =
         proteinG * KCAL_PER_G_PROTEIN + carbsG * KCAL_PER_G_CARBS + fatG * KCAL_PER_G_FAT
 
+    /** The last local day looked up on a thread: its [start], the next day's [end] and the zone it was worked out in. */
+    private class DayCache {
+        val cal: Calendar = Calendar.getInstance()
+        var zoneId: String? = null
+        var start = 0L
+        var end = 0L
+    }
+
+    private val dayCache = object : ThreadLocal<DayCache>() {
+        override fun initialValue() = DayCache()
+    }
+
     /** Local midnight of the day containing [ms]. */
-    fun dayStart(ms: Long): Long =
-        Calendar.getInstance().apply {
-            timeInMillis = ms
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+    fun dayStart(ms: Long): Long {
+        val c = dayCache.get()!!
+        val zone = TimeZone.getDefault()
+        if (ms >= c.start && ms < c.end && zone.id == c.zoneId) return c.start
+        val cal = c.cal
+        cal.timeZone = zone
+        cal.timeInMillis = ms
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+        c.start = start
+        c.end = cal.timeInMillis
+        c.zoneId = zone.id
+        return start
+    }
 
     /** Local midnight [delta] days after [dayStartMs] (negative = before). */
     fun shiftDays(dayStartMs: Long, delta: Int): Long =

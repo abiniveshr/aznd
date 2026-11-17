@@ -55,6 +55,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The Saved page: every card that was shared or saved from Flex, newest first, as a grid of small pictures.
@@ -74,7 +75,7 @@ internal fun FlexSavedPage(bottom: Dp, refreshKey: Int) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 32.dp, end = 32.dp, bottom = bottom),
+                .padding(start = Space.xxl, end = Space.xxl, bottom = bottom),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -84,7 +85,7 @@ internal fun FlexSavedPage(bottom: Dp, refreshKey: Int) {
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(Space.md))
             Text(
                 "Cards you share or save show up here",
                 style = MaterialTheme.typography.bodyMedium,
@@ -96,9 +97,9 @@ internal fun FlexSavedPage(bottom: Dp, refreshKey: Int) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = bottom + 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(start = Space.md, end = Space.md, top = Space.sm, bottom = bottom + Space.lg),
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.sm)
         ) {
             items(list, key = { it.absolutePath }) { file ->
                 SavedThumb(file, modifier = Modifier.clickable { open = file })
@@ -168,7 +169,7 @@ private fun SavedViewer(file: File, onDismiss: () -> Unit, onDeleted: () -> Unit
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 12.dp, end = 12.dp, top = 24.dp, bottom = 96.dp)
+                        .padding(start = Space.md, end = Space.md, top = Space.xl, bottom = 96.dp)
                 )
             }
             Row(
@@ -176,7 +177,7 @@ private fun SavedViewer(file: File, onDismiss: () -> Unit, onDeleted: () -> Unit
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(16.dp),
+                    .padding(Space.lg),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 IconButton(onClick = { FlexExport.share(context, FlexSavedImages.uriOf(context, file)) }) {

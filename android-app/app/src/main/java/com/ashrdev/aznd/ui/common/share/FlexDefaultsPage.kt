@@ -48,6 +48,7 @@ import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.Card
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The Defaults page: one row for each screen that has a Share button ([FLEX_DEFAULT_SOURCES]; Home is not one, its Share
@@ -67,8 +68,8 @@ internal fun FlexDefaultsPage(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.sm, bottom = bottom + Space.lg),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         items(FLEX_DEFAULT_SOURCES, key = { it.name }) { source ->
             DefaultRow(
@@ -113,11 +114,11 @@ private fun DefaultRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(Space.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             DefaultThumbnail(source, refreshKey, modifier = Modifier.size(width = 84.dp, height = 96.dp))
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Space.md))
             Column(modifier = Modifier.weight(1f)) {
                 Text(source.defaultsName(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(

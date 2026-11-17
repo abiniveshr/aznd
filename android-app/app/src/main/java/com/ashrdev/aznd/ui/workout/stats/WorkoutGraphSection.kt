@@ -15,6 +15,7 @@ import com.ashrdev.aznd.domain.GraphStyle
 import com.ashrdev.aznd.domain.GraphWindow
 import com.ashrdev.aznd.domain.workout.SessionStat
 import com.ashrdev.aznd.ui.common.StatsGraph
+import com.ashrdev.aznd.ui.theme.Space
 
 /** The graph at the top of a workout's stats screen. Modes are local to this page. */
 @Composable
@@ -25,7 +26,7 @@ fun WorkoutGraphSection(viewModel: WorkoutGraphViewModel, modifier: Modifier = M
         Text(
             "Graphs appear after you finish a session of this workout.",
             style = MaterialTheme.typography.bodyMedium,
-            modifier = modifier.padding(16.dp)
+            modifier = modifier.padding(Space.lg)
         )
         return
     }

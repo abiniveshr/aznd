@@ -76,6 +76,7 @@ import com.ashrdev.aznd.domain.workout.Muscle
 import com.ashrdev.aznd.domain.workout.displayName
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.theme.Space
 
 /*
  * The one exercise browser. Everything that lists, searches or filters exercises goes through
@@ -111,7 +112,7 @@ fun ExerciseSearchScreen(
             contentColor = MaterialTheme.colorScheme.onBackground
         ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = Space.xs)) {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close")
                     }
@@ -183,7 +184,7 @@ fun ExerciseSearchContent(
     Column(modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(start = Space.lg, end = Space.xs)
         ) {
             OutlinedTextField(
                 value = query,
@@ -218,7 +219,7 @@ fun ExerciseSearchContent(
                 onClick = onAddCustom,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = Space.lg, vertical = Space.sm)
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Text("Add custom exercise")
@@ -229,11 +230,11 @@ fun ExerciseSearchContent(
             text = if (results.size == 1) "1 exercise" else "${results.size} exercises",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.sm)
         )
 
         if (results.isEmpty()) {
-            Box(Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.fillMaxWidth().weight(1f).padding(Space.xxl), contentAlignment = Alignment.TopCenter) {
                 Text(
                     "No matching exercise",
                     style = MaterialTheme.typography.bodyLarge,
@@ -257,7 +258,7 @@ fun ExerciseSearchContent(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(MaterialTheme.colorScheme.background)
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .padding(horizontal = Space.lg, vertical = Space.xs)
                             )
                         }
                         items(group, key = { it.id }) { e ->
@@ -339,7 +340,7 @@ private fun ExerciseFilterScreen(
             contentColor = MaterialTheme.colorScheme.onBackground
         ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = Space.xs)) {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close")
                     }
@@ -358,9 +359,9 @@ private fun ExerciseFilterScreen(
                     Text(
                         "Data",
                         style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs)
                     )
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 0.dp)) {
+                    Row(Modifier.padding(horizontal = Space.lg, vertical = 0.dp)) {
                         FilterChip(
                             selected = onlyWithData,
                             onClick = { onOnlyWithData(!onlyWithData) },
@@ -372,11 +373,11 @@ private fun ExerciseFilterScreen(
                 Text(
                     "Type",
                     style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs)
                 )
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = Space.lg),
+                    horizontalArrangement = Arrangement.spacedBy(Space.sm)
                 ) {
                     items(ExerciseType.entries.toList(), key = { it.name }) { t ->
                         FilterChip(
@@ -390,7 +391,7 @@ private fun ExerciseFilterScreen(
                 Text(
                     if (muscles.isEmpty()) "Muscle" else "Muscle (${muscles.size})",
                     style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = Space.xs)
                 )
                 OutlinedTextField(
                     value = query,
@@ -405,7 +406,7 @@ private fun ExerciseFilterScreen(
                         }
                     },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Space.lg)
                 )
 
                 if (shown.isEmpty()) {
@@ -413,15 +414,15 @@ private fun ExerciseFilterScreen(
                         "No matching muscle",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f).padding(32.dp)
+                        modifier = Modifier.weight(1f).padding(Space.xxl)
                     )
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(96.dp),
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        contentPadding = PaddingValues(Space.lg),
+                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.sm)
                     ) {
                         items(shown, key = { it.name }) { m ->
                             MuscleTile(m, m in muscles) {
@@ -435,7 +436,7 @@ private fun ExerciseFilterScreen(
                     onClick = onDismiss,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = Space.lg, vertical = Space.sm)
                         .navigationBarsPadding()
                 ) {
                     Text(if (resultCount == 1) "Show 1 exercise" else "Show $resultCount exercises")
@@ -462,7 +463,7 @@ private fun MuscleTile(muscle: Muscle, selected: Boolean, onClick: () -> Unit) {
                 shape = shape
             )
             .clickable(onClick = onClick)
-            .padding(8.dp)
+            .padding(Space.sm)
     ) {
         MuscleBadge(muscle, null, size = 64.dp)
         Text(
@@ -471,7 +472,7 @@ private fun MuscleTile(muscle: Muscle, selected: Boolean, onClick: () -> Unit) {
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp)
+            modifier = Modifier.padding(top = Space.xs)
         )
     }
 }
@@ -481,7 +482,7 @@ private fun ExerciseRow(exercise: Exercise, isSelected: Boolean, onClick: () -> 
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Space.md),
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
@@ -489,7 +490,7 @@ private fun ExerciseRow(exercise: Exercise, isSelected: Boolean, onClick: () -> 
                     else Color.Transparent
                 )
                 .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = Space.lg, vertical = Space.sm)
         ) {
             MuscleBadge(exercise.primaryMuscle, exercise.photoPath, size = 48.dp)
             Column(Modifier.weight(1f)) {

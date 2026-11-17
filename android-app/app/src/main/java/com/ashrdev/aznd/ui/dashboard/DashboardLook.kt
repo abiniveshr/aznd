@@ -12,6 +12,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -33,9 +34,11 @@ import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.theme.BorderKind
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import com.ashrdev.aznd.ui.theme.ResolvedFill
+import com.ashrdev.aznd.ui.theme.ScreenBakes
 import com.ashrdev.aznd.ui.theme.azndFill
 import com.ashrdev.aznd.ui.theme.taperEdge
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** The look the dashboard's tiles are drawn with. Provided around every dashboard grid. */
@@ -51,6 +54,13 @@ val LocalDashText = compositionLocalOf { DashText(null, 1f) }
 fun ProvideDashLook(look: DashLook, content: @Composable () -> Unit) {
     val family = rememberDashFont(look.font)
     val text = remember(family, look.textScale) { DashText(family, look.textScale) }
+    val owner = remember { Any() }
+    val bgSet = if (look.bgMode == DashBgMode.SOLID || look.bgMode == DashBgMode.GRADIENT) ScreenBakes.setOf(look.backgroundFill()) else null
+    val tileSet = if (look.tiles == DashTileStyle.FILLED) ScreenBakes.setOf(look.tileFill) else null
+    DisposableEffect(bgSet, tileSet) {
+        ScreenBakes.require(owner, setOfNotNull(bgSet, tileSet))
+        onDispose { ScreenBakes.release(owner) }
+    }
     CompositionLocalProvider(LocalDashLook provides look, LocalDashText provides text, content = content)
 }
 
@@ -74,7 +84,11 @@ fun DashBackground(look: DashLook, modifier: Modifier = Modifier) {
         DashBgMode.PHOTO -> {
             val context = LocalContext.current
             val uri = look.photoUri
-            val blur = look.photoBlur
+            // The Blur slider fires on every tick: the photo is only blurred again once it rests.
+            val blur by produceState(look.photoBlur, look.photoBlur) {
+                delay(PHOTO_BLUR_REST_MS)
+                value = look.photoBlur
+            }
             val photo by produceState<ImageBitmap?>(null, uri, blur) {
                 value = if (uri == null) null else withContext(Dispatchers.IO) {
                     FlexBitmaps.load(context, uri, PHOTO_MAX)?.let { FlexBitmaps.blur(it, blur) }?.asImageBitmap()
@@ -155,3 +169,4 @@ fun DashTileFrame(modifier: Modifier = Modifier, content: @Composable BoxScope.(
 
 private const val MUTED = 0.72f
 private const val PHOTO_MAX = 1600
+private const val PHOTO_BLUR_REST_MS = 250L

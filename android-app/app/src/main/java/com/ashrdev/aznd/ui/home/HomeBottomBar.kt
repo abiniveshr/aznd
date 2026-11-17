@@ -8,6 +8,9 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.History
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.ashrdev.aznd.ui.common.BarPage
@@ -33,11 +36,14 @@ fun HomeBottomBar(
     onShare: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bar = SubPageBar(
-        pages = HomeBarPages,
-        position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
-        onSelect = onSelectPage
-    )
+    val currentSelect by rememberUpdatedState(onSelectPage)
+    val bar = remember(pagerState) {
+        SubPageBar(
+            pages = HomeBarPages,
+            position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+            onSelect = { currentSelect(it) }
+        )
+    }
     BottomBarShell(
         tray = tray,
         onOpenSettings = onOpenSettings,

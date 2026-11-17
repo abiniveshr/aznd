@@ -1,9 +1,6 @@
 package com.ashrdev.aznd.domain.streaks
 
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 enum class TrackMode(val id: String, val label: String, val blurb: String) {
     AUTO("auto", "Automatic check-in", "Checked in for you every day until you break the streak"),
@@ -54,9 +51,11 @@ object Weekdays {
 
     fun bit(index: Int): Int = 1 shl index
 
-    fun indexOf(key: String): Int = (parseKey(key).get(Calendar.DAY_OF_WEEK) + 5) % 7
+    fun indexOf(key: String): Int = weekdayOfEpochDay(epochDayOfKey(key))
 
     fun has(mask: Int, key: String): Boolean = mask == 0 || mask and bit(indexOf(key)) != 0
+
+    fun has(mask: Int, epochDay: Int): Boolean = mask == 0 || mask and bit(weekdayOfEpochDay(epochDay)) != 0
 
     fun label(mask: Int): String = when {
         mask == 0 || mask == ALL -> "Every day"
@@ -144,6 +143,14 @@ class RoutineSchedule(
         RoutineFrequency.CUSTOM -> customDaily
     }
 
+    /** [due] for a day given as an epoch day, so loops don't re-parse keys. */
+    internal fun due(epochDay: Int): Boolean = when (frequency) {
+        RoutineFrequency.DAILY -> true
+        RoutineFrequency.WEEKDAYS -> Weekdays.has(weekdays, epochDay)
+        RoutineFrequency.PER_WEEK -> false
+        RoutineFrequency.CUSTOM -> customDaily
+    }
+
     fun windowOf(anchor: String, key: String): Pair<String, String> {
         if (unit == RoutineUnit.MONTHS) {
             fun startOf(i: Int): String {
@@ -217,9 +224,7 @@ class Tracked(val breaks: Set<String>, val asOf: String)
 class BrokenStats(val events: Int)
 
 object StreakTracking {
-    private val keyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-    fun dayKeyOf(ms: Long): String = synchronized(keyFormat) { keyFormat.format(Date(ms)) }
+    fun dayKeyOf(ms: Long): String = dayKeyOfMillis(ms)
 
     fun weekStart(key: String): String = addDaysKey(key, -Weekdays.indexOf(key))
 
@@ -272,7 +277,12 @@ object StreakTracking {
                 }
             }
             else -> {
-                for (day in dayKeysBetween(from, yesterday)) if (schedule.due(day) && day !in done) missed += day
+                val last = epochDayOfKey(yesterday)
+                for (day in epochDayOfKey(from)..last) {
+                    if (!schedule.due(day)) continue
+                    val key = keyOfEpochDay(day)
+                    if (key !in done) missed += key
+                }
             }
         }
         val pending = schedule.due(today) && today !in done

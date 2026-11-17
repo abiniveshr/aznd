@@ -11,11 +11,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,17 +21,29 @@ import com.ashrdev.aznd.domain.streaks.CheckInfo
 import com.ashrdev.aznd.ui.components.FilledTonalButton
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.shareIn
+
+// One ticker for every button on screen; it only runs while something is collecting it.
+private val sharedNowMs = flow {
+    while (true) {
+        emit(System.currentTimeMillis())
+        delay(15_000)
+    }
+}.shareIn(
+    CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
+    replay = 1
+)
 
 @Composable
 fun rememberNowMs(): Long {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(15_000)
-            now = System.currentTimeMillis()
-        }
-    }
+    val now by sharedNowMs.collectAsState(initial = System.currentTimeMillis())
     return now
 }
 

@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.theme.Space
 
 /** Placeholder for the discipline level system (left page of the Routines pager). */
 @Composable
@@ -23,8 +24,8 @@ fun DisciplinePage(bottomPadding: Dp) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 24.dp, end = 24.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            .padding(start = Space.xl, end = Space.xl, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(

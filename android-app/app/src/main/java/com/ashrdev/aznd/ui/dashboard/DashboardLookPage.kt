@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.FillCopySource
 import com.ashrdev.aznd.ui.common.FillEditor
 import com.ashrdev.aznd.ui.common.TaperLineControls
@@ -41,6 +40,7 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.theme.BorderKind
 import com.ashrdev.aznd.ui.theme.FillBase
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import kotlin.math.roundToInt
 
@@ -67,8 +67,8 @@ fun DashLookPage(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.sm, bottom = bottom + Space.sm),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item {
             Text(
@@ -160,10 +160,12 @@ private fun LazyListScope.backgroundItems(
                                     bgB = stops.last().color,
                                     gradientAngle = fill.gradient.angle,
                                     bgGradient = fill.gradient,
-                                    bgPatterns = fill.patterns
+                                    bgPatterns = fill.patterns,
+                                    bgGradientAnchor = fill.gradientAnchor,
+                                    bgPatternAnchor = fill.patternAnchor
                                 )
                             } else {
-                                l.copy(bgA = color, bgPatterns = fill.patterns)
+                                l.copy(bgA = color, bgPatterns = fill.patterns, bgGradientAnchor = fill.gradientAnchor, bgPatternAnchor = fill.patternAnchor)
                             }
                         }
                     },
@@ -171,10 +173,10 @@ private fun LazyListScope.backgroundItems(
                 )
                 DashBgMode.PHOTO -> {
                     Note(if (look.photoUri != null) "Using the photo you chose." else "No photo yet. Choose one to use as the background.")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                         Button(onClick = onPickPhoto) {
                             Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(Space.sm))
                             Text("Choose photo")
                         }
                         if (look.photoUri != null) {

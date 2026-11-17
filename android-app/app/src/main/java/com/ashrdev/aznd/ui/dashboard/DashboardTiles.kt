@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -110,11 +113,22 @@ fun DashTile(
     // tiles for dragging): the tile then only draws.
     interactive: Boolean = true
 ) {
-    val k = cell.scale * widget.size.factor * LocalDashLook.current.moduleScale
+    val look = LocalDashLook.current
+    val k = cell.scale * widget.size.factor * look.moduleScale
+    // The press ripple is clipped to the same shape the panel is drawn in.
+    val shape = if (look.tiles == DashTileStyle.THEME) CardDefaults.shape else RoundedCornerShape(look.tileRadius.dp)
     // The panel itself comes from the dashboard look (app theme cards unless styled).
     DashTileFrame(
         modifier = modifier
-            .then(if (interactive) Modifier.combinedClickable(onClick = onOpen, onLongClick = onHold) else Modifier)
+            .then(
+                if (interactive) {
+                    Modifier
+                        .clip(shape)
+                        .combinedClickable(onClickLabel = "Open", role = Role.Button, onClick = onOpen, onLongClick = onHold)
+                } else {
+                    Modifier
+                }
+            )
     ) {
         Box(Modifier.fillMaxSize()) {
             when (widget.type) {
@@ -399,7 +413,7 @@ private fun GraphTile(w: DashWidget, data: DashboardData, cell: DashCell) {
     if (modes.isEmpty()) {
         Column(Modifier.fillMaxSize().padding((12f * k).dp)) {
             Line("Graph", M.NAME, k, weight = FontWeight.SemiBold)
-            Line("Pick a variable in dashboard settings", M.LABEL, k, color = muted())
+            Line("Pick a variable in edit mode, on Tuning", M.LABEL, k, color = muted())
         }
         return
     }

@@ -76,6 +76,7 @@ import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToLong
+import com.ashrdev.aznd.ui.theme.Space
 
 /*
  * The pickers behind a card's data choice (see FlexDataChoice in FlexConfigure.kt). Each one is plain content that
@@ -115,12 +116,12 @@ private fun PickRow(
             .clip(shape)
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = Space.md, vertical = Space.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (leading != null) {
             leading()
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(Space.md))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -167,7 +168,7 @@ private fun volumeText(kg: Double): String =
 @Composable
 internal fun FlexTitlePicker(block: FlexBlock, binding: FlexBinding, onChange: (FlexBinding) -> Unit) {
     val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         OutlinedTextField(
             value = binding.text ?: "",
             onValueChange = { t -> onChange(binding.copy(text = t.take(300))) },
@@ -176,7 +177,7 @@ internal fun FlexTitlePicker(block: FlexBlock, binding: FlexBinding, onChange: (
         )
         if (block.flag) {
             val shown = binding.dateMs ?: System.currentTimeMillis()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = {
                     val cal = Calendar.getInstance().apply { timeInMillis = shown }
                     DatePickerDialog(
@@ -191,7 +192,7 @@ internal fun FlexTitlePicker(block: FlexBlock, binding: FlexBinding, onChange: (
                     ).show()
                 }) {
                     Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(Space.sm))
                     Text(formatDayLong(dayKeyOf(shown)))
                 }
                 if (binding.dateMs != null) {
@@ -237,7 +238,7 @@ internal fun FlexSessionPicker(
     val filters = remember(sessions) { sessionFilters(sessions) }
     var filter by remember { mutableStateOf<SessionFilter>(SessionFilter.All) }
     val shown = remember(sessions, filter) { sessions.filter { filter.matches(it) } }
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         PickerLabel("Workout")
         if (sessions.isEmpty()) {
             PickerHint("There are no workouts yet.")
@@ -444,10 +445,10 @@ internal fun FlexSessionExercisesPicker(session: FlexSessionInfo?, names: List<S
                         val next = if (on) current - name else all.filter { it in current || it == name }
                         if (next.isNotEmpty()) onChange(if (next.size == all.size) null else next)
                     }
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .padding(horizontal = Space.xs, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Checkbox(checked = on, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                Checkbox(checked = on, onCheckedChange = null, modifier = Modifier.padding(Space.sm))
                 Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -476,7 +477,7 @@ internal fun FlexLiftsPicker(
     var mode by remember { mutableStateOf(if (names != null) AutoOrPick.PICK else AutoOrPick.AUTO) }
     var browsing by remember { mutableStateOf(false) }
     val picked = names ?: emptyList()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         PickerLabel(if (single) "Exercise" else "Exercises")
         FlexSegmented(AutoOrPick.entries.toList(), mode, { it.label }) { m ->
             mode = m
@@ -488,7 +489,7 @@ internal fun FlexLiftsPicker(
             if (picked.isEmpty()) PickerHint("Nothing picked yet: the card uses Auto until you add an exercise.")
             picked.forEach { name ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = Space.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -499,7 +500,7 @@ internal fun FlexLiftsPicker(
             }
             OutlinedButton(onClick = { browsing = true }) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(Space.sm))
                 Text(if (single && picked.isNotEmpty()) "Change exercise" else "Add exercise")
             }
             if (exercises.isEmpty()) PickerHint("No exercise has logged sets yet.")
@@ -532,7 +533,7 @@ internal fun FlexRoutinePicker(routines: List<FlexRoutineInfo>, selectedId: Long
         val q = query.trim().lowercase()
         if (q.isEmpty()) routines else routines.filter { it.name.lowercase().contains(q) }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         PickerLabel("Routine")
         if (routines.isEmpty()) {
             PickerHint("There are no routines yet.")
@@ -574,7 +575,7 @@ internal fun FlexRoutinePicker(routines: List<FlexRoutineInfo>, selectedId: Long
 internal fun FlexStreaksPicker(streaks: List<FlexStreakInfo>, ids: List<Long>?, autoLimit: Int, onChange: (List<Long>?) -> Unit) {
     var mode by remember { mutableStateOf(if (ids != null) AutoOrPick.PICK else AutoOrPick.AUTO) }
     val picked = ids ?: emptyList()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         PickerLabel("Streaks")
         FlexSegmented(AutoOrPick.entries.toList(), mode, { it.label }) { m ->
             mode = m
@@ -640,7 +641,7 @@ internal fun FlexGraphPicker(
         DropdownField("Range", FlexGraphRange.entries, cfg.range, { it.label }) { r -> edit { it.copy(range = r) } }
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         if (graphs.isEmpty()) PickerHint("There are no graphs to show yet.")
         FlexPickField(
             label = "Variable",
@@ -653,7 +654,7 @@ internal fun FlexGraphPicker(
         ) { picked ->
             edit { g -> g.copy(variables = listOfNotNull(picked.id, g.variables.getOrNull(1)?.takeIf { it != picked.id })) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
             Box(modifier = Modifier.weight(1f)) {
                 FlexPickField(
                     label = "Compare with",
@@ -727,12 +728,12 @@ internal fun FlexPhotoPicker(photos: List<FlexPhotoInfo>, uri: String?, onPick: 
     }
     val fromGallery = uri != null && photos.none { it.uri == uri }
     val ring = MaterialTheme.colorScheme.primary
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         PickerLabel("Photo")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = { picker.launch() }) {
                 Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(Space.sm))
                 Text("Add image")
             }
             if (fromGallery && uri != null) {
@@ -745,8 +746,8 @@ internal fun FlexPhotoPicker(photos: List<FlexPhotoInfo>, uri: String?, onPick: 
         if (photos.isNotEmpty()) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                verticalArrangement = Arrangement.spacedBy(Space.sm),
                 modifier = Modifier.fillMaxWidth().height(300.dp)
             ) {
                 groups.forEach { (group, list) ->
@@ -755,7 +756,7 @@ internal fun FlexPhotoPicker(photos: List<FlexPhotoInfo>, uri: String?, onPick: 
                             group,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 6.dp)
+                            modifier = Modifier.padding(top = Space.sm)
                         )
                     }
                     items(list, key = { it.uri }) { p ->
@@ -796,7 +797,7 @@ internal fun FlexCalendarPicker(block: FlexBlock, binding: FlexBinding, sources:
     val (first, last) = flexCalendarRange(source, anchor)
     fun edit(f: (FlexCalendarSpec) -> FlexCalendarSpec) = onChange(binding.copy(cal = f(cal)))
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         if (sources.isEmpty()) PickerHint("There are no days to show yet.")
         if (sources.size > 1) {
             FlexPickField(
@@ -819,7 +820,7 @@ internal fun FlexCalendarPicker(block: FlexBlock, binding: FlexBinding, sources:
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
             Box(modifier = Modifier.weight(1f)) {
                 DropdownField("Year", flexCalendarYears(first, last, view.year), view.year, { it.toString() }) { y ->
                     edit { it.copy(year = y, index = view.index) }
@@ -849,7 +850,7 @@ internal fun FlexCalendarPicker(block: FlexBlock, binding: FlexBinding, sources:
 /** A Day note card: pick a streak, the card shows its latest note. Streaks with no note yet are listed but cannot be picked. */
 @Composable
 internal fun FlexDayNotePicker(streaks: List<FlexStreakInfo>, selectedId: Long?, onPick: (Long) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         PickerLabel("Streak")
         if (streaks.isEmpty()) {
             PickerHint("There are no streaks yet.")

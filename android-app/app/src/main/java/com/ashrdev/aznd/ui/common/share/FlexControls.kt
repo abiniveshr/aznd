@@ -62,14 +62,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.theme.Space
 
 /** A titled card that groups related controls. */
 @Composable
 fun FlexSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             content()
@@ -96,7 +97,7 @@ fun FlexFoldSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { open = !open }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = Space.lg, vertical = Space.lg),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -119,8 +120,8 @@ fun FlexFoldSection(
             }
             if (open) {
                 Column(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(start = Space.lg, end = Space.lg, bottom = Space.lg),
+                    verticalArrangement = Arrangement.spacedBy(Space.md)
                 ) { content() }
             }
         }
@@ -131,8 +132,8 @@ fun FlexFoldSection(
 @Composable
 fun <T> ChipChoice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+        verticalArrangement = Arrangement.spacedBy(Space.xs)
     ) {
         options.forEach { option ->
             FilterChip(
@@ -201,13 +202,13 @@ private val QuickColors = listOf(
 @Composable
 fun ColorRow(label: String, color: Int, onChange: (Int) -> Unit) {
     var dialog by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.md)) {
             Swatch(color, selected = false, size = 28.dp) { dialog = true }
             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = { dialog = true }) { Text("Custom") }
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             items(QuickColors) { c -> Swatch(c, selected = c == color) { onChange(c) } }
         }
     }
@@ -246,7 +247,7 @@ private fun DropdownBox(text: String, enabled: Boolean = true, hint: Boolean = f
             .clip(shape)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = Space.lg, vertical = Space.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -279,7 +280,7 @@ fun <T> FlexPickField(
     onSelect: (T) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box {
             DropdownBox(valueText, enabled = enabled, hint = placeholder) { open = true }
@@ -295,7 +296,7 @@ fun <T> FlexPickField(
                             heading,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 2.dp)
+                            modifier = Modifier.padding(start = Space.md, end = Space.md, top = Space.md, bottom = 2.dp)
                         )
                     }
                     items.forEach { option ->
@@ -356,7 +357,7 @@ fun FlexAlignPad(
         modifier = modifier
             .clip(shape)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .padding(3.dp),
+            .padding(Space.xs),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         FlexVAlign.entries.forEach { vv ->
@@ -398,7 +399,7 @@ fun <T> DropdownField(
     onSelect: (T) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box {
             DropdownBox(optionLabel(selected)) { open = true }
@@ -437,7 +438,7 @@ fun MultiSelectDropdown(
         keys.size <= 2 -> choices.filter { it.first in keys }.joinToString(", ") { it.second }.ifBlank { "Auto" }
         else -> "${keys.size} selected"
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box {
             DropdownBox(summary) { open = true }
@@ -511,7 +512,7 @@ fun FlexWarning(spec: FlexSpec, plan: FlexPlan, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .clip(shape)
             .background(MaterialTheme.colorScheme.tertiaryContainer)
-            .padding(12.dp),
+            .padding(Space.md),
         verticalAlignment = Alignment.Top
     ) {
         Icon(
@@ -520,8 +521,8 @@ fun FlexWarning(spec: FlexSpec, plan: FlexPlan, modifier: Modifier = Modifier) {
             tint = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Spacer(modifier = Modifier.width(Space.md))
+        Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             messages.forEach {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
             }

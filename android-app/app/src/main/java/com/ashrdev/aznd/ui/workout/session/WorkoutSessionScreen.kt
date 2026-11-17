@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.workout.session
 
+import android.content.ContextWrapper
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.rememberPagerState
@@ -13,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -20,16 +22,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberImagePicker
+import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
+import com.ashrdev.aznd.data.workout.toMeta
 import com.ashrdev.aznd.ui.workout.exercise.ExercisePickerDialog
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Screen for logging an active workout session. Exercises are swipeable cards (see [LoggerPager]).
  * The bottom bar holds Photo, Discard and Finish. Photo adds a picture when there is none; once
- * there is one it opens the picture with Replace / Remove / Save to gallery.
+ * there is one it opens the picture with Replace / Remove / Save to gallery. Finish first shows a
+ * summary; with [onShare] set (and not in Freestyle) it also offers "Finish and share", which finishes
+ * and then calls [onShare] with the history session id instead of [onFinished]: the caller swaps this
+ * screen for the share screen.
  */
 @Composable
 fun WorkoutSessionScreen(
@@ -39,9 +51,22 @@ fun WorkoutSessionScreen(
     onFinished: () -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onShare: ((historySessionId: Long) -> Unit)? = null
 ) {
     LaunchedEffect(workoutId) { viewModel.begin(workoutId) }
+    // Typed values are written shortly after the last keystroke; leaving the app writes them at once.
+    val context = LocalContext.current
+    DisposableEffect(context, viewModel) {
+        val owner = generateSequence(context) { (it as? ContextWrapper)?.baseContext }
+            .filterIsInstance<LifecycleOwner>()
+            .firstOrNull()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) viewModel.saveNow()
+        }
+        owner?.lifecycle?.addObserver(observer)
+        onDispose { owner?.lifecycle?.removeObserver(observer) }
+    }
     val phase by viewModel.phase.collectAsState()
     val session by viewModel.session.collectAsState()
     val state by viewModel.state.collectAsState()
@@ -49,7 +74,9 @@ fun WorkoutSessionScreen(
     val previous by viewModel.previousRows.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val deleted by viewModel.deletedSet.collectAsState()
     var confirmDiscard by remember { mutableStateOf(false) }
+    var summary by remember { mutableStateOf<FinishSummary?>(null) }
     var showAddPicker by remember { mutableStateOf(false) }
     var showPhoto by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState { state.cards.size + 1 }
@@ -66,7 +93,34 @@ fun WorkoutSessionScreen(
         )
     }
 
-    LaunchedEffect(phase) { if (phase == LoggerPhase.Closed) onFinished() }
+    // Sharing replaces this screen with the share screen in one step: leaving first would start a
+    // screen transition, and navigation is ignored while one is running.
+    LaunchedEffect(phase) {
+        if (phase == LoggerPhase.Closed) {
+            // Read from the view model: it is set before the phase closes, the collected copy may lag a frame.
+            val id = viewModel.shareId.value
+            if (id != null && onShare != null) onShare(id) else onFinished()
+        }
+    }
+
+    summary?.let { s ->
+        FinishSummaryDialog(
+            summary = s,
+            onFinish = {
+                summary = null
+                viewModel.finish()
+            },
+            onFinishAndShare = if (onShare != null && workoutId != EMPTY_WORKOUT_ID) {
+                {
+                    summary = null
+                    viewModel.finish(share = true)
+                }
+            } else {
+                null
+            },
+            onKeepGoing = { summary = null }
+        )
+    }
 
     if (confirmDiscard) {
         AlertDialog(
@@ -107,7 +161,16 @@ fun WorkoutSessionScreen(
                 onClick = { if (photoUri == null) photoPicker.launch() else showPhoto = true }
             ),
             ThirdAction(icon = Icons.Default.Delete, label = "Discard", onClick = { confirmDiscard = true }),
-            ThirdAction(icon = Icons.Default.Check, label = "Finish", onClick = viewModel::finish)
+            ThirdAction(
+                icon = Icons.Default.Check,
+                label = "Finish",
+                onClick = {
+                    val sess = session
+                    if (sess != null) {
+                        summary = buildFinishSummary(sess, state.rows, exercises, System.currentTimeMillis())
+                    }
+                }
+            )
         )
     } else {
         emptyList()
@@ -116,9 +179,27 @@ fun WorkoutSessionScreen(
     // The top bar shows the exercise on screen, with the workout name under it. It follows the
     // card swipe (drift + cross-fade) instead of snapping at the halfway point; the Add page has
     // no exercise, so it shows just the workout name.
-    val cards = state.cards
-    val exerciseNames = remember(cards, exercises) {
-        cards.map { card -> card.exerciseId?.let { id -> exercises.firstOrNull { it.id == id }?.name } }
+    val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
+    val metaById = remember(exercises) { exercises.associate { it.id to it.toMeta() } }
+    val derivedCache = remember { LoggerDerivedCache() }
+    val derived = remember(state, previous) {
+        deriveLogger(state, previous, derivedCache.last).also { derivedCache.last = it }
+    }
+    val cards = derived.cards
+    val exerciseNames = remember(cards, exerciseById) {
+        cards.map { card -> card.exerciseId?.let { id -> exerciseById[id]?.name } }
+    }
+    val bodyweightKg = session?.bodyweightKg ?: 0.0
+    val env = remember(exercises, exerciseById, metaById, suggestions, bodyweightKg, settings.trackRpe, settings.targetReps) {
+        LoggerEnv(
+            exercises = exercises,
+            byId = exerciseById,
+            meta = metaById,
+            suggestions = suggestions,
+            bodyweightKg = bodyweightKg,
+            showRpe = settings.trackRpe,
+            showTargets = settings.targetReps
+        )
     }
 
     ScreenScaffold(
@@ -135,20 +216,16 @@ fun WorkoutSessionScreen(
         when (phase) {
             LoggerPhase.EmptyWorkout -> Text(
                 text = "This workout has no exercises yet. Edit it to add some.",
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(Space.lg),
                 style = MaterialTheme.typography.bodyLarge
             )
             LoggerPhase.Active -> {
                 val data = LoggerData(
                     rows = state.rows,
-                    cards = state.cards,
-                    depth = state.depthById,
-                    exercises = exercises,
-                    previous = previous,
-                    suggestions = suggestions,
-                    bodyweightKg = session?.bodyweightKg ?: 0.0,
-                    showRpe = settings.trackRpe,
-                    showTargets = settings.targetReps
+                    cards = cards,
+                    depth = derived.depth,
+                    previousOf = derived.previousOf,
+                    env = env
                 )
                 LoggerPager(
                     data = data,
@@ -156,7 +233,8 @@ fun WorkoutSessionScreen(
                     pagerState = pagerState,
                     bottomPadding = padding.calculateBottomPadding(),
                     onAddExercise = { showAddPicker = true },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    undoVisible = deleted != null
                 )
             }
             else -> Unit

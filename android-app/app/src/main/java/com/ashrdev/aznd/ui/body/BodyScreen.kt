@@ -45,6 +45,8 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.StatsGraph
 import com.ashrdev.aznd.ui.common.rememberGraphRangeState
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
+import com.ashrdev.aznd.ui.components.StatTile
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_MEASURE = 0
 private const val PAGE_STRENGTH = 1
@@ -108,13 +110,14 @@ fun BodyScreen(
         onOpenSettings = onOpenSettings,
         subPages = subPages
     ) { padding ->
-        val bottom = padding.calculateBottomPadding() + 16.dp
+        val bottom = padding.calculateBottomPadding() + Space.lg
+        val modelPageBottom = padding.calculateBottomPadding() + 16.dp
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 PAGE_MEASURE -> MeasurePage(
                     all = all,
                     range = range,
-                    bottomPadding = bottom,
+                    bottomPadding = modelPageBottom,
                     onLog = { site, cm, at -> viewModel.addMeasurement(site, cm, at) },
                     onDelete = { measurementToDelete = it }
                 )
@@ -127,7 +130,7 @@ fun BodyScreen(
                     onLogBodyFat = { pct, at -> viewModel.addMeasurement(MeasurementSite.BODY_FAT, pct, at) },
                     onOpenHistory = onOpenCompositionHistory
                 )
-                else -> StrengthPage(bottomPadding = bottom, onOpenMuscle = onOpenMuscle)
+                else -> StrengthPage(bottomPadding = modelPageBottom, onOpenMuscle = onOpenMuscle)
             }
         }
     }
@@ -265,9 +268,9 @@ private fun LazyListScope.measurementSection(
     item(key = "m-cards-${site.name}") {
         val shown = GraphWindow.select(ascending, range, System.currentTimeMillis()) { it.measuredAt }
         val change = if (shown.size >= 2) shown.last().valueCm - shown.first().valueCm else 0.0
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            StatCard("Latest", "${GraphWindow.formatValue(mine.first().valueCm)} ${site.unit}", Modifier.weight(1f))
-            StatCard("Change in range", "${BodyStats.signed(change)} ${site.unit}", Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
+            StatTile("Latest", "${GraphWindow.formatValue(mine.first().valueCm)} ${site.unit}", Modifier.weight(1f))
+            StatTile("Change in range", "${BodyStats.signed(change)} ${site.unit}", Modifier.weight(1f))
         }
     }
     item(key = "m-graph-${site.name}") {
@@ -306,8 +309,8 @@ private fun CompositionPage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.lg)
     ) {
         compositionSection(
             weights = weights,

@@ -136,19 +136,20 @@ class TrainingRepository(
 
     /**
      * The Finish button: only this makes a session "completed". Finishing twice (double tap) is a
-     * no-op the second time, so the history never gets a duplicate.
+     * no-op the second time, so the history never gets a duplicate. Returns the id of the history
+     * row written for it, or null when there is none (Freestyle, nothing to write, already finished).
      */
-    suspend fun finishSession(sessionId: Long) {
-        val s = sessions.getSession(sessionId) ?: return
-        if (s.finishedAt != null) return
+    suspend fun finishSession(sessionId: Long): Long? {
+        val s = sessions.getSession(sessionId) ?: return null
+        if (s.finishedAt != null) return null
         // An empty workout in which nothing was logged leaves nothing behind.
         if (s.workoutId == EMPTY_WORKOUT_ID && sessions.setsFor(sessionId).isEmpty()) {
             sessions.deleteSession(sessionId)
-            return
+            return null
         }
         val finishedAt = clock()
         sessions.setFinished(sessionId, finishedAt)
-        mirrorSession(s.copy(finishedAt = finishedAt))
+        return mirrorSession(s.copy(finishedAt = finishedAt))
     }
 
     suspend fun discardSession(sessionId: Long) = sessions.deleteSession(sessionId)
@@ -212,12 +213,12 @@ class TrainingRepository(
         }
     }
 
-    /** Writes the finished session into the history tables and remembers the link. */
-    private suspend fun mirrorSession(session: LoggedSession) {
-        val old = legacy ?: return
-        val finishedAt = session.finishedAt ?: return
-        if (session.workoutId == EMPTY_WORKOUT_ID) return // per-exercise stats only, no history entry
-        val workout = old.getWorkoutWithExercises(session.workoutId)?.workout ?: return
+    /** Writes the finished session into the history tables and remembers the link; returns the history row id. */
+    private suspend fun mirrorSession(session: LoggedSession): Long? {
+        val old = legacy ?: return null
+        val finishedAt = session.finishedAt ?: return null
+        if (session.workoutId == EMPTY_WORKOUT_ID) return null // per-exercise stats only, no history entry
+        val workout = old.getWorkoutWithExercises(session.workoutId)?.workout ?: return null
         val rows = SetTree.ordered(sessions.setsFor(session.id).map { it.toRow() })
         val byId = exercisesById(rows.mapNotNull { it.exerciseId })
         val legacyId = old.insertSession(
@@ -246,5 +247,6 @@ class TrainingRepository(
             .mapIndexed { i, e -> e.copy(orderIndex = i) }
         if (logged.isNotEmpty()) old.insertLoggedSets(logged)
         sessions.setLegacySessionId(session.id, legacyId)
+        return legacyId
     }
 }

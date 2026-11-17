@@ -101,7 +101,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.FillCopySource
 import com.ashrdev.aznd.ui.common.FillEditor
@@ -124,6 +123,7 @@ import com.ashrdev.aznd.ui.theme.GradientKind
 import com.ashrdev.aznd.ui.theme.GradientSpec
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import com.ashrdev.aznd.ui.theme.ResolvedFill
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.ThemePresets
 import com.ashrdev.aznd.ui.theme.azndFill
@@ -163,6 +163,22 @@ private fun fitKeyOf(spec: FlexSpec): Any {
     return listOf(
         blocks, st.aspect, st.moduleScale, st.textScale, st.font, st.padding, st.paddingV, st.spacing, st.panel,
         st.watermark && st.watermarkText.isNotBlank()
+    )
+}
+
+/**
+ * [sp] with the fields that only colour or fade the poster set to their defaults: two specs with the same result lay out
+ * the same, so the plan of one is the plan of the other. Everything that can change a size, a wrap or a position stays.
+ */
+private fun layoutShapeOf(sp: FlexSpec): FlexSpec {
+    val d = FlexStyle()
+    return sp.copy(
+        style = sp.style.copy(
+            bgA = d.bgA, bgB = d.bgB, gradientAngle = d.gradientAngle, bgGradient = d.bgGradient, bgPatterns = d.bgPatterns,
+            photoBlur = d.photoBlur, photoDim = d.photoDim, textColor = d.textColor, accent = d.accent,
+            panelColor = d.panelColor, panelAlpha = d.panelAlpha, panelFill = d.panelFill,
+            panelBorderColor = d.panelBorderColor, borderColor = d.borderColor, watermarkAlign = d.watermarkAlign
+        )
     )
 }
 
@@ -282,7 +298,8 @@ internal fun FlexPresetEditor(
 
     val assets = rememberFlexAssets(shown, content)
     // The layout of the card as it is right now: its height, shrink, block positions, what is hidden or cut off.
-    val plan = remember(shown, content, assets) {
+    val layoutShape = remember(shown) { shown?.let { layoutShapeOf(it) } }
+    val plan = remember(layoutShape, content, assets) {
         val sp = shown
         val ct = content
         if (sp != null && ct != null) FlexPainter.plan(sp, ct, assets) else null
@@ -310,12 +327,24 @@ internal fun FlexPresetEditor(
      * [join]: the change belongs to the undo step before it (best fit following the change that set it off). [force]:
      * not held to the content budget (fits, which never add content, and putting the preset's card back).
      */
+    // The fit key of the last spec checked, so a slider tick works out one key (the one before is the last tick's).
+    val lastKey = remember { arrayOfNulls<Any>(3) }
+    /** True when [after] (the drawn form of [next]) has a different fit key from the drawn form of the spec [before]. */
+    fun keyChanged(before: FlexSpec, next: FlexSpec, after: FlexSpec): Boolean {
+        val was = if (lastKey[0] === before && lastKey[1] === bindings && lastKey[2] != null) lastKey[2] else fitKeyOf(view(before))
+        val now = fitKeyOf(after)
+        lastKey[0] = next
+        lastKey[1] = bindings
+        lastKey[2] = now
+        return was != now
+    }
     fun tryCommit(next: FlexSpec, continuous: Boolean = false, join: Boolean = false, force: Boolean = false): Boolean {
         val before = spec
         val ct = content
         var next = next
-        if (!force && before != null && ct != null && fitKeyOf(view(before)) != fitKeyOf(view(next)) &&
-            FlexPainter.refuses(view(before), view(next), ct, assets)
+        val viewNext = if (!force && before != null && ct != null) view(next) else null
+        if (viewNext != null && before != null && ct != null && keyChanged(before, next, viewNext) &&
+            FlexPainter.refuses(view(before), viewNext, ct, assets)
         ) {
             // A card that is added (a new block id: Add screen, Duplicate, "Add another") and does not fit is added turned
             // off instead: a card that is off costs the poster nothing. Any other change that does not fit is refused.
@@ -803,7 +832,7 @@ internal fun FlexPresetEditor(
                                                 graphRangeOnly = screenFlow
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Spacer(modifier = Modifier.height(Space.md))
                                     }
                                     FlexCardConfig(
                                         blockId = id,

@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.body.BodyMeasurement
 import com.ashrdev.aznd.data.body.BodyWeightEntry
 import com.ashrdev.aznd.domain.GraphMode
@@ -47,6 +46,7 @@ import com.ashrdev.aznd.ui.components.Card
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 /** The two things on the Composition history page. [routeId] is what the nav route carries. */
 enum class CompositionMetric(val routeId: String, val label: String, val unit: String) {
@@ -119,7 +119,7 @@ fun CompositionHistoryScreen(
             }
         }
     ) { padding ->
-        val bottom = padding.calculateBottomPadding() + 16.dp
+        val bottom = padding.calculateBottomPadding() + Space.lg
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 PAGE_CALENDAR -> CalendarPage(metric, entries, bottom)
@@ -155,7 +155,7 @@ private fun CalendarPage(metric: CompositionMetric, entries: List<MetricEntry>?,
                     dayEntries.forEach { e ->
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                modifier = Modifier.fillMaxWidth().padding(Space.lg),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -200,7 +200,7 @@ private fun GraphPage(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding)
+            .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding)
     ) {
         when {
             entries == null -> Unit

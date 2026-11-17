@@ -27,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 /** The tallest the crop editor's picture is drawn (it sits in the card panel, in half of the screen). */
 private val CROP_EDITOR_MAX_HEIGHT = 220.dp
@@ -57,7 +58,7 @@ internal fun FlexCropEditor(
     val dim = Color.Black.copy(alpha = 0.55f)
     val line = Color.White
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val boxW = minOf(maxWidth, CROP_EDITOR_MAX_HEIGHT * aspect)
             val boxH = boxW / aspect

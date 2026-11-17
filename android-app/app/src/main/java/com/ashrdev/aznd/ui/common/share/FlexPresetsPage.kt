@@ -56,6 +56,7 @@ import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The Presets page: the built-in presets first (one per share source), then the person's own ([FlexCardPreset]),
@@ -89,8 +90,8 @@ internal fun FlexPresetsPage(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.sm, bottom = bottom + Space.lg),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         items(presets, key = { "p${it.id}" }) { preset ->
             PresetRow(
@@ -122,7 +123,7 @@ internal fun FlexPresetsPage(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 24.dp, horizontal = 16.dp),
+                        .padding(vertical = Space.xl, horizontal = Space.lg),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
@@ -131,7 +132,7 @@ internal fun FlexPresetsPage(
                         modifier = Modifier.size(40.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(Space.sm))
                     Text(
                         "Tap + to make your first preset",
                         style = MaterialTheme.typography.bodyMedium,
@@ -209,14 +210,14 @@ private fun PresetRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(Space.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             CardThumbnail(
                 preset, library, share, workoutViewModel, streakViewModel,
                 modifier = Modifier.size(width = 84.dp, height = 96.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Space.md))
             Column(modifier = Modifier.weight(1f)) {
                 Text(preset.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(

@@ -1,7 +1,6 @@
 package com.ashrdev.aznd.ui.home
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -13,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import com.ashrdev.aznd.ui.common.SlidingPageActions
 import com.ashrdev.aznd.ui.common.SlidingPageTitle
@@ -75,6 +76,8 @@ fun HomeScreen(
         }
     }
     val tray = rememberTrayState()
+    // Only whether the tray is open is read while composing; its drag is read where the scrim draws.
+    val trayOpen by remember { derivedStateOf { tray.value > 0f } }
     // This screen has no Back button, so a pending "keep the bar pulled up" ends here.
     LaunchedEffect(Unit) { TrayMemory.clear() }
     val scope = rememberCoroutineScope()
@@ -89,7 +92,7 @@ fun HomeScreen(
     }
 
     BackHandler(enabled = pagerState.currentPage != homeIndex) { goToPage(homeIndex) }
-    BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
+    BackHandler(enabled = trayOpen) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
         modifier = Modifier.fillMaxSize().themedFill(ThemeColor.BACKGROUND),
@@ -147,11 +150,11 @@ fun HomeScreen(
                 }
             }
 
-            if (tray.value > 0f) {
+            if (trayOpen) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f * tray.value.coerceIn(0f, 1f)))
+                        .drawBehind { drawRect(Color.Black.copy(alpha = 0.45f * tray.value.coerceIn(0f, 1f))) }
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null

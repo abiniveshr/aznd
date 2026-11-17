@@ -55,6 +55,7 @@ import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 private enum class EditSection(val title: String, val icon: ImageVector) {
     GOAL("Goal", Icons.Default.Flag),
@@ -83,8 +84,8 @@ fun MacroEditPage(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         if (section == null) {
             items(EditSection.entries.toList(), key = { it.name }) { s ->
@@ -96,11 +97,11 @@ fun MacroEditPage(
                 }
                 Card(modifier = Modifier.fillMaxWidth().clickable { sectionName = s.name }) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(Space.lg),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(s.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(Modifier.width(Space.lg))
                         Column(Modifier.weight(1f)) {
                             Text(s.title, style = MaterialTheme.typography.titleMedium)
                             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -152,9 +153,9 @@ private fun GoalSection(targets: MacroTargetsStore, body: BodyInputs?, onSaved: 
         BodyStats.goalWeightKg(weightKg, bodyFat, goalFatValue)
     } else null
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 CalorieGoal.entries.forEach { g ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -163,7 +164,7 @@ private fun GoalSection(targets: MacroTargetsStore, body: BodyInputs?, onSaved: 
                         RadioButton(selected = goal == g, onClick = null)
                         Text(
                             if (g.offsetKcal != null) "${g.label} (${CalorieTarget.offsetLabel(g.offsetKcal)})" else g.label,
-                            modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp)
+                            modifier = Modifier.padding(start = Space.sm, top = Space.sm, bottom = Space.sm)
                         )
                     }
                 }
@@ -181,7 +182,7 @@ private fun GoalSection(targets: MacroTargetsStore, body: BodyInputs?, onSaved: 
         }
 
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
                 Text("Macro targets", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(value = protein, onValueChange = { protein = it.filter(Char::isDigit) }, label = { Text("Protein (g)") }, singleLine = true, keyboardOptions = numbers, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = carbs, onValueChange = { carbs = it.filter(Char::isDigit) }, label = { Text("Carbs (g)") }, singleLine = true, keyboardOptions = numbers, modifier = Modifier.fillMaxWidth())
@@ -195,7 +196,7 @@ private fun GoalSection(targets: MacroTargetsStore, body: BodyInputs?, onSaved: 
         }
 
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
                 Text("Goal bodyweight", style = MaterialTheme.typography.titleMedium)
                 if (weightKg == null || bodyFat == null) {
                     Text(
@@ -250,7 +251,7 @@ private fun GoalSection(targets: MacroTargetsStore, body: BodyInputs?, onSaved: 
 
 @Composable
 private fun MealsSection(onLogMeal: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         PlaceholderCard("Presets", "Ready-made meals you can log in one tap. Coming soon.")
         PlaceholderCard("Custom meal", "Build and save your own meals from ingredients. Coming soon.")
         OutlinedButton(onClick = onLogMeal, modifier = Modifier.fillMaxWidth()) { Text("Log a meal now") }
@@ -260,7 +261,7 @@ private fun MealsSection(onLogMeal: () -> Unit) {
 @Composable
 private fun PlaceholderCard(title: String, text: String) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -284,7 +285,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.ingredientsSection(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)
+                    modifier = Modifier.padding(start = Space.lg, top = Space.xs, bottom = Space.xs, end = Space.xs)
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(ing.name, style = MaterialTheme.typography.titleMedium)
@@ -314,14 +315,14 @@ private fun AddIngredientCard(onAdd: (Ingredient) -> Unit) {
     val decimal = KeyboardOptions(keyboardType = KeyboardType.Decimal)
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
             Text("Add ingredient (values per 100 g)", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = name, onValueChange = { name = it; error = null }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 OutlinedTextField(value = kcal, onValueChange = { kcal = it; error = null }, label = { Text("kcal") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f))
                 OutlinedTextField(value = protein, onValueChange = { protein = it; error = null }, label = { Text("Protein g") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 OutlinedTextField(value = carbs, onValueChange = { carbs = it; error = null }, label = { Text("Carbs g") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f))
                 OutlinedTextField(value = fat, onValueChange = { fat = it; error = null }, label = { Text("Fat g") }, singleLine = true, keyboardOptions = decimal, modifier = Modifier.weight(1f))
             }

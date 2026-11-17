@@ -30,6 +30,7 @@ import com.ashrdev.aznd.ui.workout.formatTimestamp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Set-by-set breakdown of one workout: pick a logged session (newest first), then see every
@@ -49,7 +50,7 @@ fun SetBreakdownPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(Space.xl)
         ) {
             Text(
                 "No sessions logged yet. Finish a session of this workout and its sets show up here.",
@@ -73,11 +74,11 @@ fun SetBreakdownPage(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "sessions") {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 items(sessions.take(20), key = { it.session.id }) { s ->
                     FilterChip(
                         selected = s.session.id == current.session.id,
@@ -102,8 +103,8 @@ fun SetBreakdownPage(
             val before = previousByExercise[exerciseName].orEmpty()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.padding(Space.lg),
+                    verticalArrangement = Arrangement.spacedBy(Space.sm)
                 ) {
                     Text(exerciseName, style = MaterialTheme.typography.titleMedium)
                     sets.forEachIndexed { i, set ->

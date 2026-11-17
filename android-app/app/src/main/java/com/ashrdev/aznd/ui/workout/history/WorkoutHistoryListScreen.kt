@@ -36,13 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.WorkoutHistorySummary
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_PRESETS = 0
 private const val PAGE_CALENDAR = 1
@@ -123,13 +123,13 @@ fun WorkoutHistoryListScreen(
                 )
                 PAGE_CALENDAR -> HistoryOverviewPage(
                     sessions = sessions,
-                    bottomPadding = bottom + 16.dp,
+                    bottomPadding = bottom + Space.lg,
                     onOpenSession = onOpenSession
                 )
                 else -> HistorySessionListPage(
                     sessions = sessions,
                     catalog = catalog,
-                    bottomPadding = bottom + 16.dp,
+                    bottomPadding = bottom + Space.lg,
                     onOpenSession = onOpenSession,
                     onDeleteSession = { viewModel.deleteSession(it) }
                 )
@@ -150,7 +150,7 @@ private fun PresetHistoryPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(Space.xl)
         ) {
             Text("No sessions logged yet.", style = MaterialTheme.typography.bodyMedium)
         }
@@ -158,9 +158,9 @@ private fun PresetHistoryPage(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding
+                start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             items(summaries, key = { it.workoutId }) { summary ->
                 HistoryRow(
@@ -189,7 +189,7 @@ private fun HistoryRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

@@ -29,16 +29,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import com.ashrdev.aznd.data.streaks.StreakEntity
 import com.ashrdev.aznd.ui.common.PhotoViewerDialog
 import com.ashrdev.aznd.ui.components.Card
-import com.ashrdev.aznd.ui.common.PhotoStore
+import com.ashrdev.aznd.ui.common.rememberPhotoBitmap
+import com.ashrdev.aznd.ui.theme.Space
 
 private val BannerHeight = 200.dp
 private val PreviewHeight = 140.dp
@@ -49,8 +48,9 @@ const val STREAK_BANNER_HEIGHT_PX = 675
 
 @Composable
 fun StreakBannerImage(bannerUri: String?, modifier: Modifier = Modifier, height: Dp = BannerHeight, onClick: (() -> Unit)? = null) {
-    val context = LocalContext.current
-    val bitmap = remember(bannerUri) { bannerUri?.let { PhotoStore.loadBitmap(context, it.toUri()) } }
+    val screenPx = LocalContext.current.resources.displayMetrics.widthPixels
+    // Never below the 1200 px the picker saves: sampling halves in steps, a lower cap would shrink it by half.
+    val bitmap = rememberPhotoBitmap(bannerUri, maxOf(screenPx, STREAK_BANNER_WIDTH_PX))
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -62,7 +62,7 @@ fun StreakBannerImage(bannerUri: String?, modifier: Modifier = Modifier, height:
     ) {
         if (bitmap != null) {
             Image(
-                bitmap = bitmap.asImageBitmap(),
+                bitmap = bitmap,
                 contentDescription = "Banner",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize()
@@ -98,13 +98,13 @@ fun StreakBannerCard(
 @Composable
 fun StreakPreviewHeader(bannerUri: String?, photoUri: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
-        StreakBannerImage(bannerUri = bannerUri, height = PreviewHeight, modifier = Modifier.padding(bottom = 28.dp))
+        StreakBannerImage(bannerUri = bannerUri, height = PreviewHeight, modifier = Modifier.padding(bottom = Space.xxl))
         StreakLogo(
             photoUri = photoUri,
             size = 64.dp,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 16.dp)
+                .padding(start = Space.lg)
                 .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape)
         )
     }
@@ -124,7 +124,7 @@ fun StreakIdentityCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             StreakLogo(
@@ -132,7 +132,7 @@ fun StreakIdentityCard(
                 size = 64.dp,
                 modifier = Modifier.clickable(onClick = onLogoClick)
             )
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(Space.lg))
             Column(modifier = Modifier.weight(1f)) {
                 Text(streak.name, style = MaterialTheme.typography.titleLarge)
                 Text(

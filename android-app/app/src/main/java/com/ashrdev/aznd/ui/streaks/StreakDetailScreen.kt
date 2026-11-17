@@ -31,6 +31,7 @@ import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import java.util.Calendar
+import com.ashrdev.aznd.ui.theme.Space
 
 private val breakPhrases = listOf(
     "Do not worry, we start again",
@@ -171,7 +172,7 @@ fun StreakDetailScreen(
         calendarActions = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(Space.md)
             ) {
                 OutlinedButton(onClick = { onSaveDay(streakId, today) }, modifier = Modifier.weight(1f)) { Text("Save today") }
                 val check = t.check

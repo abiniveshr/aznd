@@ -44,6 +44,7 @@ import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.workout.formatTimestamp
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun WorkoutHistoryScreen(
@@ -182,7 +183,7 @@ private fun HistoryCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

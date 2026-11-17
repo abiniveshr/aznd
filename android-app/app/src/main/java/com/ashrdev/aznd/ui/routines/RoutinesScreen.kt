@@ -49,6 +49,7 @@ import com.ashrdev.aznd.ui.streaks.StreakLogo
 import com.ashrdev.aznd.ui.streaks.StreakViewModel
 import com.ashrdev.aznd.ui.streaks.StreakWithCount
 import com.ashrdev.aznd.ui.streaks.rememberNowMs
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_DISCIPLINE = 0
 private const val PAGE_ROUTINES = 1
@@ -124,11 +125,11 @@ fun RoutinesScreen(
 private fun AddRow(label: String, hint: String?, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(Space.lg))
             Column(Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 if (hint != null) {
@@ -150,8 +151,8 @@ private fun RoutineListPage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         items(routines, key = { it.routine.id }) { item ->
             RoutineCard(
@@ -193,11 +194,11 @@ private fun RoutineCard(
     val done = item.info.state(rememberNowMs()).done
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = Space.lg, top = Space.md, bottom = Space.md, end = Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             StreakLogo(photoUri = r.photoUri, size = 52.dp)
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(Space.lg))
             Column(Modifier.weight(1f)) {
                 Text(r.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -210,14 +211,14 @@ private fun RoutineCard(
             if (streak != null) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable { onOpenStreak(streak.streak.id) }.padding(horizontal = 8.dp)
+                    modifier = Modifier.clickable { onOpenStreak(streak.streak.id) }.padding(horizontal = Space.sm)
                 ) {
                     Text("${streak.currentStreak}", style = MaterialTheme.typography.titleLarge)
                     Text(if (streak.currentStreak == 1) "day" else "days", style = MaterialTheme.typography.labelSmall)
                 }
             }
             if (item.manual) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Space.sm))
                 CheckInBox(item.info, onChange = onToggleDone)
             }
         }
@@ -234,8 +235,8 @@ private fun StreakListPage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         items(streaks, key = { it.streak.id }) { item ->
             StreakCard(
@@ -261,11 +262,11 @@ private fun StreakCard(item: StreakWithCount, onClick: () -> Unit, onCheckIn: (B
     val next = remember(streak.milestones, days) { nextMilestone(days, parseMilestones(streak.milestones)) }
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             StreakLogo(photoUri = streak.photoUri, size = 56.dp)
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(Space.lg))
             Column(modifier = Modifier.weight(1f)) {
                 Text(streak.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 streak.quote?.takeIf { it.isNotBlank() }?.let { quote ->
@@ -289,7 +290,7 @@ private fun StreakCard(item: StreakWithCount, onClick: () -> Unit, onCheckIn: (B
             item.check?.let { check ->
                 CheckInBox(check, onChange = onCheckIn)
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(Space.md))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("$days", style = MaterialTheme.typography.headlineMedium)
                 Text(if (days == 1) "day" else "days", style = MaterialTheme.typography.bodySmall)

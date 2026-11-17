@@ -50,6 +50,7 @@ import com.ashrdev.aznd.ui.common.rememberReorderState
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.common.tiling.TileTree
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The Cards page of the preset editor: an Add button over the poster's cards as a list. Switch a card on or off, drag
@@ -71,11 +72,11 @@ internal fun FlexCardsPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = Space.lg)
     ) {
-        Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
+        Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().padding(top = Space.sm, bottom = Space.xs)) {
             Icon(Icons.Default.Add, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Space.sm))
             Text("Add a card")
         }
         BlockListPanel(
@@ -136,8 +137,8 @@ internal fun BlockListPanel(
     LazyColumn(
         state = listState,
         modifier = modifier,
-        contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(top = Space.xs, bottom = Space.sm),
+        verticalArrangement = Arrangement.spacedBy(Space.sm)
     ) {
         items(spec.blocks, key = { it.id }) { block ->
             ReorderableItem(listOrder, block.id) {
@@ -182,7 +183,7 @@ private fun BlockRow(
     val type = block.type
     Card(modifier = Modifier.fillMaxWidth(), highlight = selected) {
         Row(
-            modifier = dragModifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            modifier = dragModifier.padding(horizontal = Space.xs, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -190,15 +191,15 @@ private fun BlockRow(
                 contentDescription = "Drag to reorder",
                 modifier = handleModifier
                     .size(40.dp)
-                    .padding(8.dp)
+                    .padding(Space.sm)
             )
             Switch(checked = block.enabled, onCheckedChange = onEnabled)
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(Space.md))
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .clickable(onClick = onSelect)
-                    .padding(vertical = 6.dp)
+                    .padding(vertical = Space.sm)
             ) {
                 Text(type.label, style = MaterialTheme.typography.titleMedium)
                 val note = when {

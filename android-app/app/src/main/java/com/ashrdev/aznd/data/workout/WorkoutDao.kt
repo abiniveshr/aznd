@@ -98,6 +98,10 @@ interface WorkoutDao {
     fun getSessions(): Flow<List<SessionWithSets>>
 
     @Transaction
+    @Query("SELECT * FROM sessions ORDER BY startedAt DESC")
+    suspend fun getSessionsOnce(): List<SessionWithSets>
+
+    @Transaction
     @Query("SELECT * FROM sessions WHERE id = :sessionId")
     suspend fun getSession(sessionId: Long): SessionWithSets?
 

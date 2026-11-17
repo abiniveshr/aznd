@@ -32,6 +32,7 @@ import com.ashrdev.aznd.ui.components.Card
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * One line in a [LogsViewer]. The screen that owns the data maps its entries to these, so the
@@ -94,8 +95,8 @@ fun LogsViewer(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "range-selector") {
             DateRangeSelector(state = state, availableMonths = availableMonths)
@@ -133,9 +134,9 @@ private fun LogRow(item: LogItem, onDelete: (() -> Unit)?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = if (onDelete != null) 4.dp else 16.dp)
+            modifier = Modifier.padding(start = Space.lg, top = Space.xs, bottom = Space.xs, end = if (onDelete != null) Space.xs else Space.lg)
         ) {
-            Column(Modifier.weight(1f).padding(vertical = if (onDelete != null) 0.dp else 8.dp)) {
+            Column(Modifier.weight(1f).padding(vertical = if (onDelete != null) 0.dp else Space.sm)) {
                 Text(item.title, style = MaterialTheme.typography.titleMedium)
                 Text(
                     logTimeFormat.format(Date(item.timeMs)),
@@ -178,7 +179,7 @@ fun LogsViewerScreen(
     ) { padding ->
         LogsViewer(
             logs = logs,
-            bottomPadding = padding.calculateBottomPadding() + 16.dp,
+            bottomPadding = padding.calculateBottomPadding() + Space.lg,
             emptyText = emptyText,
             summary = summary
         )

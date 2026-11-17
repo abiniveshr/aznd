@@ -51,6 +51,7 @@ import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.workout.exercise.ExerciseSearchContent
 import com.ashrdev.aznd.ui.workout.exercise.LocalOpenCustomExercise
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_EXERCISES = 0
 private const val PAGE_VIEW = 1
@@ -144,12 +145,12 @@ fun WorkoutsScreen(
             if (page == PAGE_VIEW) listOf(
                 PrimaryAction(
                     icon = Icons.Default.Add,
-                    label = "New Preset",
+                    label = "New workout",
                     onClick = onAddWorkout
                 ),
                 PrimaryAction(
                     icon = Icons.Default.PlayArrow,
-                    label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume FS" else "Freestyle",
+                    label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume" else "Freestyle",
                     onClick = startEmpty
                 )
             ) else emptyList()
@@ -198,8 +199,8 @@ private fun ViewPage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         runningSession?.let { running ->
             item(key = "running") {
@@ -209,7 +210,7 @@ private fun ViewPage(
                         .fillMaxWidth()
                         .clickable(onClick = { onOpenSession(running.workoutId) })
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(Space.lg)) {
                         Text("Session in progress", style = MaterialTheme.typography.titleMedium)
                         Text(
                             "${running.workoutName} · started ${formatClock(running.startedAt)}",
@@ -234,7 +235,7 @@ private fun ViewPage(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
+                            .padding(start = Space.lg, top = Space.md, bottom = Space.md, end = Space.md),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -245,13 +246,13 @@ private fun ViewPage(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(Space.sm))
                         Button(
                             onClick = { onStart(item) },
                             enabled = item.exercises.isNotEmpty()
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(Space.xs))
                             Text(if (isRunning) "Resume" else "Start")
                         }
                     }
@@ -275,7 +276,7 @@ private fun ExercisesPage(
         exercises = exercises,
         onPick = onOpen,
         onAddCustom = null,
-        modifier = Modifier.fillMaxSize().padding(top = 8.dp),
+        modifier = Modifier.fillMaxSize().padding(top = Space.sm),
         autoFocus = false,
         bottomPadding = bottomPadding,
         dataIds = dataIds
@@ -289,10 +290,10 @@ private fun SplitPage(bottomPadding: Dp) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 24.dp, end = 24.dp, bottom = bottomPadding),
+            .padding(start = Space.xl, end = Space.xl, bottom = bottomPadding),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.sm)) {
             Icon(Icons.Default.ViewWeek, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Workout split", style = MaterialTheme.typography.titleMedium)
             Text(

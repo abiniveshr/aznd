@@ -2,13 +2,17 @@ package com.ashrdev.aznd.ui.theme
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.ashrdev.aznd.ui.common.share.FlexFont
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.Executors
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -158,7 +162,10 @@ data class ThemeSettings(
     val light: Palette = DefaultLightPalette,
     val dark: Palette = DefaultDarkPalette,
     /** Set only for the high contrast theme: the base colour its palette is made from (see [HighContrast]). */
-    val contrast: ContrastBase? = null
+    val contrast: ContrastBase? = null,
+    /** The font of the whole app: one of Flex's fonts, or null for the system default. */
+    val appFont: FlexFont? = null,
+    val density: UiDensity = UiDensity.REGULAR
 )
 
 fun Color.toHexString(): String = String.format(Locale.US, "#%06X", 0xFFFFFF and toArgb())
@@ -229,6 +236,8 @@ fun ThemeSettings.toJson(): String = JSONObject().apply {
     put("borderTaper", borderTaper.toJson())
     put("light", light.toJson())
     put("dark", dark.toJson())
+    appFont?.let { put("appFont", it.name) }
+    put("density", density.name)
     contrast?.let { put("contrast", JSONObject().put("color", it.color.toHexString()).put("shade", it.shade.name)) }
 }.toString(2)
 
@@ -268,6 +277,8 @@ fun themeFromJson(text: String): ThemeSettings {
         borderTaper = taperLineFromJson(o.optJSONObject("borderTaper")),
         light = paletteFrom(o.optJSONObject("light"), d.light),
         dark = paletteFrom(o.optJSONObject("dark"), d.dark),
+        appFont = FlexFont.entries.firstOrNull { it.name == o.optString("appFont") },
+        density = UiDensity.entries.firstOrNull { it.name == o.optString("density") } ?: d.density,
         contrast = o.optJSONObject("contrast")?.let { c ->
             ContrastBase(
                 color = parseHex(c.str("color"), Color.White),
@@ -281,27 +292,87 @@ object ThemeStore {
     private const val PREFS = "aznd_theme"
     private const val KEY = "settings"
 
+    /** How long after the last edit the theme is committed. */
+    private const val COMMIT_DELAY_MS = 250L
+
     private val _settings = MutableStateFlow(ThemeSettings())
+
+    /** The committed theme: what the whole app draws with. */
     val settings: StateFlow<ThemeSettings> = _settings.asStateFlow()
+
+    private val _draft = MutableStateFlow(ThemeSettings())
+
+    /** The theme as it is being edited: changes on every edit, and is committed to [settings] a moment after the last one, once the patterns it uses are baked. */
+    val draft: StateFlow<ThemeSettings> = _draft.asStateFlow()
+
     private var prefs: SharedPreferences? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val commitTask = Runnable { if (ScreenBakes.readyFor(_draft.value)) commitNow() }
+
+    private val _pending = MutableStateFlow(false)
+
+    val pending: StateFlow<Boolean> = _pending.asStateFlow()
+
+    // One thread, so the saves land in the order they were committed.
+    private val saver = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "theme-save").apply { isDaemon = true }
+    }
 
     fun init(context: Context) {
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
+        PatternBake.init(context)
+        ScreenBakes.init(context)
         val saved = p.getString(KEY, null)
         if (saved != null) {
-            runCatching { themeFromJson(saved) }.getOrNull()?.let { _settings.value = it }
+            runCatching { themeFromJson(saved) }.getOrNull()?.let {
+                _settings.value = it
+                _draft.value = it
+            }
+        }
+        publishDensity(_settings.value)
+        val startDark = when (_settings.value.mode) {
+            ThemeMode.LIGHT -> false
+            ThemeMode.DARK -> true
+            ThemeMode.SYSTEM -> ScreenBakes.systemDark()
+        }
+        ScreenBakes.setThemeRequired(ScreenBakes.themeSets(_settings.value, startDark))
+        PatternBake.prewarm(_settings.value)
+    }
+
+    /** Hands the committed density to the spacing tokens, on the main thread. */
+    private fun publishDensity(committed: ThemeSettings) {
+        if (Looper.myLooper() == Looper.getMainLooper()) applyUiDensity(committed.density)
+        else handler.post { applyUiDensity(committed.density) }
+    }
+
+    /** Changes the draft now and commits it [COMMIT_DELAY_MS] after the last call. */
+    fun update(transform: (ThemeSettings) -> ThemeSettings) {
+        _draft.value = transform(_draft.value)
+        _pending.value = _draft.value != _settings.value
+        handler.removeCallbacks(commitTask)
+        handler.postDelayed(commitTask, COMMIT_DELAY_MS)
+    }
+
+    /** Publishes the draft as the committed theme and saves it; the Applying screen (see [ThemeHost]) covers any baking it needs. */
+    fun commitNow() {
+        handler.removeCallbacks(commitTask)
+        val next = _draft.value
+        _pending.value = false
+        if (next == _settings.value) return
+        _settings.value = next
+        val p = prefs
+        saver.execute {
+            if (p != null) p.edit().putString(KEY, next.toJson()).apply()
+            PatternBake.afterCommit(next)
         }
     }
 
-    fun update(transform: (ThemeSettings) -> ThemeSettings) {
-        val next = transform(_settings.value)
-        _settings.value = next
-        prefs?.edit()?.putString(KEY, next.toJson())?.apply()
+    fun replace(next: ThemeSettings) {
+        _draft.value = next
+        commitNow()
     }
 
-    fun replace(next: ThemeSettings) = update { next }
-
-    fun reset() = update { ThemeSettings() }
+    fun reset() = replace(ThemeSettings())
 }

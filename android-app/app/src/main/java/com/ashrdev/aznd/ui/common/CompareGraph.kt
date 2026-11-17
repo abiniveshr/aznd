@@ -54,6 +54,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun CompareGraph(
@@ -69,8 +70,8 @@ fun CompareGraph(
     if (variables.size < 2) return
     val body: @Composable () -> Unit = {
         Column(
-            (if (bordered) Modifier else modifier).then(if (fillHeight) Modifier.fillMaxSize() else Modifier).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            (if (bordered) Modifier else modifier).then(if (fillHeight) Modifier.fillMaxSize() else Modifier).padding(Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             if (title != null) Text(title, style = MaterialTheme.typography.titleMedium)
             CompareBody(variables, nowMs, fillHeight, initial)
@@ -115,7 +116,7 @@ internal fun ColumnScope.CompareBody(
     val range = rangeState.range
     val colors = compareColors()
 
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
         items(variables, key = { it.id }) { v ->
             val on = v.id in picked
             FilterChip(
@@ -141,12 +142,12 @@ internal fun ColumnScope.CompareBody(
         return
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
         CompareView.entries.forEach { v ->
             FilterChip(selected = v == view, onClick = { viewName = v.name }, label = { Text(v.label) })
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
         GraphRangeButton(rangeState)
         CompareBucket.entries.forEach { b ->
             FilterChip(selected = b == bucket, onClick = { bucketName = b.name }, label = { Text(b.label) })
@@ -238,8 +239,8 @@ internal fun ColumnScope.CompareBody(
                             pairX = i
                             pairY = j
                         }
-                        .padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(vertical = Space.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(chosen[i].label, color = colors[i], style = MaterialTheme.typography.bodyMedium)
@@ -272,7 +273,7 @@ internal fun ColumnScope.CompareBody(
 @Composable
 private fun CorrelationSummary(a: GraphMode, b: GraphMode, ca: Color, cb: Color, c: Correlation?, bucket: CompareBucket) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
             Text(a.label, color = ca, style = MaterialTheme.typography.titleSmall)
             Text("×", style = MaterialTheme.typography.titleSmall)
             Text(b.label, color = cb, style = MaterialTheme.typography.titleSmall)

@@ -160,12 +160,16 @@ object SetTree {
         return t.flatten()
     }
 
-    /** Empty NORMAL set at the end of the card holding [anyRowIdInCard], same exercise. */
-    fun addSetToCard(rows: List<SetRow>, anyRowIdInCard: Long, ids: IdSource): List<SetRow> {
+    /**
+     * NORMAL set at the end of the card holding [anyRowIdInCard], same exercise. Empty, except that
+     * [copyWeight] starts it with the weight of the card's last set (reps are never filled in).
+     */
+    fun addSetToCard(rows: List<SetRow>, anyRowIdInCard: Long, ids: IdSource, copyWeight: Boolean = false): List<SetRow> {
         val t = Tree(rows)
         val last = t.cardTops(anyRowIdInCard).lastOrNull() ?: return t.flatten()
         val tops = t.kids(null)
-        tops.add(tops.indexOfFirst { it.id == last.id } + 1, SetRow(ids.next(), exerciseId = last.exerciseId))
+        val weight = if (copyWeight) last.weightKg else null
+        tops.add(tops.indexOfFirst { it.id == last.id } + 1, SetRow(ids.next(), exerciseId = last.exerciseId, weightKg = weight))
         return t.flatten()
     }
 

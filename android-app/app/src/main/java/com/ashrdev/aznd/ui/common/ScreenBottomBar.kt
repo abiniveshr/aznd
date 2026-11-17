@@ -10,7 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.theme.Space
 
 data class ThirdAction(
     val icon: ImageVector,
@@ -59,7 +59,7 @@ fun ScreenBottomBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(TabsHeight)
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = Space.md)
                 ) {
                     actions.forEach { action ->
                         ActionTile(

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.theme.Space
 
 data class ModelEntry(val label: String, val onPick: () -> Unit)
 
@@ -33,11 +34,11 @@ fun RegionDropdownGrid(
     regions: List<ModelRegion>,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         regions.chunked(REGIONS_PER_ROW).forEach { rowRegions ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(Space.sm)
             ) {
                 rowRegions.forEach { region ->
                     RegionDropdown(region, Modifier.weight(1f))

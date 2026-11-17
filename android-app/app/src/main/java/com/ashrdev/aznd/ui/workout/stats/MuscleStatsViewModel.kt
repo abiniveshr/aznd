@@ -10,10 +10,12 @@ import com.ashrdev.aznd.domain.workout.E1rmCalculator
 import com.ashrdev.aznd.domain.workout.Muscle
 import com.ashrdev.aznd.domain.workout.MuscleSession
 import com.ashrdev.aznd.domain.workout.MuscleStatsCalculator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Reads every finished set once and turns it into one entry per session for this muscle. */
 class MuscleStatsViewModel(
@@ -28,12 +30,11 @@ class MuscleStatsViewModel(
 
     init {
         viewModelScope.launch {
-            _sessions.value = MuscleStatsCalculator.sessions(
-                muscle,
-                repository.loggedSetData(),
-                repository.statsExercises(),
-                E1rmCalculator(rpeTracking = trackRpe)
-            )
+            val sets = repository.loggedSetData()
+            val exercises = repository.statsExercises()
+            _sessions.value = withContext(Dispatchers.Default) {
+                MuscleStatsCalculator.sessions(muscle, sets, exercises, E1rmCalculator(rpeTracking = trackRpe))
+            }
         }
     }
 

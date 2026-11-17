@@ -35,6 +35,7 @@ import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.formatTimestamp
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun HistoryPage(
@@ -59,8 +60,8 @@ fun HistoryPage(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "workout-history") {
             HistoryEntryCard(
@@ -104,11 +105,11 @@ private fun HistoryEntryCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(Space.lg))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)

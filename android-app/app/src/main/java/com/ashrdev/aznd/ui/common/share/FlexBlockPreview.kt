@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Shown inside an opened block in the Content list: that block drawn on its own (same look as the card,
@@ -56,8 +57,8 @@ internal fun BlockPreview(
     val soloPlan = remember(soloSpec, content, assets) { FlexPainter.plan(soloSpec, content, assets) }
     val position = plan.boxes.indexOfFirst { it.id == block.id }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(modifier = Modifier.weight(0.62f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
+        Column(modifier = Modifier.weight(0.62f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
                 "This block",
                 style = MaterialTheme.typography.labelSmall,
@@ -75,7 +76,7 @@ internal fun BlockPreview(
                 )
             }
         }
-        Column(modifier = Modifier.weight(0.38f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.weight(0.38f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
                 "Position",
                 style = MaterialTheme.typography.labelSmall,

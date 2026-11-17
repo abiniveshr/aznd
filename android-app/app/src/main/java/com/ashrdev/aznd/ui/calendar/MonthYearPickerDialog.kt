@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
+import com.ashrdev.aznd.ui.theme.Space
 
 // Scrollable list of the months that have data, grouped by year, newest year first.
 @Composable
@@ -41,16 +42,16 @@ fun MonthYearPickerDialog(
         text = {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 360.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(Space.lg)
             ) {
                 years.forEach { (year, list) ->
                     item(key = "year-$year") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
                             Text(year.toString(), style = MaterialTheme.typography.titleSmall)
                             list.sortedBy { it.month }.chunked(4).forEach { rowMonths ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(Space.sm)
                                 ) {
                                     rowMonths.forEach { m ->
                                         MonthChip(

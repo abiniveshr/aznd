@@ -27,6 +27,8 @@ import com.ashrdev.aznd.domain.GraphWindow
 import com.ashrdev.aznd.domain.body.MeasurementSite
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.components.StatTile
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The Composition page of the Body screen: log bodyweight and body fat %, see the latest numbers
@@ -74,14 +76,14 @@ fun LazyListScope.compositionSection(
             val change = if (shown.size >= 2) shown.last().weightKg - shown.first().weightKg else 0.0
             val weight = weightList.first().weightKg
             val bodyFat = fatList.firstOrNull()?.valueCm
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Weight", "${GraphWindow.formatValue(weight)} kg", Modifier.weight(1f))
-                    StatCard("Change in range", "${BodyStats.signed(change)} kg", Modifier.weight(1f))
+            Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
+                    StatTile("Weight", "${GraphWindow.formatValue(weight)} kg", Modifier.weight(1f))
+                    StatTile("Change in range", "${BodyStats.signed(change)} kg", Modifier.weight(1f))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Body fat", bodyFat?.let { "${GraphWindow.formatValue(it)} %" } ?: "—", Modifier.weight(1f))
-                    StatCard(
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
+                    StatTile("Body fat", bodyFat?.let { "${GraphWindow.formatValue(it)} %" } ?: "—", Modifier.weight(1f))
+                    StatTile(
                         "Lean mass",
                         bodyFat?.let { "${GraphWindow.formatValue(BodyStats.leanMassKg(weight, it))} kg" } ?: "—",
                         Modifier.weight(1f)
@@ -98,7 +100,7 @@ fun LazyListScope.compositionSection(
     }
 
     item(key = "history-buttons") {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(
                 onClick = { onOpenHistory(CompositionMetric.WEIGHT) },
                 modifier = Modifier.weight(1f)
@@ -136,7 +138,7 @@ internal fun HistoryRow(title: String, subtitle: String, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)
+            modifier = Modifier.padding(start = Space.lg, top = Space.xs, bottom = Space.xs, end = Space.xs)
         ) {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
@@ -149,16 +151,6 @@ internal fun HistoryRow(title: String, subtitle: String, onDelete: () -> Unit) {
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete entry", tint = MaterialTheme.colorScheme.error)
             }
-        }
-    }
-}
-
-@Composable
-internal fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge)
         }
     }
 }

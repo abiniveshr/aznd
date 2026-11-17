@@ -63,6 +63,7 @@ import com.ashrdev.aznd.ui.common.share.ColorRow
 import com.ashrdev.aznd.ui.common.share.LabeledSlider
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.theme.FillAnchor
 import com.ashrdev.aznd.ui.theme.FillBase
 import com.ashrdev.aznd.ui.theme.FillStyle
 import com.ashrdev.aznd.ui.theme.GradientKind
@@ -75,6 +76,7 @@ import com.ashrdev.aznd.ui.theme.azndFill
 import com.ashrdev.aznd.ui.theme.mixArgb
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 private class GradientPreset(val name: String, val kind: GradientKind, val angle: Int, val colors: IntArray)
 
@@ -227,17 +229,17 @@ fun FillEditor(
                                     adopt(source)
                                     showCopy = false
                                 }
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
+                                .padding(horizontal = Space.xs, vertical = Space.sm),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
                                     .clip(CircleShape)
-                                    .azndFill(ResolvedFill(Color(source.baseColor), source.fill), CircleShape)
+                                    .azndFill(ResolvedFill(Color(source.baseColor), source.fill), CircleShape, preview = true)
                                     .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             )
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(Space.md))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(source.label)
                                 Text(
@@ -256,13 +258,13 @@ fun FillEditor(
     }
 
     val shape = RoundedCornerShape(12.dp)
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.md)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
                 .clip(shape)
-                .azndFill(ResolvedFill(Color(color), fill), shape)
+                .azndFill(ResolvedFill(Color(color), fill), shape, preview = true)
                 .border(1.dp, MaterialTheme.colorScheme.outline, shape)
         )
         if (chooseBase) {
@@ -288,6 +290,9 @@ fun FillEditor(
                 onPickStop = { pickStop = it },
                 onPreset = { p -> gradient { cur -> GradientSpec.of(p.kind, p.angle, *p.colors).copy(centerX = cur.centerX, centerY = cur.centerY, radius = cur.radius) } }
             )
+            ChipChoice(FillAnchor.entries, fill.gradientAnchor, { it.label }) { picked ->
+                emit(f = fill.copy(gradientAnchor = picked))
+            }
         }
 
         val under = ResolvedFill(Color(fill.representative(color)), FillStyle.Plain)
@@ -298,7 +303,7 @@ fun FillEditor(
             onToggle = { patternsOpen = !patternsOpen }
         ) {
             // The patterns to pick from. Tapping one adds it as a card below (or opens its card if it is already there).
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                 items(PatternKind.entries.filter { it != PatternKind.NONE }) { kind ->
                     PatternTile(
                         kind = kind,
@@ -334,6 +339,11 @@ fun FillEditor(
                         onAdd = { duplicateLayer(id) },
                         onRemove = { removeLayer(id) }
                     )
+                }
+            }
+            if (patterns.isNotEmpty()) {
+                ChipChoice(FillAnchor.entries, fill.patternAnchor, { it.label }) { picked ->
+                    emit(f = fill.copy(patternAnchor = picked))
                 }
             }
         }
@@ -373,7 +383,7 @@ private fun FillFold(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggle)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = Space.md, vertical = Space.md),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(title, style = MaterialTheme.typography.titleSmall)
@@ -385,7 +395,7 @@ private fun FillFold(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 10.dp)
+                        .padding(horizontal = Space.md)
                 )
                 Icon(
                     Icons.Default.ExpandMore,
@@ -395,8 +405,8 @@ private fun FillFold(
             }
             AnimatedVisibility(visible = open) {
                 Column(
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(start = Space.md, end = Space.md, bottom = Space.md),
+                    verticalArrangement = Arrangement.spacedBy(Space.md)
                 ) { content() }
             }
         }
@@ -410,22 +420,22 @@ private fun GradientSection(
     onPickStop: (Int) -> Unit,
     onPreset: (GradientPreset) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             items(GradientPresets) { p ->
                 val spec = GradientSpec.of(p.kind, p.angle, *p.colors)
                 Column(
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.small)
                         .clickable { onPreset(p) }
-                        .padding(4.dp),
+                        .padding(Space.xs),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .azndFill(ResolvedFill(Color.Black, FillStyle.ofGradient(spec)), CircleShape)
+                            .azndFill(ResolvedFill(Color.Black, FillStyle.ofGradient(spec)), CircleShape, preview = true)
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     )
                     Text(p.name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
@@ -462,7 +472,7 @@ private fun GradientSection(
                 )
                 Column(modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 8.dp)) {
+                    .padding(horizontal = Space.sm)) {
                     Text("At ${(stop.position * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
                     Slider(
                         value = stop.position,
@@ -478,7 +488,7 @@ private fun GradientSection(
                 ) { Icon(Icons.Default.Delete, contentDescription = "Remove colour") }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             OutlinedButton(
                 enabled = g.stops.size < 8,
                 onClick = {
@@ -501,12 +511,12 @@ private fun GradientSection(
                 }
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Space.sm))
                 Text("Add colour")
             }
             OutlinedButton(onClick = { onChange { it.reversed() } }) {
                 Icon(Icons.Default.SwapHoriz, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Space.sm))
                 Text("Reverse")
             }
             OutlinedButton(onClick = {
@@ -531,7 +541,7 @@ private fun PatternTile(kind: PatternKind, under: ResolvedFill, count: Int, tint
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .padding(4.dp),
+            .padding(Space.xs),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val sample = FillStyle(patterns = listOf(PatternSpec.of(kind, intensity = maxOf(kind.defaultIntensity, 0.3f), tint = tint)))
@@ -539,7 +549,7 @@ private fun PatternTile(kind: PatternKind, under: ResolvedFill, count: Int, tint
             modifier = Modifier
                 .size(60.dp)
                 .clip(shape)
-                .azndFill(ResolvedFill(under.base, sample), shape)
+                .azndFill(ResolvedFill(under.base, sample), shape, preview = true)
                 .border(
                     width = if (selected) 3.dp else 1.dp,
                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
@@ -578,7 +588,7 @@ private fun PatternLayerCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggleExpanded)
-                    .padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                    .padding(start = Space.md, end = Space.sm, top = Space.sm, bottom = Space.sm),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val preview = FillStyle(patterns = listOf(spec.copy(enabled = true, intensity = maxOf(spec.intensity, 0.3f))))
@@ -587,7 +597,7 @@ private fun PatternLayerCard(
                         .size(32.dp)
                         .alpha(if (spec.enabled) 1f else 0.4f)
                         .clip(swatchShape)
-                        .azndFill(ResolvedFill(under, preview), swatchShape)
+                        .azndFill(ResolvedFill(under, preview), swatchShape, preview = true)
                         .border(1.dp, MaterialTheme.colorScheme.outline, swatchShape)
                 )
                 Text(
@@ -598,7 +608,7 @@ private fun PatternLayerCard(
                     color = if (spec.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = Space.sm)
                 )
                 MiniIconButton(Icons.Default.Refresh, "Reload pattern", enabled = spec.kind.seeded) {
                     onChange { it.copy(seed = it.seed + 1) }
@@ -624,8 +634,8 @@ private fun PatternLayerCard(
             }
             AnimatedVisibility(visible = expanded) {
                 Column(
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(start = Space.md, end = Space.md, bottom = Space.md),
+                    verticalArrangement = Arrangement.spacedBy(Space.md)
                 ) {
                     LabeledSlider("Strength", "${(spec.intensity * 100).roundToInt()}%", spec.intensity, 0f..1f) { v ->
                         onChange { it.copy(intensity = v) }
@@ -634,7 +644,7 @@ private fun PatternLayerCard(
                         onChange { it.copy(scale = v) }
                     }
                     if (spec.kind.tinted) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                             Box(
                                 modifier = Modifier
                                     .size(28.dp)

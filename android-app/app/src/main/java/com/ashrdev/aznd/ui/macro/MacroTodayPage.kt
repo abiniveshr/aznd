@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,12 +48,14 @@ import com.ashrdev.aznd.domain.macro.MacroGoals
 import com.ashrdev.aznd.domain.macro.MacroStats
 import com.ashrdev.aznd.domain.macro.MacroTotals
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.StatTile
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 private enum class TodayView(val label: String) { NET("Net"), EATEN("Eaten") }
 
@@ -83,11 +86,11 @@ fun MacroTodayPage(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 8.dp,
+                start = Space.lg, end = Space.lg, top = Space.sm,
                 // Extra room so the last meal can scroll clear of the floating button.
                 bottom = bottomPadding + if (view == TodayView.EATEN) 72.dp else 0.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.lg)
         ) {
             item(key = "day") { DayNavigator(day, today, onDayChange) }
             item(key = "toggle") {
@@ -132,7 +135,7 @@ fun MacroTodayPage(
                 text = { Text("Log meal") },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = bottomPadding)
+                    .padding(end = Space.lg, bottom = bottomPadding)
             )
         }
     }
@@ -151,9 +154,9 @@ private fun NetView(totals: MacroTotals, burntKcal: Double, targetKcal: Double?)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             GaugeArc(
                 segments = listOf(
@@ -169,18 +172,20 @@ private fun NetView(totals: MacroTotals, burntKcal: Double, targetKcal: Double?)
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Figure("Target", if (targetKcal != null) "${n(target.roundToInt().toDouble())}" else "—", Modifier.weight(1f))
-                Figure("Burned", n(burntKcal), Modifier.weight(1f))
-                Figure("Total", if (targetKcal != null) n(allowance.roundToInt().toDouble()) else "—", Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
+                StatTile("Target", if (targetKcal != null) "${n(target.roundToInt().toDouble())}" else "—", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, container = false)
+                StatTile("Burned", n(burntKcal), Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, container = false)
+                StatTile("Total", if (targetKcal != null) n(allowance.roundToInt().toDouble()) else "—", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, container = false)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Figure("Consumed", n(consumed), Modifier.weight(1f))
-                Figure(
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
+                StatTile("Consumed", n(consumed), Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, container = false)
+                StatTile(
                     if (left >= 0) "Remaining" else "Over",
                     if (targetKcal != null) n(abs(left).roundToInt().toDouble()) else "—",
                     Modifier.weight(1f),
-                    valueColor = if (over) MaterialTheme.colorScheme.error else null
+                    valueColor = if (over) MaterialTheme.colorScheme.error else Color.Unspecified,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    container = false
                 )
             }
             Text(
@@ -215,9 +220,9 @@ private fun EatenView(totals: MacroTotals, goals: MacroGoals) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             GaugeArc(segments = segments) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -229,7 +234,7 @@ private fun EatenView(totals: MacroTotals, goals: MacroGoals) {
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.md), modifier = Modifier.fillMaxWidth()) {
                 MacroLegend("Protein", totals.proteinG, goals.proteinG, protein, Modifier.weight(1f))
                 MacroLegend("Carbs", totals.carbsG, goals.carbsG, carbs, Modifier.weight(1f))
                 MacroLegend("Fat", totals.fatG, goals.fatG, fat, Modifier.weight(1f))
@@ -249,7 +254,7 @@ private fun EatenView(totals: MacroTotals, goals: MacroGoals) {
 @Composable
 private fun MacroLegend(label: String, eaten: Double, goal: Int, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(color))
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -261,28 +266,11 @@ private fun MacroLegend(label: String, eaten: Double, goal: Int, color: androidx
 }
 
 @Composable
-private fun Figure(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    valueColor: androidx.compose.ui.graphics.Color? = null
-) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            color = valueColor ?: MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
 private fun MealCard(e: FoodEntry, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)
+            modifier = Modifier.padding(start = Space.lg, top = Space.xs, bottom = Space.xs, end = Space.xs)
         ) {
             Column(Modifier.weight(1f)) {
                 Text(e.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

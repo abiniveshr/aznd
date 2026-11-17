@@ -41,6 +41,7 @@ import com.ashrdev.aznd.ui.workout.formatExerciseShare
 import com.ashrdev.aznd.ui.workout.formatSet
 import com.ashrdev.aznd.ui.workout.formatSingleSetShare
 import com.ashrdev.aznd.ui.workout.formatTimestamp
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun SessionDetailScreen(
@@ -85,9 +86,9 @@ fun SessionDetailScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+                start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding()
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             item {
                 Column {
@@ -132,7 +133,7 @@ private fun ExerciseGroupCard(
 ) {
     val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(Space.lg)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -165,7 +166,7 @@ private fun ExerciseGroupCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp),
+                            .padding(top = Space.sm),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {

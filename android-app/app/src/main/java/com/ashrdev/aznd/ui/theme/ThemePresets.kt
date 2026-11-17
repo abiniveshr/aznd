@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.Color
  * own setting ([ThemeSettings.contrast]), which the Appearance page lets the person change (see [HighContrast]).
  *
  * A preset sets every colour, fill and border width, in both the light and the dark palette. It leaves the corner
- * sizes alone (see [ThemePresets.applyTo]) and turns wallpaper colours off.
+ * sizes, the font and the density alone (see [ThemePresets.applyTo]) and turns wallpaper colours off.
  */
 data class ThemePreset(
     val id: String,
@@ -26,11 +26,13 @@ data class ThemePreset(
 
 object ThemePresets {
 
-    /** Puts [preset] on top of the person's current settings, keeping their corner sizes. */
+    /** Puts [preset] on top of the person's current settings, keeping their corner sizes, font and density. */
     fun applyTo(current: ThemeSettings, preset: ThemePreset): ThemeSettings = preset.settings.copy(
         useDynamicColor = false,
         cardCorner = current.cardCorner,
-        buttonCorner = current.buttonCorner
+        buttonCorner = current.buttonCorner,
+        appFont = current.appFont,
+        density = current.density
     )
 
     private fun c(v: Long): Int = v.toInt()

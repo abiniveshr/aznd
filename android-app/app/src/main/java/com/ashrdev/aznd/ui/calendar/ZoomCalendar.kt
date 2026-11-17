@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import java.util.Calendar
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val SWIPE_THRESHOLD_PX = 120f
 private const val ZOOM_ANIM_MS = 220
@@ -58,7 +59,7 @@ fun ZoomCalendar(
     onDayDoubleClick: ((String) -> Unit)? = null,
     onDayClick: (String) -> Unit = {}
 ) {
-    val thisMonth = monthKeyOf(todayDayKey())
+    val thisMonth = remember { monthKeyOf(todayDayKey()) }
     val allowed = remember(validMonths, thisMonth) {
         (validMonths + thisMonth).toSortedSet().toList()
     }
@@ -211,7 +212,7 @@ private fun CalendarHeader(
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.small)
                     .clickable(onClick = onTitleClick)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = Space.md, vertical = Space.sm)
             )
         }
         IconButton(onClick = onNext, enabled = canGoNext) {

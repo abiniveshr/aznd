@@ -19,6 +19,8 @@ import kotlin.math.roundToInt
 
 enum class FillBase(val label: String) { SOLID("Solid"), GRADIENT("Gradient") }
 
+enum class FillAnchor(val label: String) { SCREEN("Stationary"), ELEMENT("Mobile") }
+
 enum class GradientKind(val label: String) { LINEAR("Linear"), RADIAL("Radial"), SWEEP("Sweep") }
 
 /**
@@ -157,7 +159,9 @@ data class FillStyle(
     val base: FillBase = FillBase.SOLID,
     val gradient: GradientSpec = GradientSpec(),
     /** Any number of patterns, drawn over the base in this order (first = lowest). */
-    val patterns: List<PatternSpec> = emptyList()
+    val patterns: List<PatternSpec> = emptyList(),
+    val gradientAnchor: FillAnchor = FillAnchor.ELEMENT,
+    val patternAnchor: FillAnchor = FillAnchor.SCREEN
 ) {
     /** The patterns that are switched on and actually draw something, in drawing order. */
     val activePatterns: List<PatternSpec> get() = patterns.filter { it.isActive }
@@ -319,6 +323,8 @@ fun FillStyle.toJson(): JSONObject = JSONObject().apply {
     put("base", base.name)
     put("gradient", gradient.toJson())
     put("patterns", patterns.toJsonArray())
+    put("gradientAnchor", gradientAnchor.name)
+    put("patternAnchor", patternAnchor.name)
 }
 
 fun fillStyleFromJson(o: JSONObject?): FillStyle {
@@ -326,6 +332,8 @@ fun fillStyleFromJson(o: JSONObject?): FillStyle {
     return FillStyle(
         base = enumOrDefault(o.optString("base"), FillBase.SOLID),
         gradient = gradientFromJson(o.optJSONObject("gradient")),
-        patterns = patternsFromJson(o, "patterns", "pattern")
+        patterns = patternsFromJson(o, "patterns", "pattern"),
+        gradientAnchor = enumOrDefault(o.optString("gradientAnchor"), FillAnchor.ELEMENT),
+        patternAnchor = enumOrDefault(o.optString("patternAnchor"), FillAnchor.SCREEN)
     )
 }

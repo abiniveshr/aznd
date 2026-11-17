@@ -33,6 +33,7 @@ import com.ashrdev.aznd.ui.common.rememberReorderState
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.workout.exercise.ExercisePickerDialog
 import kotlinx.coroutines.launch
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * Workout builder UI for editing and creating workout templates.
@@ -79,7 +80,7 @@ fun WorkoutBuilderScreen(
     }
 
     ScreenScaffold(
-        title = if (workoutId == null) "New Workout" else "Edit Workout",
+        title = if (workoutId == null) "New workout" else "Edit workout",
         onBack = onDone,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
@@ -159,8 +160,8 @@ fun BuilderEditorList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottom),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottom),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "name") {
             OutlinedTextField(

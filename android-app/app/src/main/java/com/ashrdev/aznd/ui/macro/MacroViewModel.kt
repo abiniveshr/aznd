@@ -16,17 +16,23 @@ import com.ashrdev.aznd.domain.workout.E1rmCalculator
 import com.ashrdev.aznd.domain.macro.MacroStats
 import com.ashrdev.aznd.domain.body.MeasurementSite
 import com.ashrdev.aznd.domain.workout.SessionStatsCalculator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Food log + the calories your finished workouts burnt (estimated from the workout module), so the
- * macro screen can show net calories. The burnt numbers are read once when the screen opens.
+ * macro screen can show net calories. The burnt numbers are read when the screen opens and again whenever
+ * a workout session starts, finishes or is discarded.
  */
 class MacroViewModel(
     private val dao: FoodDao,
@@ -59,12 +65,14 @@ class MacroViewModel(
 
     init {
         viewModelScope.launch {
-            val sessions = SessionStatsCalculator.all(
-                repository.loggedSetData(),
-                repository.statsExercises(),
-                E1rmCalculator(rpeTracking = trackRpe)
-            )
-            _burnt.value = MacroStats.burntByDay(sessions)
+            // The unfinished session changes when one starts, finishes or is discarded.
+            repository.observeActiveSession().map { it?.id }.distinctUntilChanged().collectLatest {
+                val sets = repository.loggedSetData()
+                val exercises = repository.statsExercises()
+                _burnt.value = withContext(Dispatchers.Default) {
+                    MacroStats.burntByDay(SessionStatsCalculator.all(sets, exercises, E1rmCalculator(rpeTracking = trackRpe)))
+                }
+            }
         }
     }
 

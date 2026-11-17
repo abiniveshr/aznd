@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.navigation.Destination
+import com.ashrdev.aznd.ui.theme.Space
 
 private data class ModuleEntry(
     val title: String,
@@ -52,9 +53,9 @@ fun AppsPage(
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        horizontalArrangement = Arrangement.spacedBy(Space.md),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         items(modules) { module ->
             ModuleCard(module = module, onClick = { onNavigate(module.route) })
@@ -73,7 +74,7 @@ private fun ModuleCard(module: ModuleEntry, onClick: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Icon(

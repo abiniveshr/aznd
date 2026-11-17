@@ -9,10 +9,12 @@ import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.domain.workout.E1rmCalculator
 import com.ashrdev.aznd.domain.workout.SessionStat
 import com.ashrdev.aznd.domain.workout.SessionStatsCalculator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Per-session numbers of one workout, for the graph on the workout stats screen. */
 class WorkoutGraphViewModel(
@@ -27,12 +29,11 @@ class WorkoutGraphViewModel(
 
     init {
         viewModelScope.launch {
-            _sessions.value = SessionStatsCalculator.forWorkout(
-                workoutId,
-                repository.loggedSetData(),
-                repository.statsExercises(),
-                E1rmCalculator(rpeTracking = trackRpe)
-            )
+            val sets = repository.loggedSetData()
+            val exercises = repository.statsExercises()
+            _sessions.value = withContext(Dispatchers.Default) {
+                SessionStatsCalculator.forWorkout(workoutId, sets, exercises, E1rmCalculator(rpeTracking = trackRpe))
+            }
         }
     }
 

@@ -38,6 +38,7 @@ import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val HISTORY_MEASURE = 0
 private const val HISTORY_STRENGTH = 1
@@ -87,7 +88,7 @@ fun BodyHistoryScreen(
         onOpenSettings = onOpenSettings,
         subPages = subPages
     ) { padding ->
-        val bottom = padding.calculateBottomPadding() + 16.dp
+        val bottom = padding.calculateBottomPadding() + Space.lg
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 HISTORY_MEASURE -> HistoryPlaceholderPage("Measurements history is coming soon.")
@@ -107,7 +108,7 @@ fun BodyHistoryScreen(
 
 @Composable
 private fun HistoryPlaceholderPage(text: String) {
-    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxSize().padding(Space.xxl), contentAlignment = Alignment.Center) {
         Text(
             text,
             style = MaterialTheme.typography.bodyLarge,
@@ -126,8 +127,8 @@ private fun CompositionHistoryPage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "weight") {
             MetricCard(
@@ -152,11 +153,11 @@ private fun CompositionHistoryPage(
 private fun MetricCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(Space.lg))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(

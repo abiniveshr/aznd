@@ -60,6 +60,7 @@ import com.ashrdev.aznd.ui.components.Card
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 private val ManageBarPages = ManagePage.entries.map { BarPage(it.title, it.icon) }
 
@@ -180,7 +181,7 @@ fun ManageDataScreen(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete this data?") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
                     Text("Period: $period", style = MaterialTheme.typography.labelLarge)
                     lines.forEach { Text("• $it") }
                     notes.forEach {
@@ -221,7 +222,7 @@ fun ManageDataScreen(
             onDismissRequest = viewModel::dismissReport,
             title = { Text(r.title) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { r.lines.forEach { Text(it) } }
+                Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) { r.lines.forEach { Text(it) } }
             },
             confirmButton = { TextButton(onClick = viewModel::dismissReport) { Text("OK") } }
         )
@@ -259,7 +260,7 @@ fun ManageDataScreen(
             }
         }
     ) { padding ->
-        val bottom = padding.calculateBottomPadding() + 16.dp
+        val bottom = padding.calculateBottomPadding() + Space.lg
         Column(modifier = Modifier.fillMaxSize()) {
             if (viewModel.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { index ->
@@ -359,8 +360,8 @@ private fun ModuleList(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.sm, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.sm)
     ) {
         if (header != null) item(key = "header") { header() }
         if (rows.isEmpty()) {
@@ -376,7 +377,7 @@ private fun ModuleList(
                     else -> ToggleableState.Indeterminate
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = Space.sm),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -405,7 +406,7 @@ private fun ModuleList(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable(enabled = row.enabled, onClick = toggle)
-                            .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                            .padding(start = Space.xs, end = Space.lg, top = Space.sm, bottom = Space.sm),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(checked = checked, enabled = row.enabled, onCheckedChange = { toggle() })
@@ -431,7 +432,7 @@ private fun ModuleList(
                             row.trailing,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 8.dp)
+                            modifier = Modifier.padding(start = Space.sm)
                         )
                     }
                 }
@@ -445,11 +446,11 @@ private fun ImportStart(error: String?, bottomPadding: Dp) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(start = Space.lg, end = Space.lg, top = Space.sm, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier = Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
                 Text("Import from a file", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Choose an aznd export file. You then pick exactly which kinds of data to bring in. " +
@@ -473,9 +474,9 @@ private fun ImportHeader(
     onClear: () -> Unit
 ) {
     val format = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text("Export file", style = MaterialTheme.typography.titleMedium)
                 if (pkg.exportedAt > 0) Text("Made ${format.format(Date(pkg.exportedAt))}", style = MaterialTheme.typography.bodyMedium)
                 if (pkg.range != DayRange.All) {
@@ -492,7 +493,7 @@ private fun ImportHeader(
             }
         }
         Card(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.padding(Space.lg), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Replace existing data", style = MaterialTheme.typography.titleMedium)
                     Text(

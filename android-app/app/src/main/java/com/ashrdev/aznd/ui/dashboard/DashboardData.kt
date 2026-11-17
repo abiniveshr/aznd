@@ -46,7 +46,9 @@ class DashboardData(
     val workouts: List<WorkoutWithExercises>,
     val today: TodayCalories,
     val modes: List<GraphMode>,
-    val nowMs: Long
+    val nowMs: Long,
+    /** False for the placeholder shown before the first real data is worked out. */
+    val loaded: Boolean = true
 ) {
     val ranked: List<StreakWithCount> = streaks.sortedWith(compareByDescending<StreakWithCount> { it.currentStreak }.thenBy { it.streak.name.lowercase() })
 
@@ -59,6 +61,14 @@ class DashboardData(
     fun modesFor(w: DashWidget): List<GraphMode> = w.variables.mapNotNull { id -> modes.firstOrNull { it.id == id } }
 
     fun workoutName(id: Long): String? = workouts.firstOrNull { it.workout.id == id }?.workout?.name
+
+    companion object {
+        fun loading(): DashboardData = DashboardData(
+            emptyList(), emptyList(), emptyList(), emptyList(),
+            TodayCalories(MacroTotals(), 0.0, null, MacroGoals(0, 0, 0)),
+            emptyList(), System.currentTimeMillis(), loaded = false
+        )
+    }
 }
 
 object DashboardSeries {
@@ -75,7 +85,8 @@ object DashboardSeries {
 
     fun today(food: List<FoodEntry>, burnt: Map<Long, Double>, weights: List<BodyWeightEntry>, measurements: List<BodyMeasurement>, goal: CalorieGoal, advancedOffset: Int, proteinG: Int, carbsG: Int, fatG: Int, nowMs: Long): TodayCalories {
         val day = MacroStats.dayStart(nowMs)
-        val totals = food.filter { MacroStats.dayStart(it.eatenAt) == day }
+        // A day is at most 25 h long: only entries near it need the calendar check.
+        val totals = food.filter { it.eatenAt >= day && it.eatenAt < day + 26 * 3_600_000L && MacroStats.dayStart(it.eatenAt) == day }
             .fold(MacroTotals()) { acc, e -> acc + MacroTotals(e.calories, e.proteinG, e.carbsG, e.fatG) }
         val weight = weights.firstOrNull()?.weightKg ?: PLACEHOLDER_BODYWEIGHT_KG
         val bodyFat = measurements.firstOrNull { it.site == MeasurementSite.BODY_FAT.name }?.valueCm

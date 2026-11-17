@@ -34,6 +34,8 @@ import com.ashrdev.aznd.domain.streaks.ProgressUnit
 import com.ashrdev.aznd.domain.streaks.StreakStats
 import com.ashrdev.aznd.domain.streaks.displayDate
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.StatTile
+import com.ashrdev.aznd.ui.theme.Space
 
 private fun days(n: Int) = "$n day${if (n == 1) "" else "s"}"
 
@@ -61,8 +63,8 @@ fun StreakDetailsPage(
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (roomy) Modifier else Modifier.verticalScroll(scroll))
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             StreakBannerCard(bannerUri = streak.bannerUri, onPick = onPickBanner)
             StreakIdentityCard(
@@ -81,7 +83,7 @@ fun StreakDetailsPage(
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Space.md)
                 ) {
                     StatTile(
                         label = "Times broken",
@@ -107,20 +109,6 @@ fun StreakDetailsPage(
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(value, style = MaterialTheme.typography.titleLarge)
-        }
-    }
-}
-
-@Composable
 private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, unit: ProgressUnit, modifier: Modifier = Modifier) {
     val next = stats.nextMilestone
     val date = stats.nextMilestoneDate
@@ -128,8 +116,8 @@ private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, unit: Prog
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
+                .padding(Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Space.sm, Alignment.CenterVertically)
         ) {
             Text(
                 "Upcoming milestone",
@@ -144,7 +132,7 @@ private fun MilestoneCard(stats: StreakStats, hasMilestones: Boolean, unit: Prog
                     next = next,
                     current = stats.current,
                     unit = unit,
-                    modifier = Modifier.padding(top = 20.dp)
+                    modifier = Modifier.padding(top = Space.xl)
                 )
             } else {
                 Text(

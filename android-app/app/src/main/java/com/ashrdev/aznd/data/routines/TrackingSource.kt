@@ -22,9 +22,11 @@ import com.ashrdev.aznd.domain.streaks.todayKey
 import com.ashrdev.aznd.domain.streaks.addDaysKey
 import com.ashrdev.aznd.domain.streaks.computeCurrentStreak
 import com.ashrdev.aznd.domain.streaks.computeStreakStats
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 
 class ActivityDays(
     val workoutsById: Map<Long, Set<String>>,
@@ -176,7 +178,7 @@ class TrackingSource(
         activity
     ) { streaks, routines, breaks, checkIns, days ->
         TrackingSnapshot(streaks, routines, group(breaks), groupCheckIns(checkIns), days, today(), latestCheckIn(checkIns))
-    }
+    }.flowOn(Dispatchers.Default)
 
     suspend fun once(): TrackingSnapshot {
         val days = ActivityDays.of(

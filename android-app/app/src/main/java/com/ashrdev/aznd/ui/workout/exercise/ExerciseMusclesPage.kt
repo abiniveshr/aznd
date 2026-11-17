@@ -20,6 +20,7 @@ import com.ashrdev.aznd.domain.workout.Muscle
 import com.ashrdev.aznd.domain.workout.displayName
 import com.ashrdev.aznd.ui.common.BodyModelPlaceholder
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The viewer's Exercise page: which muscles an exercise trains. The 3D model (placeholder for
@@ -70,7 +71,7 @@ private fun MuscleRow(muscle: Muscle, primary: Boolean) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(muscle.displayName(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

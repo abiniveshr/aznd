@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.ui.workout.exercise
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -37,6 +38,7 @@ import com.ashrdev.aznd.data.workout.TutorialStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val FRAME_MS = 900L
 
@@ -48,11 +50,10 @@ fun ExerciseTutorialPage(exercise: Exercise, bottomPadding: Dp) {
     val load by produceState<TutorialLoad?>(null, exercise.id) {
         value = withContext(Dispatchers.IO) {
             val tutorial = TutorialStore.forExercise(context, exercise.seedKey)
-            val frames = tutorial?.frames.orEmpty().mapNotNull { path ->
-                runCatching {
-                    context.assets.open(path).use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
-                }.getOrNull()
-            }
+            // Frames are shown full width inside the list padding, so decode no wider than that.
+            val metrics = context.resources.displayMetrics
+            val targetPx = (metrics.widthPixels - (32 * metrics.density).toInt()).coerceAtLeast(1)
+            val frames = tutorial?.frames.orEmpty().mapNotNull { path -> decodeFrame(context, path, targetPx) }
             TutorialLoad(tutorial, frames)
         }
     }
@@ -60,7 +61,7 @@ fun ExerciseTutorialPage(exercise: Exercise, bottomPadding: Dp) {
     val loaded = load ?: return
     val tutorial = loaded.tutorial
     if (tutorial == null) {
-        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().padding(Space.xl), contentAlignment = Alignment.Center) {
             Text(
                 "No tutorial for this exercise yet.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -73,9 +74,9 @@ fun ExerciseTutorialPage(exercise: Exercise, bottomPadding: Dp) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding + 16.dp
+            start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding + Space.lg
         ),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         if (loaded.frames.isNotEmpty()) {
             item(key = "frames") { FrameLoop(loaded.frames) }
@@ -83,7 +84,7 @@ fun ExerciseTutorialPage(exercise: Exercise, bottomPadding: Dp) {
         if (tutorial.steps.isNotEmpty()) {
             item(key = "steps-title") { Text("Steps", style = MaterialTheme.typography.titleMedium) }
             itemsIndexed(tutorial.steps) { index, step ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     Text(
                         "${index + 1}.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -104,6 +105,17 @@ fun ExerciseTutorialPage(exercise: Exercise, bottomPadding: Dp) {
         }
     }
 }
+
+/** Down-sampled so a big frame never costs more memory than its width on screen needs. */
+private fun decodeFrame(context: Context, path: String, targetPx: Int): ImageBitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.assets.open(path).use { BitmapFactory.decodeStream(it, null, bounds) }
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= targetPx) sample *= 2
+    context.assets.open(path).use {
+        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+    }?.asImageBitmap()
+}.getOrNull()
 
 @Composable
 private fun FrameLoop(frames: List<ImageBitmap>) {

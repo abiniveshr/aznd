@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -50,6 +51,7 @@ import com.ashrdev.aznd.ui.common.share.flexGlide
 import com.ashrdev.aznd.ui.common.share.outlineArea
 import com.ashrdev.aznd.ui.common.tiling.DropSpot
 import com.ashrdev.aznd.ui.common.tiling.TileNode
+import com.ashrdev.aznd.ui.common.tiling.TileTree
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,6 +73,7 @@ fun rememberDashArrangement(
     viewport: Float
 ): DashArrangement {
     val look = LocalDashLook.current
+    val context = LocalContext.current.applicationContext
     val measure = rememberDashMeasure()
     val scale = look.moduleScale
     val gap = look.gap
@@ -86,17 +89,40 @@ fun rememberDashArrangement(
     val tail = "@$width@$viewport@${look.sizing}"
     val keyOf: (TileNode?) -> String = { tree -> if (tree == null) "auto|$signature$tail" else "$tree|$byIdSignature$tail" }
     val cacheKey = keyOf(layout)
-    val produced by produceState(DashboardLayout.cached(cacheKey), cacheKey) {
-        value = withContext(Dispatchers.Default) { DashboardLayout.arrangeCached(cacheKey, tiles, width, viewport, gap, layout) }
+    // What decides the page's arrangement apart from the texts: kept across app starts (see DashboardArrangeMemory).
+    val persistKey = remember(widgets) {
+        widgets.joinToString("~") { w ->
+            "${w.id}|${w.type.id}|${w.size.id}|${w.rank}|${w.streakId}|${w.variables.joinToString(",")}|${w.shortcut.id}|${w.workoutId}|${w.calorieView.id}|${w.model.id}"
+        }
+    } + tail
+    // Nothing is searched before the first real data is in: the texts would only be placeholders.
+    val produced by produceState(DashboardLayout.cached(cacheKey), cacheKey, data.loaded) {
+        if (!data.loaded) return@produceState
+        value = withContext(Dispatchers.Default) {
+            val found = DashboardLayout.arrangeCached(cacheKey, tiles, width, viewport, gap, layout)
+            if (layout == null) found.tree?.let { DashboardArrangeMemory.put(context, persistKey, it) }
+            found
+        }
     }
     // Read the cache right away as well: after a drop its preview is already worked out, so the
     // tiles land without a frame back in their old places.
     val arranged = DashboardLayout.cached(cacheKey) ?: produced
+    // On a cold start the tiling solved last time is placed (the cheap path) until the search is done.
+    val remembered = if (arranged == null && layout == null) {
+        remember(persistKey, tiles) {
+            DashboardArrangeMemory.get(context, persistKey)
+                ?.takeIf { tree -> TileTree.leaves(tree).let { it.size == widgets.size && it.toSet() == widgets.map { w -> w.id }.toSet() } }
+                ?.let { tree -> runCatching { DashboardLayout.arrangeTree(tree, tiles, width, viewport, gap) }.getOrNull() }
+                ?.takeIf { it.cells.isNotEmpty() }
+        }
+    } else {
+        null
+    }
     val preview: suspend (TileNode) -> DashArranged = { tree ->
         val key = keyOf(tree)
         withContext(Dispatchers.Default) { DashboardLayout.arrangeCached(key, tiles, width, viewport, gap, tree) }
     }
-    return DashArrangement(arranged, preview)
+    return DashArrangement(arranged ?: remembered, preview)
 }
 
 /** The layout a drop would leave, worked out for [spot] on top of [base]. [fits]: nothing more is cut off. */
@@ -151,7 +177,10 @@ fun DashGrid(
     editing: Boolean = false,
     drag: DashDrag? = null,
     presetId: Int = -1,
-    onGridPlaced: ((LayoutCoordinates) -> Unit)? = null
+    onGridPlaced: ((LayoutCoordinates) -> Unit)? = null,
+    /** Makes the tiles click targets (Home): a tap opens the widget, a long press edits the page. */
+    onOpen: ((DashWidget) -> Unit)? = null,
+    onHold: (() -> Unit)? = null
 ) {
     val look = LocalDashLook.current
     val byId = widgets.associateBy { it.id }
@@ -198,7 +227,9 @@ fun DashGrid(
                         data = data,
                         // The held tile's place: empty, or a faint copy where the previewed drop lands it.
                         opacity = if (cell.id == holding) (if (showing != null) FLEX_LANDING_ALPHA else 0f) else 1f,
-                        letGo = drag?.letGo?.takeIf { it.presetId == presetId && it.id == cell.id }
+                        letGo = drag?.letGo?.takeIf { it.presetId == presetId && it.id == cell.id },
+                        onOpen = onOpen,
+                        onHold = onHold
                     )
                 }
             }
@@ -257,7 +288,9 @@ private fun PlacedTile(
     cell: DashCell,
     data: DashboardData,
     opacity: Float,
-    letGo: DashLetGo?
+    letGo: DashLetGo?,
+    onOpen: ((DashWidget) -> Unit)?,
+    onHold: (() -> Unit)?
 ) {
     val x = remember { Animatable(cell.x) }
     val y = remember { Animatable(cell.y) }
@@ -291,13 +324,15 @@ private fun PlacedTile(
         launch { w.animateTo(cell.w, flexGlide(FLEX_GLIDE_PIXEL)) }
         launch { h.animateTo(cell.h, flexGlide(FLEX_GLIDE_PIXEL)) }
     }
+    val open = remember(widget, onOpen) { { onOpen?.invoke(widget); Unit } }
+    val hold = remember(onHold) { { onHold?.invoke(); Unit } }
     DashTile(
         widget = widget,
         cell = cell,
         data = data,
-        onOpen = {},
-        onHold = {},
-        interactive = false,
+        onOpen = open,
+        onHold = hold,
+        interactive = onOpen != null,
         modifier = Modifier
             .offset { IntOffset(x.value.dp.roundToPx(), y.value.dp.roundToPx()) }
             .layout { m, c ->

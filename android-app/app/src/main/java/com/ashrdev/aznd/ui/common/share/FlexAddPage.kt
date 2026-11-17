@@ -49,6 +49,7 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The Add screen: every kind of card the poster can get (those the content has something for), under the category
@@ -95,8 +96,8 @@ internal fun FlexAddPage(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.sm, bottom = padding.calculateBottomPadding() + Space.md),
+            verticalArrangement = Arrangement.spacedBy(Space.sm)
         ) {
             groups.forEach { (cat, types) ->
                 item(key = "cat:" + cat.name) {
@@ -105,18 +106,18 @@ internal fun FlexAddPage(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                        modifier = Modifier.padding(top = Space.sm, start = Space.xs)
                     )
                 }
                 types.forEach { type ->
                     item(key = type.name) {
                         Card(modifier = Modifier.fillMaxWidth().clickable { picked = type }) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(addIconOf(type), contentDescription = null, modifier = Modifier.size(28.dp))
-                                Spacer(modifier = Modifier.width(14.dp))
+                                Spacer(modifier = Modifier.width(Space.lg))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(type.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
@@ -216,14 +217,14 @@ private fun AddCardDialog(
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)
+                modifier = Modifier.padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = Space.sm)
             )
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp)
+                    .padding(horizontal = Space.md)
             ) {
                 FlexCardConfig(
                     blockId = shown,
@@ -241,8 +242,8 @@ private fun AddCardDialog(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(Space.md),
+                horizontalArrangement = Arrangement.spacedBy(Space.md)
             ) {
                 OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
                 Button(onClick = { onAdd(draft, shown) }, modifier = Modifier.weight(1f)) { Text("Add") }

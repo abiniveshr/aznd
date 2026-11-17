@@ -54,6 +54,7 @@ import com.ashrdev.aznd.ui.common.rememberDateRangeState
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import java.util.Calendar
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 // The Manage data filter (top-bar icon). It adds no date logic of its own: every date it produces
 // is a universal DayRange from a universal DateRangeState (ui.common), except the "Custom amount"
@@ -260,7 +261,7 @@ fun ManageFilterDialog(
                     .fillMaxWidth()
                     .height(bodyHeight)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(Space.lg)
             ) {
                 FilterSection(
                     title = "Data categories",
@@ -304,7 +305,7 @@ private fun FilterSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(role = Role.Button, onClick = onToggle)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = Space.lg, vertical = Space.md),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -325,7 +326,7 @@ private fun FilterSection(
                 )
             }
             if (expanded) {
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) { content() }
+                Column(modifier = Modifier.padding(start = Space.lg, end = Space.lg, bottom = Space.lg)) { content() }
             }
         }
     }
@@ -351,12 +352,12 @@ private fun CategorySection(state: ManageFilterState, apps: List<DataApp>) {
 
 @Composable
 private fun DateSection(state: ManageFilterState, page: ManagePage) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         if (state.useRange) {
             CustomRangeRow(state.rangeDates, buttonModifier = Modifier.height(ControlHeight), stacked = true)
         } else {
             // Custom splits the line in half: the option on the left, its unit on the right.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 DropdownField(
                     label = "",
                     valueText = state.sinceChoice.label,
@@ -432,7 +433,7 @@ private fun CheckRow(
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(Space.md))
         Column {
             Text(label, style = MaterialTheme.typography.bodyLarge)
             if (supporting != null) Hint(supporting)

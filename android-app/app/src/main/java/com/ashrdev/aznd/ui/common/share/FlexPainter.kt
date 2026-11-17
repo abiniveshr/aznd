@@ -11,6 +11,7 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -49,7 +50,10 @@ import com.ashrdev.aznd.ui.common.tiling.TileZoom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.stream.Collectors
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -912,6 +916,14 @@ object FlexPainter {
 
     private const val NEED_REACH = 4f
 
+    /** Best fit's workers: one core is left to the screen. Null on a phone with two cores or fewer, where it runs in turn. */
+    private val fitPool by lazy {
+        val n = Runtime.getRuntime().availableProcessors() - 1
+        if (n < 2) null else Executors.newFixedThreadPool(n, ThreadFactory { r ->
+            Thread(r, "flex-fit").apply { isDaemon = true }
+        })
+    }
+
     private const val MEASURE_CACHE = 200_000
 
     /** A block as the auto aligner sees it: its class, its least and its hugging width, and how its height goes with its width. */
@@ -1233,16 +1245,28 @@ object FlexPainter {
             val jobs = ArrayList<Pair<List<FlexBlock>, Float>>()
             for (order in if (explore) orders(live) else listOf(live)) for (h in heights) jobs += order to h
             class Hit(val tree: TileNode, val price: Double, val reading: Boolean)
-            val found = jobs.parallelStream()
-                .map { (order, h) ->
-                    val list = order.map { items.getValue(it.id) }
-                    val swaps = inversions(order.map { it.id }, ids)
-                    val tall = if (free) 1.4 * h / stacked else 0.0
-                    TileAligner(list, AlignSpace(availW, h, gap), FlexTileRules, effort).solve()
-                        .map { Hit(it.tree, it.cost + ORDER_SWAP * swaps + tall, swaps == 0) }
+            fun solveJob(job: Pair<List<FlexBlock>, Float>): List<Hit> {
+                val (order, h) = job
+                val list = order.map { items.getValue(it.id) }
+                val swaps = inversions(order.map { it.id }, ids)
+                val tall = if (free) 1.4 * h / stacked else 0.0
+                return TileAligner(list, AlignSpace(availW, h, gap), FlexTileRules, effort).solve()
+                    .map { Hit(it.tree, it.cost + ORDER_SWAP * swaps + tall, swaps == 0) }
+            }
+            // The items are made here, so the workers only read them.
+            for (job in jobs) for (b in job.first) items.getValue(b.id)
+            val pool = fitPool
+            val found: List<Hit> = if (pool == null || jobs.size < 2) {
+                jobs.flatMap { solveJob(it) }
+            } else {
+                val futures = jobs.map { job -> pool.submit(Callable { solveJob(job) }) }
+                try {
+                    futures.flatMap { it.get() }
+                } catch (e: ExecutionException) {
+                    futures.forEach { it.cancel(true) }
+                    throw e.cause ?: e
                 }
-                .collect(Collectors.toList())
-                .flatten()
+            }
             val keep = (found.filter { it.reading } + found.sortedBy { it.price }.take(TOP_ORDERS)).distinctBy { it.tree }
             val out = ArrayList<TileNode>()
             for (hit in keep) {
@@ -1497,19 +1521,20 @@ object FlexPainter {
         val rounded = st.cardRadius > 0
         val layer = if (rounded) canvas.saveLayer(0f, 0f, w, h, null) else -1
 
-        val ctx = Ctx(canvas, st, assets)
+        val ctx = Ctx(canvas, st, assets).also { it.fieldW = w; it.fieldH = h }
         drawBackground(ctx, w, h)
         drawContent(ctx, spec, content, plan, poses, w, h)
         drawBorder(ctx, w, h, plan)
 
         if (rounded) {
             val r = st.cardRadius.toFloat()
-            val outside = Path().apply {
-                addRoundRect(RectF(0f, 0f, w, h), r, r, Path.Direction.CW)
-                fillType = Path.FillType.INVERSE_EVEN_ODD
-            }
-            val clear = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) }
-            canvas.drawPath(outside, clear)
+            val kit = ctx.kit
+            val outside = kit.outside
+            outside.rewind()
+            kit.rect.set(0f, 0f, w, h)
+            outside.addRoundRect(kit.rect, r, r, Path.Direction.CW)
+            outside.fillType = Path.FillType.INVERSE_EVEN_ODD
+            canvas.drawPath(outside, kit.clear)
             canvas.restoreToCount(layer)
         }
         canvas.restoreToCount(outer)
@@ -1524,7 +1549,54 @@ object FlexPainter {
         val height: Int get() = layout.height
     }
 
+    /** What a text paint is made of: the same key gives the same paint. */
+    private data class InkKey(
+        val size: Float,
+        val bold: Boolean,
+        val color: Int,
+        val alpha: Float,
+        val letter: Float,
+        val face: Typeface,
+        val textScale: Float
+    )
+
+    /** A wrapped text: what decides it. The paint is one of the shared ones, compared by identity, and is never changed. */
+    private data class LayoutKey(
+        val text: String,
+        val paint: TextPaint,
+        val width: Float,
+        val centered: Boolean,
+        val rightAligned: Boolean
+    )
+
+    private class Laid(val lines: Lines, val widest: Float)
+
+    /**
+     * Drawing resources kept between draws and plans. One set per thread (the editor, thumbnails and the export draw
+     * at the same time), so nothing in it needs a lock.
+     */
+    private class Kit {
+        val inks = HashMap<InkKey, TextPaint>()
+        val layouts = HashMap<LayoutKey, Laid>()
+        val scratch = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        val outside = Path()
+        val clear = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) }
+        val rect = RectF()
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG)
+        val rule = Paint(Paint.ANTI_ALIAS_FLAG)
+        val rulePath = Path()
+    }
+
+    private const val KIT_PAINTS = 400
+    private const val KIT_LAYOUTS = 600
+
+    private val kits = object : ThreadLocal<Kit>() {
+        override fun initialValue(): Kit = Kit()
+    }
+
     private class Ctx(val canvas: Canvas, val st: FlexStyle, val assets: FlexAssets) {
+        val kit: Kit = kits.get()!!
+
         /** While true, blocks only measure. */
         var dry = false
 
@@ -1552,11 +1624,15 @@ object FlexPainter {
          */
         var fieldX: Float = 0f
         var fieldY: Float = 0f
+        var fieldW: Float = 0f
+        var fieldH: Float = 0f
 
         /** Call after translating the canvas by ([dx], [dy]) and then scaling it by [k]: the card's corner moves the other way. */
         fun enter(dx: Float, dy: Float, k: Float) {
             fieldX = (fieldX - dx) / k
             fieldY = (fieldY - dy) / k
+            fieldW /= k
+            fieldH /= k
         }
         val center: Boolean get() = align == FlexAlign.CENTER
         val right: Boolean get() = align == FlexAlign.END
@@ -1586,20 +1662,34 @@ object FlexPainter {
         val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
         private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        private val paints = HashMap<String, TextPaint>()
 
-        /** A cached text paint. [size] is in card pixels before the card's text scale is applied. */
+        /**
+         * A cached text paint, shared by every draw on this thread: never change it (use [aligned] for another text align).
+         * [size] is in card pixels before the card's text scale is applied.
+         */
         fun ink(size: Float, bold: Boolean, color: Int, alpha: Float = 1f, letter: Float = 0f): TextPaint {
-            val key = "$size|$bold|$color|$alpha|$letter"
-            return paints.getOrPut(key) {
-                TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                    textSize = size * st.textScale
-                    typeface = st.font.face(bold)
-                    this.color = color
-                    this.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
-                    letterSpacing = letter
-                }
+            // The face is in the key, so a font that failed to load once is picked up when it can.
+            val face = FlexFonts.face(st.font, bold)
+            val key = InkKey(size, bold, color, alpha, letter, face, st.textScale)
+            kit.inks[key]?.let { return it }
+            if (kit.inks.size >= KIT_PAINTS) kit.inks.clear()
+            val made = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = size * st.textScale
+                typeface = face
+                this.color = color
+                this.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
+                letterSpacing = letter
             }
+            kit.inks[key] = made
+            return made
+        }
+
+        /** [p] with its text align set, on a scratch paint that is only good until the next call. */
+        fun aligned(p: TextPaint, align: Paint.Align): TextPaint {
+            val q = kit.scratch
+            q.set(p)
+            q.textAlign = align
+            return q
         }
 
         fun kicker(): TextPaint = ink(28f, true, st.accent, 1f, 0.12f)
@@ -1613,6 +1703,11 @@ object FlexPainter {
          * and a dry run notes how much wider the box must be.
          */
         fun layout(s: CharSequence, p: TextPaint, width: Float, centered: Boolean, rightAligned: Boolean = right): Lines {
+            val key = LayoutKey(s.toString(), p, width, centered, rightAligned)
+            kit.layouts[key]?.let { hit ->
+                if (dry && hit.widest > width) overflow = max(overflow, hit.widest - width)
+                return hit.lines
+            }
             var widest = 0f
             for (word in s.split(' ', '\n', '\t')) if (word.isNotEmpty()) widest = max(widest, p.measureText(word))
             if (dry && widest > width) overflow = max(overflow, widest - width)
@@ -1636,7 +1731,10 @@ object FlexPainter {
                 rightAligned -> -extra
                 else -> 0f
             }
-            return Lines(l, shift)
+            val lines = Lines(l, shift)
+            if (kit.layouts.size >= KIT_LAYOUTS) kit.layouts.clear()
+            kit.layouts[key] = Laid(lines, widest)
+            return lines
         }
 
         fun drawLayout(l: Lines, x: Float, y: Float) {
@@ -1663,9 +1761,7 @@ object FlexPainter {
         /** One line of text whose top edge is at [top]; [x] is its left, centre or right per [align]. */
         fun line(s: String, p: TextPaint, x: Float, top: Float, align: Paint.Align): Float {
             if (!dry) {
-                p.textAlign = align
-                canvas.drawText(s, x, top - p.ascent(), p)
-                p.textAlign = Paint.Align.LEFT
+                canvas.drawText(s, x, top - p.ascent(), aligned(p, align))
             }
             return lineH(p)
         }
@@ -1693,7 +1789,8 @@ object FlexPainter {
             if (dry) return
             fill.color = st.textColor
             fill.alpha = 28
-            canvas.drawRoundRect(RectF(0f, 0f, w, h), radius, radius, fill)
+            kit.rect.set(0f, 0f, w, h)
+            canvas.drawRoundRect(kit.rect, radius, radius, fill)
         }
 
         fun panelRect(x: Float, y: Float, w: Float, h: Float) {
@@ -1707,7 +1804,7 @@ object FlexPainter {
                         fill.alpha = (st.panelAlpha * 255f).roundToInt().coerceIn(0, 255)
                         canvas.drawRoundRect(r, rad, rad, fill)
                     } else {
-                        FillRender.drawRoundRect(canvas, st.panelFill, st.panelColor, r, rad, PATTERN_DENSITY, st.panelAlpha, fieldX, fieldY)
+                        FillRender.drawRoundRect(canvas, st.panelFill, st.panelColor, r, rad, PATTERN_DENSITY, st.panelAlpha, fieldX, fieldY, fieldW, fieldH)
                     }
                 }
                 FlexPanel.OUTLINE -> if (st.panelBorderWidth <= 0 && st.panelBorderKind == BorderKind.OUTLINE) {
@@ -1800,7 +1897,9 @@ object FlexPainter {
 
     private fun drawBackground(c: Ctx, w: Float, h: Float) {
         val st = c.st
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val paint = c.kit.bg
+        paint.reset()
+        paint.isAntiAlias = true
         val photo = c.assets.background
         when {
             st.bgMode == FlexBgMode.PHOTO && photo != null -> {
@@ -1825,7 +1924,8 @@ object FlexPainter {
     private fun drawRule(c: Ctx, x: Float, y: Float, length: Float, thickness: Float, color: Int, vertical: Boolean) {
         if (length <= 0f || thickness <= 0f) return
         val pts = c.st.lineTaper.outline(x, y, length, thickness, vertical)
-        val path = Path()
+        val path = c.kit.rulePath
+        path.rewind()
         path.moveTo(pts[0], pts[1])
         var i = 2
         while (i < pts.size) {
@@ -1833,7 +1933,7 @@ object FlexPainter {
             i += 2
         }
         path.close()
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val paint = c.kit.rule
         paint.color = color
         c.canvas.drawPath(path, paint)
     }
@@ -1910,18 +2010,17 @@ object FlexPainter {
             val pad = st.padding.toFloat()
             val p = c.ink(26f, true, st.textColor, 0.5f, 0.1f)
             val baseline = h - max(st.paddingV * 0.55f, 40f)
-            p.textAlign = when (st.watermarkAlign) {
+            val wp = c.aligned(p, when (st.watermarkAlign) {
                 FlexAlign.START -> Paint.Align.LEFT
                 FlexAlign.CENTER -> Paint.Align.CENTER
                 FlexAlign.END -> Paint.Align.RIGHT
-            }
+            })
             val x = when (st.watermarkAlign) {
                 FlexAlign.START -> pad
                 FlexAlign.CENTER -> w / 2f
                 FlexAlign.END -> w - pad
             }
-            c.canvas.drawText(st.watermarkText, x, baseline, p)
-            p.textAlign = Paint.Align.LEFT
+            c.canvas.drawText(st.watermarkText, x, baseline, wp)
         }
     }
 
@@ -1936,6 +2035,8 @@ object FlexPainter {
         canvas.save()
         val fieldX = c.fieldX
         val fieldY = c.fieldY
+        val fieldW = c.fieldW
+        val fieldH = c.fieldH
         canvas.translate(left, top)
         c.enter(left, top, 1f)
         if (grow != 1f) {
@@ -1972,6 +2073,8 @@ object FlexPainter {
         canvas.restore()
         c.fieldX = fieldX
         c.fieldY = fieldY
+        c.fieldW = fieldW
+        c.fieldH = fieldH
     }
 
     /** A photo is its own tile: the image fills it. */
@@ -2192,10 +2295,14 @@ object FlexPainter {
         c.canvas.scale(k, k)
         val fieldX = c.fieldX
         val fieldY = c.fieldY
+        val fieldW = c.fieldW
+        val fieldH = c.fieldH
         c.enter(x, y, k)
         val h = blockContent(c, b, ct, 0f, 0f, w / k)
         c.fieldX = fieldX
         c.fieldY = fieldY
+        c.fieldW = fieldW
+        c.fieldH = fieldH
         c.canvas.restore()
         return h * k
     }

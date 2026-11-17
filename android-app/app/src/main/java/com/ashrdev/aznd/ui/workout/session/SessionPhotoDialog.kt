@@ -30,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -38,9 +37,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import com.ashrdev.aznd.ui.common.PhotoBackdrop
-import com.ashrdev.aznd.ui.common.PhotoStore
+import com.ashrdev.aznd.ui.common.rememberPhotoLoad
 import com.ashrdev.aznd.ui.common.saveImageToDevice
 import kotlinx.coroutines.launch
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The running workout's photo, shown when the Photo button in the bottom bar is tapped and a photo
@@ -56,7 +56,8 @@ fun SessionPhotoDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val bitmap = remember(uriString) { PhotoStore.loadBitmap(context, uriString.toUri(), maxDimension = 2000) }
+    val load = rememberPhotoLoad(uriString, maxDimension = 2000)
+    val bitmap = load.bitmap
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -74,26 +75,26 @@ fun SessionPhotoDialog(
             contentAlignment = Alignment.Center
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
+                modifier = Modifier.padding(horizontal = Space.xl, vertical = Space.xxl),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (bitmap != null) {
                     Image(
-                        bitmap = bitmap.asImageBitmap(),
+                        bitmap = bitmap,
                         contentDescription = "Workout photo",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .clip(RoundedCornerShape(16.dp))
                     )
-                } else {
+                } else if (!load.loading) {
                     Text("Couldn't load the photo.", color = Color.White)
                 }
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(modifier = Modifier.height(Space.xl))
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     FilledTonalButton(onClick = onReplace) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Replace")
                     }
                     FilledTonalButton(
@@ -104,20 +105,20 @@ fun SessionPhotoDialog(
                         )
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Remove")
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(modifier = Modifier.height(Space.md))
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     FilledTonalButton(onClick = { scope.launch { saveImageToDevice(context, uriString.toUri()) } }) {
                         Icon(Icons.Default.Download, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Save to gallery")
                     }
                     FilledTonalButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Close")
                     }
                 }

@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -49,7 +50,14 @@ data class AzndStyle(
     val topBar: Color,
     val onTopBar: Color,
     val bottomBar: Color,
+    /** The text colour chosen for the bottom bar's fill. */
+    val onBottomBar: Color,
     val background: Color,
+    /** The text colours chosen for the background, cards, buttons and highlight cards, each from its own fill. */
+    val onBackground: Color,
+    val onCard: Color,
+    val onButton: Color,
+    val onHighlight: Color,
     val text: Color,
     val button: Color,
     val highlight: Color,
@@ -87,22 +95,22 @@ private fun shapesFor(r: Int) = Shapes(
     extraLarge = RoundedCornerShape((r * 2.33f).dp)
 )
 
-/** [p] must already be [effective] (gradients worked down to one colour). */
-private fun buildColorScheme(p: Palette, dark: Boolean): ColorScheme {
+/** [p] must already be [effective] (gradients worked down to one colour); [on] is the text colour of each of its surfaces. */
+private fun buildColorScheme(p: Palette, dark: Boolean, on: SurfaceTexts): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     return base.copy(
         primary = p.button,
-        onPrimary = readableOn(p.button),
+        onPrimary = on.button,
         primaryContainer = p.highlight,
-        onPrimaryContainer = readableOn(p.highlight),
+        onPrimaryContainer = on.highlight,
         secondaryContainer = p.highlight,
-        onSecondaryContainer = readableOn(p.highlight),
+        onSecondaryContainer = on.highlight,
         background = p.background,
-        onBackground = p.text,
+        onBackground = on.background,
         surface = p.background,
-        onSurface = p.text,
+        onSurface = on.card,
         surfaceVariant = p.card,
-        onSurfaceVariant = p.text.copy(alpha = 0.75f),
+        onSurfaceVariant = on.card.copy(alpha = 0.75f),
         surfaceContainerLowest = p.background,
         surfaceContainerLow = p.card,
         surfaceContainer = p.card,
@@ -120,7 +128,8 @@ private fun buildColorScheme(p: Palette, dark: Boolean): ColorScheme {
 fun azndStyleOf(settings: ThemeSettings, dark: Boolean): AzndStyle {
     val palette = if (dark) settings.dark else settings.light
     val flat = palette.effective()
-    val scheme = buildColorScheme(flat, dark)
+    val on = surfaceTextsOf(palette)
+    val scheme = buildColorScheme(flat, dark, on)
     return AzndStyle(
         cardBorder = settings.cardBorder.dp,
         topBarBorder = settings.topBarBorder.dp,
@@ -141,9 +150,14 @@ fun azndStyleOf(settings: ThemeSettings, dark: Boolean): AzndStyle {
         outline = scheme.outline,
         card = flat.card,
         topBar = flat.topBar,
-        onTopBar = readableOn(flat.topBar),
+        onTopBar = on.topBar,
         bottomBar = flat.bottomBar,
+        onBottomBar = on.bottomBar,
         background = flat.background,
+        onBackground = on.background,
+        onCard = on.card,
+        onButton = on.button,
+        onHighlight = on.highlight,
         text = flat.text,
         button = flat.button,
         highlight = flat.highlight,
@@ -155,59 +169,79 @@ fun azndStyleOf(settings: ThemeSettings, dark: Boolean): AzndStyle {
 @Composable
 fun AzndTheme(content: @Composable () -> Unit) {
     val settings by ThemeStore.settings.collectAsState()
+    AzndTheme(settings, content)
+}
+
+/** The theme for [settings] (the committed ones for the app; the Appearance preview passes the draft). */
+@Composable
+fun AzndTheme(settings: ThemeSettings, content: @Composable () -> Unit) {
     val dark = when (settings.mode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
     val palette = if (dark) settings.dark else settings.light
-    val flat = palette.effective()
     val context = LocalContext.current
     val useDynamic = settings.useDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    val colorScheme = if (useDynamic) {
-        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        buildColorScheme(flat, dark)
+    val colorScheme = remember(palette, dark, useDynamic, context) {
+        if (useDynamic) {
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            buildColorScheme(palette.effective(), dark, surfaceTextsOf(palette))
+        }
     }
 
-    val topBar = if (useDynamic) colorScheme.surface else flat.topBar
-    val card = if (useDynamic) colorScheme.surfaceVariant else flat.card
-    val style = AzndStyle(
-        cardBorder = settings.cardBorder.dp,
-        topBarBorder = settings.topBarBorder.dp,
-        bottomBarBorder = settings.bottomBarBorder.dp,
-        fieldBorder = settings.fieldBorder.dp,
-        outlinedButtonBorder = settings.outlinedButtonBorder.dp,
-        filledButtonBorder = settings.filledButtonBorder.dp,
-        cardBorderLine = settings.cardBorderLine,
-        topBarBorderLine = settings.topBarBorderLine,
-        bottomBarBorderLine = settings.bottomBarBorderLine,
-        fieldBorderLine = settings.fieldBorderLine,
-        outlinedButtonBorderLine = settings.outlinedButtonBorderLine,
-        filledButtonBorderLine = settings.filledButtonBorderLine,
-        borderTaper = settings.borderTaper,
-        buttonCorner = settings.buttonCorner,
-        buttonShape = RoundedCornerShape(settings.buttonCorner.dp),
-        cardCorner = settings.cardCorner,
-        outline = colorScheme.outline,
-        card = card,
-        topBar = topBar,
-        onTopBar = readableOn(topBar),
-        bottomBar = if (useDynamic) card else flat.bottomBar,
-        background = colorScheme.background,
-        text = colorScheme.onBackground,
-        button = colorScheme.primary,
-        highlight = colorScheme.primaryContainer,
-        dark = dark,
-        // Wallpaper colours replace the palette entirely, so its fills are off too.
-        fills = if (useDynamic) emptyMap() else ThemeColor.entries.filter { it.fillable }.associateWith { palette.fillOf(it) }
-    )
+    val style = remember(settings, dark, useDynamic, colorScheme) {
+        val flat = palette.effective()
+        val topBar = if (useDynamic) colorScheme.surface else flat.topBar
+        val card = if (useDynamic) colorScheme.surfaceVariant else flat.card
+        // Wallpaper colours bring their own text colours; the palette's fills are not in play then.
+        val on = if (useDynamic) null else surfaceTextsOf(palette)
+        AzndStyle(
+            cardBorder = settings.cardBorder.dp,
+            topBarBorder = settings.topBarBorder.dp,
+            bottomBarBorder = settings.bottomBarBorder.dp,
+            fieldBorder = settings.fieldBorder.dp,
+            outlinedButtonBorder = settings.outlinedButtonBorder.dp,
+            filledButtonBorder = settings.filledButtonBorder.dp,
+            cardBorderLine = settings.cardBorderLine,
+            topBarBorderLine = settings.topBarBorderLine,
+            bottomBarBorderLine = settings.bottomBarBorderLine,
+            fieldBorderLine = settings.fieldBorderLine,
+            outlinedButtonBorderLine = settings.outlinedButtonBorderLine,
+            filledButtonBorderLine = settings.filledButtonBorderLine,
+            borderTaper = settings.borderTaper,
+            buttonCorner = settings.buttonCorner,
+            buttonShape = RoundedCornerShape(settings.buttonCorner.dp),
+            cardCorner = settings.cardCorner,
+            outline = colorScheme.outline,
+            card = card,
+            topBar = topBar,
+            onTopBar = on?.topBar ?: readableOn(topBar),
+            bottomBar = if (useDynamic) card else flat.bottomBar,
+            onBottomBar = on?.bottomBar ?: colorScheme.onSurface,
+            background = colorScheme.background,
+            onBackground = colorScheme.onBackground,
+            onCard = colorScheme.onSurface,
+            onButton = colorScheme.onPrimary,
+            onHighlight = colorScheme.onPrimaryContainer,
+            text = colorScheme.onBackground,
+            button = colorScheme.primary,
+            highlight = colorScheme.primaryContainer,
+            dark = dark,
+            // Wallpaper colours replace the palette entirely, so its fills are off too.
+            fills = if (useDynamic) emptyMap() else ThemeColor.entries.filter { it.fillable }.associateWith { palette.fillOf(it) }
+        )
+    }
+    val shapes = remember(settings.cardCorner) { shapesFor(settings.cardCorner) }
+    val fontFamily = remember(settings.appFont, context) { AppFonts.familyOf(settings.appFont, context) }
+    val typography = remember(fontFamily) { azndTypography(fontFamily) }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        shapes = shapesFor(settings.cardCorner),
-        typography = Typography
+        shapes = shapes,
+        typography = typography
     ) {
         CompositionLocalProvider(LocalAzndStyle provides style, content = content)
     }

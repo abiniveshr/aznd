@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.dashboard.DashBackground
 import com.ashrdev.aznd.ui.dashboard.DashGrid
+import com.ashrdev.aznd.ui.dashboard.DashWidget
 import com.ashrdev.aznd.ui.dashboard.DashMetrics
 import com.ashrdev.aznd.ui.dashboard.DashPageDots
 import com.ashrdev.aznd.ui.dashboard.DashPreset
@@ -34,6 +36,7 @@ import com.ashrdev.aznd.ui.dashboard.LocalDashLook
 import com.ashrdev.aznd.ui.dashboard.ProvideDashLook
 import com.ashrdev.aznd.ui.dashboard.rememberDashArrangement
 import com.ashrdev.aznd.ui.navigation.Destination
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * The dashboard: its active preset pages, one above the other — scroll up and down to move between
@@ -68,7 +71,7 @@ fun DashboardPage(
                     position = { pager.currentPage + pager.currentPageOffsetFraction },
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 4.dp, bottom = bottomPadding)
+                        .padding(end = Space.xs, bottom = bottomPadding)
                 )
             }
         }
@@ -94,18 +97,21 @@ private fun PresetPage(
         val dataNow by rememberUpdatedState(data)
         val presetNow by rememberUpdatedState(preset)
         val lookNow by rememberUpdatedState(look)
-        // Taps and holds are taken here, around the scrolling grid: the point is turned into grid
-        // coordinates by hand (side and top margins, and how far the page is scrolled).
+        val navigateNow by rememberUpdatedState(onNavigate)
+        val editNow by rememberUpdatedState(onEdit)
+        // Tiles take their own taps and holds. A hold on empty space is taken here, around the
+        // scrolling grid: the point is turned into grid coordinates by hand (side and top margins,
+        // and how far the page is scrolled) to tell it from a hold on a tile.
         val gestures = Modifier.pointerInput(Unit) {
             detectTapGestures(
-                onTap = { p ->
-                    val cell = aNow?.hit(p.x / density - lookNow.side, (p.y + scroll.value) / density - lookNow.top) ?: return@detectTapGestures
-                    val widget = presetNow.widgets.firstOrNull { it.id == cell.id } ?: return@detectTapGestures
-                    onNavigate(DashboardTargets.route(widget, dataNow, presetNow.id))
-                },
-                onLongPress = { onEdit(presetNow.id, -1) }
+                onLongPress = { p ->
+                    val onTile = aNow?.hit(p.x / density - lookNow.side, (p.y + scroll.value) / density - lookNow.top) != null
+                    if (!onTile) editNow(presetNow.id, -1)
+                }
             )
         }
+        val open = remember { { w: DashWidget -> navigateNow(DashboardTargets.route(w, dataNow, presetNow.id)) } }
+        val hold = remember { { editNow(presetNow.id, -1) } }
         if (preset.widgets.isEmpty()) {
             EmptyPage(preset.name, bottomPadding, gestures) { onEdit(preset.id, Destination.DashboardEdit.ADD_WIDGET) }
         } else if (a != null) {
@@ -116,7 +122,9 @@ private fun PresetPage(
                 viewport = viewport,
                 bottomPadding = bottomPadding,
                 scroll = scroll,
-                modifier = gestures
+                modifier = gestures,
+                onOpen = open,
+                onHold = hold
             )
         }
     }
@@ -126,9 +134,9 @@ private fun PresetPage(
 private fun EmptyPage(name: String, bottomPadding: Dp, gestures: Modifier, onAdd: () -> Unit) {
     Box(Modifier.fillMaxSize().then(gestures).padding(bottom = bottomPadding), contentAlignment = Alignment.Center) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(Space.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             Text("$name is empty", style = MaterialTheme.typography.titleMedium)
             Text(

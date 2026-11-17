@@ -27,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewQuilt
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
@@ -76,6 +75,7 @@ import com.ashrdev.aznd.ui.common.tiling.dropSpot
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.navigation.Destination
 import com.ashrdev.aznd.ui.streaks.StreakWithCount
+import com.ashrdev.aznd.ui.theme.Space
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -83,12 +83,12 @@ import kotlin.math.roundToInt
 
 private const val PAGE_TUNING = 0
 private const val PAGE_TILING = 1
-private const val PAGE_MORE = 2
+private const val PAGE_ADD = 2
 
 private val EditPages = listOf(
     BarPage("Tuning", Icons.Default.Tune),
     BarPage("Tiling", Icons.AutoMirrored.Filled.ViewQuilt),
-    BarPage("More", Icons.Default.MoreHoriz)
+    BarPage("Add", Icons.Default.Add)
 )
 
 // The held tile, as Flex draws its held block (FlexPainter.drawHeld): a touch bigger, on a soft shadow.
@@ -106,12 +106,12 @@ private const val PAGE_FULL = "That page is full"
 
 /**
  * Edit mode for the dashboard, opened on page [presetId]. Three swipeable pages, opening on the
- * middle one:   Tuning | Tiling | More
+ * middle one:   Tuning | Tiling | Add
  *  - Tiling: the live tiling. Hold a tile to drag it into a gap or beside another, as in Flex.
  *    Scroll up and down to edit the other pages; hold a tile at the top or bottom edge to carry it
  *    to the page above or below. Tap a tile for its options.
  *  - Tuning (swipe left): the page's widgets and their options.
- *  - More (swipe right): a placeholder for tools to come.
+ *  - Add (swipe right): the widget types to add to the page being edited.
  * A preset that isn't a dashboard page is edited on its own.
  * [focusWidget]: open that widget's options on Tuning ([Destination.DashboardEdit.ADD_WIDGET]: the add picker).
  */
@@ -139,7 +139,9 @@ fun DashboardEditScreen(
     val hPager = rememberPagerState(initialPage = if (focusWidget == -1) PAGE_TILING else PAGE_TUNING) { EditPages.size }
     val subPages = rememberSubPageBar(hPager, EditPages)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val drag = remember { DashDrag() }
+    DisposableEffect(store) { onDispose { store.flush() } }
 
     val currentId = pages.getOrNull(vPager.currentPage) ?: pages.first()
     val current = store.preset(currentId)
@@ -187,11 +189,11 @@ fun DashboardEditScreen(
         pageTitle = { page ->
             when (page) {
                 PAGE_TUNING -> "Tuning · $name"
-                PAGE_MORE -> "More"
+                PAGE_ADD -> "Add · $name"
                 else -> name
             }
         },
-        pageSubtitle = { page -> if (page == PAGE_MORE) null else "Editing · $where" },
+        pageSubtitle = { _ -> "Editing · $where" },
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
@@ -241,7 +243,23 @@ fun DashboardEditScreen(
                         bottom = bottom
                     )
                 }
-                PAGE_MORE -> ComingSoon(bottom)
+                PAGE_ADD -> AddWidgetPage(
+                    pageName = name,
+                    full = full,
+                    bottom = bottom,
+                    onPick = { type ->
+                        current?.id?.let { target ->
+                            val id = store.addWidget(target, type)
+                            if (id == null) {
+                                Toast.makeText(context, PAGE_FULL, Toast.LENGTH_SHORT).show()
+                            } else {
+                                expandedPreset = target
+                                expandedWidget = id
+                                Toast.makeText(context, "Added ${type.label}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
                 else -> TilingPage(
                     store = store,
                     pages = pages,
@@ -542,7 +560,7 @@ private fun TilingPage(
                     position = { vPager.currentPage + vPager.currentPageOffsetFraction },
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 4.dp, bottom = bottom)
+                        .padding(end = Space.xs, bottom = bottom)
                 )
             }
             // The held tile floats under the finger, over every page, at the size it was picked up.
@@ -618,18 +636,8 @@ private fun EditPage(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center).padding(32.dp)
+                modifier = Modifier.align(Alignment.Center).padding(Space.xxl)
             )
-        }
-    }
-}
-
-@Composable
-private fun ComingSoon(bottom: Dp) {
-    Box(Modifier.fillMaxSize().padding(bottom = bottom), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.MoreHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("More editing tools are coming here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

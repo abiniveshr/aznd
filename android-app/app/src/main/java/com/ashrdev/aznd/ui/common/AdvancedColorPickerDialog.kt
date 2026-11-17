@@ -43,6 +43,7 @@ import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedTextField
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 private val DefaultSwatches = listOf(
     0xFFFFFFFF.toInt(), 0xFFE5E7EB.toInt(), 0xFF9AA0A6.toInt(), 0xFF3C4043.toInt(), 0xFF000000.toInt(),
@@ -97,7 +98,7 @@ fun AdvancedColorPickerDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(Space.md)
             ) {
                 // Saturation (left to right) and brightness (bottom to top).
                 Box(
@@ -159,7 +160,7 @@ fun AdvancedColorPickerDialog(
                         }
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -194,7 +195,7 @@ fun AdvancedColorPickerDialog(
                 ChannelSlider("Blue", b) { setArgb((0xFF shl 24) or (r shl 16) or (g shl 8) or it) }
 
                 val all = (swatches + DefaultSwatches).distinct()
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     items(all) { c ->
                         Box(
                             modifier = Modifier
@@ -223,7 +224,7 @@ private fun ChannelSlider(label: String, value: Int, onChange: (Int) -> Unit) {
             valueRange = 0f..255f,
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 4.dp)
+                .padding(horizontal = Space.xs)
         )
         Text(value.toString(), style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(32.dp))
     }

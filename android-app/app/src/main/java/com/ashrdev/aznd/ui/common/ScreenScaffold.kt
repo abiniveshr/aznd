@@ -1,11 +1,11 @@
 package com.ashrdev.aznd.ui.common
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,25 +29,32 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.TopAppBar
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.themedFill
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private val PrimaryButtonHeight = 64.dp
-private val PrimaryButtonGap = 12.dp
+private val PrimaryButtonGap: Dp get() = Space.md
 
 // Every screen except the Home pager sits inside this: top bar with a title and a Back button on
 // its left, content, and the persistent bottom bar (optional actions, pull up for Home /
@@ -108,7 +115,8 @@ fun ScreenScaffold(
     val pagedPrimary = if (chromePosition != null) pagePrimaryActions else null
     val reserve = if (reservePrimarySpace || pagedPrimary != null) PrimaryButtonHeight + PrimaryButtonGap else 0.dp
 
-    BackHandler(enabled = tray.value > 0f) { scope.launch { tray.settleTo(0f) } }
+    val trayShown by remember(tray) { derivedStateOf { tray.value > 0f } }
+    BackHandler(enabled = trayShown) { scope.launch { tray.settleTo(0f) } }
 
     Scaffold(
         // The screen's fill (gradient / pattern included) is painted by the modifier; Material's own
@@ -165,47 +173,22 @@ fun ScreenScaffold(
                 .padding(top = innerPadding.calculateTopPadding())
                 .imePadding()
         ) {
-            content(PaddingValues(bottom = if (imeVisible) 16.dp else clearance + reserve))
+            content(PaddingValues(bottom = if (imeVisible) Space.lg else clearance + reserve))
 
             // The bar steps aside while the keyboard is open so it never eats typing space.
             if (!imeVisible) {
-                // Big action button: rides up with the bar as it's pulled, fading out as it goes.
-                // Per-page buttons also slide sideways 1:1 with their page.
-                val hasPrimary = pagedPrimary != null || primaryAction != null
-                if (hasPrimary && tray.value < 0.98f) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(bottom = barHeight + PrimaryButtonGap)
-                            .offset { IntOffset(0, -(trayTravelPx * tray.value).roundToInt()) }
-                            .graphicsLayer { alpha = (1f - tray.value).coerceIn(0f, 1f) }
-                    ) {
-                        if (pagedPrimary != null && chromePosition != null) {
-                            PageSlider(
-                                pageCount = chromeCount,
-                                position = chromePosition,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { page ->
-                                PrimaryButtonRow(pagedPrimary(page))
-                            }
-                        } else {
-                            PrimaryButtonRow(listOfNotNull(primaryAction, secondaryAction))
-                        }
-                    }
-                }
+                PrimaryActionHost(
+                    tray = tray,
+                    primaryAction = primaryAction,
+                    secondaryAction = secondaryAction,
+                    pagedPrimary = pagedPrimary,
+                    chromePosition = chromePosition,
+                    chromeCount = chromeCount,
+                    barHeight = barHeight,
+                    trayTravelPx = trayTravelPx
+                )
 
-                if (tray.value > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.45f * tray.value.coerceIn(0f, 1f)))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { scope.launch { tray.settleTo(0f) } }
-                    )
-                }
+                TrayScrim(tray = tray, onDismiss = { scope.launch { tray.settleTo(0f) } })
                 ScreenBottomBar(
                     onHome = onHome,
                     tray = tray,
@@ -222,6 +205,67 @@ fun ScreenScaffold(
     }
 }
 
+// Big action button: rides up with the bar as it's pulled, fading out as it goes. Per-page buttons
+// also slide sideways 1:1 with their page. Composed only while the tray is shut enough; offset and
+// alpha are read at layout / draw time, so a pull never recomposes it.
+@Composable
+private fun BoxScope.PrimaryActionHost(
+    tray: Animatable<Float, AnimationVector1D>,
+    primaryAction: PrimaryAction?,
+    secondaryAction: PrimaryAction?,
+    pagedPrimary: ((page: Int) -> List<PrimaryAction>)?,
+    chromePosition: (() -> Float)?,
+    chromeCount: Int,
+    barHeight: Dp,
+    trayTravelPx: Float
+) {
+    val visible by remember(tray) { derivedStateOf { tray.value < 0.98f } }
+    if ((pagedPrimary == null && primaryAction == null) || !visible) return
+    Box(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .padding(bottom = barHeight + PrimaryButtonGap)
+            .offset { IntOffset(0, -(trayTravelPx * tray.value).roundToInt()) }
+            .graphicsLayer { alpha = (1f - tray.value).coerceIn(0f, 1f) }
+    ) {
+        if (pagedPrimary != null && chromePosition != null) {
+            PageSlider(
+                pageCount = chromeCount,
+                position = chromePosition,
+                modifier = Modifier.fillMaxWidth()
+            ) { page ->
+                PrimaryButtonRow(pagedPrimary(page))
+            }
+        } else {
+            PrimaryButtonRow(listOfNotNull(primaryAction, secondaryAction))
+        }
+    }
+}
+
+// Dims the screen while the tray is up; a tap on it closes the tray. Only its presence is composed
+// state (it flips at the ends); the dimming itself is drawn.
+@Composable
+private fun TrayScrim(
+    tray: Animatable<Float, AnimationVector1D>,
+    onDismiss: () -> Unit
+) {
+    val shown by remember(tray) { derivedStateOf { tray.value > 0f } }
+    if (!shown) return
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawBehind {
+                drawRect(Color.Black, alpha = 0.45f * tray.value.coerceIn(0f, 1f))
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
+    )
+}
+
 /** One or two big buttons side by side, with the screen's side margins. Empty list = nothing. */
 @Composable
 private fun PrimaryButtonRow(actions: List<PrimaryAction>) {
@@ -229,8 +273,8 @@ private fun PrimaryButtonRow(actions: List<PrimaryAction>) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = Space.lg),
+        horizontalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         for (action in actions) {
             Button(
@@ -241,7 +285,7 @@ private fun PrimaryButtonRow(actions: List<PrimaryAction>) {
                     .height(PrimaryButtonHeight)
             ) {
                 Icon(action.icon, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(Space.sm))
                 Text(action.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
             }
         }

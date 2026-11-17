@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -47,6 +46,7 @@ import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val TAG = "PhotoViewer"
 
@@ -54,10 +54,9 @@ private const val TAG = "PhotoViewer"
 fun PhotoViewerDialog(uriString: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val bitmap = remember(uriString) {
-        PhotoStore.loadBitmap(context, uriString.toUri(), maxDimension = 2000)
-    }
-    if (bitmap == null) return
+    val load = rememberPhotoLoad(uriString, maxDimension = 2000)
+    val bitmap = load.bitmap
+    if (bitmap == null && !load.loading) return
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -74,12 +73,12 @@ fun PhotoViewerDialog(uriString: String, onDismiss: () -> Unit) {
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
+            if (bitmap != null) Column(
+                modifier = Modifier.padding(horizontal = Space.xl, vertical = Space.xxl),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Image(
-                    bitmap = bitmap.asImageBitmap(),
+                    bitmap = bitmap,
                     contentDescription = "Photo",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -87,24 +86,24 @@ fun PhotoViewerDialog(uriString: String, onDismiss: () -> Unit) {
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { openInGallery(context, uriString.toUri()) }
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(Space.md))
                 Text(
                     "Tap the photo to open it in your gallery",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.9f)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(modifier = Modifier.height(Space.lg))
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     Button(onClick = {
                         scope.launch { saveImageToDevice(context, uriString.toUri()) }
                     }) {
                         Icon(Icons.Default.Download, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Save to device")
                     }
                     FilledTonalButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Close")
                     }
                 }

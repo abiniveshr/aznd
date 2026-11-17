@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
@@ -45,6 +46,7 @@ import com.ashrdev.aznd.ui.common.rememberReorderState
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.streaks.StreakWithCount
+import com.ashrdev.aznd.ui.theme.Space
 
 /**
  * One dashboard page's widgets: their options (size, what they show), removing them, and their
@@ -69,8 +71,8 @@ internal fun WidgetTuningList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = bottom + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.md, bottom = bottom + Space.lg),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item(key = "intro") {
             Text(
@@ -142,7 +144,7 @@ internal fun WidgetRow(
 ) {
     Card(modifier = Modifier.fillMaxWidth(), highlight = expanded) {
         Row(
-            modifier = dragModifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            modifier = dragModifier.padding(horizontal = Space.xs, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -151,12 +153,12 @@ internal fun WidgetRow(
                 modifier = handleModifier.size(40.dp).padding(8.dp)
             )
             Icon(DashboardTargets.icon(widget.type), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(Space.md))
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .clickable(onClick = onToggle)
-                    .padding(vertical = 8.dp)
+                    .padding(vertical = Space.sm)
             ) {
                 Text(widget.type.label, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -173,8 +175,8 @@ internal fun WidgetRow(
         }
         if (expanded) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = Space.lg, end = Space.lg, bottom = Space.md),
+                verticalArrangement = Arrangement.spacedBy(Space.md)
             ) { options() }
         }
     }
@@ -182,7 +184,7 @@ internal fun WidgetRow(
 
 @Composable
 private fun <T> ChipRow(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
         for (o in options) FilterChip(selected = o == selected, onClick = { onPick(o) }, label = { Text(label(o)) })
     }
 }
@@ -276,7 +278,7 @@ internal fun WidgetOptions(
     }
     TextButton(onClick = onRemove) {
         Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(Space.sm))
         Text("Remove widget", color = MaterialTheme.colorScheme.error)
     }
 }
@@ -287,29 +289,54 @@ internal fun AddWidgetDialog(onPick: (DashWidgetType) -> Unit, onDismiss: () -> 
         onDismissRequest = onDismiss,
         title = { Text("Add widget") },
         text = {
-            Column(
-                modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                for (type in DashWidgetType.entries) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(type) }
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(DashboardTargets.icon(type), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text(type.label, style = MaterialTheme.typography.titleSmall)
-                            Text(type.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
+            AddWidgetList(
+                onPick = onPick,
+                modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())
+            )
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+/** Every widget type that can be added, one row each. [enabled] false: the page is full. */
+@Composable
+internal fun AddWidgetList(onPick: (DashWidgetType) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+        for (type in DashWidgetType.entries) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (enabled) 1f else 0.5f)
+                    .clickable(enabled = enabled) { onPick(type) }
+                    .padding(vertical = Space.md),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(DashboardTargets.icon(type), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(Space.lg))
+                Column {
+                    Text(type.label, style = MaterialTheme.typography.titleSmall)
+                    Text(type.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** Edit mode's Add page: the widget types to add to the page being edited. */
+@Composable
+internal fun AddWidgetPage(pageName: String, full: Boolean, bottom: Dp, onPick: (DashWidgetType) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = Space.lg, end = Space.lg, top = Space.md, bottom = bottom + Space.lg)
+    ) {
+        Text(
+            if (full) "$pageName is full" else "Add to $pageName",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = Space.sm)
+        )
+        AddWidgetList(onPick = onPick, enabled = !full)
+    }
 }

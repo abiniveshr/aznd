@@ -11,36 +11,95 @@ enum class CalendarZoom { YEAR, QUADRANT, MONTH }
 internal val weekdayLetters = listOf("S", "M", "T", "W", "T", "F", "S")
 
 internal class YearLayout(val year: Int, firstDayOfWeek: Int) {
-    val dayKeys: List<String> = (1..12).flatMap { m ->
-        val month = MonthKey(year, m)
-        (1..month.daysInMonth()).map { month.dayKey(it) }
+    // Ordinal (0-based day of the year) of each month's first day; the last entry is the day count.
+    private val monthFirstOrdinal = IntArray(13).also { first ->
+        for (m in 1..12) first[m] = first[m - 1] + MonthKey(year, m).daysInMonth()
+    }
+
+    private val dayCount = monthFirstOrdinal[12]
+
+    private val monthOf = IntArray(dayCount).also { months ->
+        for (m in 1..12) for (i in monthFirstOrdinal[m - 1] until monthFirstOrdinal[m]) months[i] = m
+    }
+
+    val dayKeys: List<String> = run {
+        val out = ArrayList<String>(dayCount)
+        val key = StringBuilder(10)
+        for (m in 1..12) for (d in 1..(monthFirstOrdinal[m] - monthFirstOrdinal[m - 1])) {
+            key.setLength(0)
+            appendPadded(key, year, 4).append('-')
+            appendPadded(key, m, 2).append('-')
+            appendPadded(key, d, 2)
+            out.add(key.toString())
+        }
+        out
     }
 
     val leading: Int = (MonthKey(year, 1).firstWeekday() - firstDayOfWeek + 7) % 7
 
-    val weeks: Int = (leading + dayKeys.size + 6) / 7
+    val weeks: Int = (leading + dayCount + 6) / 7
 
-    val monthStartWeek: List<Int> = run {
-        var ordinal = 0
-        (1..12).map { m ->
-            ((leading + ordinal) / 7).also { ordinal += MonthKey(year, m).daysInMonth() }
-        }
-    }
+    val monthStartWeek: List<Int> = (1..12).map { m -> (leading + monthFirstOrdinal[m - 1]) / 7 }
 
     fun dayKeyAt(week: Int, row: Int): String? = dayKeys.getOrNull(week * 7 + row - leading)
 
-    fun weekOf(dayKey: String): Int? =
-        dayKeys.indexOf(dayKey).takeIf { it >= 0 }?.let { (leading + it) / 7 }
+    /** The month (1..12) of the day at [week], [row], or 0 where the grid has no day. */
+    fun monthAt(week: Int, row: Int): Int {
+        val i = week * 7 + row - leading
+        return if (i in 0 until dayCount) monthOf[i] else 0
+    }
+
+    /** The day of the month of the day at [week], [row], or 0 where the grid has no day. */
+    fun dayOfMonthAt(week: Int, row: Int): Int {
+        val i = week * 7 + row - leading
+        return if (i in 0 until dayCount) i - monthFirstOrdinal[monthOf[i] - 1] + 1 else 0
+    }
+
+    fun weekOf(dayKey: String): Int? {
+        if (dayKey.length != 10) return null
+        val y = digits(dayKey, 0, 4)
+        val m = digits(dayKey, 5, 2)
+        val d = digits(dayKey, 8, 2)
+        if (y != year || m !in 1..12 || d < 1 || d > monthFirstOrdinal[m] - monthFirstOrdinal[m - 1]) return null
+        return (leading + monthFirstOrdinal[m - 1] + d - 1) / 7
+    }
 
     fun monthEndWeek(month: Int): Int =
-        weekOf(MonthKey(year, month).let { it.dayKey(it.daysInMonth()) }) ?: (weeks - 1)
+        if (month in 1..12) (leading + monthFirstOrdinal[month] - 1) / 7 else weeks - 1
+
+    companion object {
+        private val cache = object : LinkedHashMap<Long, YearLayout>(8, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, YearLayout>?): Boolean = size > 8
+        }
+
+        /** The layout of [year] for a week starting on [firstDayOfWeek], built once and shared. */
+        fun of(year: Int, firstDayOfWeek: Int): YearLayout = synchronized(cache) {
+            cache.getOrPut(year * 8L + firstDayOfWeek) { YearLayout(year, firstDayOfWeek) }
+        }
+
+        private fun appendPadded(out: StringBuilder, value: Int, width: Int): StringBuilder {
+            val text = value.toString()
+            for (i in text.length until width) out.append('0')
+            return out.append(text)
+        }
+
+        private fun digits(text: String, start: Int, count: Int): Int {
+            var n = 0
+            for (i in start until start + count) {
+                val c = text[i]
+                if (c !in '0'..'9') return -1
+                n = n * 10 + (c - '0')
+            }
+            return n
+        }
+    }
 }
 
 internal class YearBand(val months: IntRange, val startWeek: Int, val endWeek: Int) {
     val weekCount: Int get() = endWeek - startWeek + 1
 
     fun dayKeyAt(layout: YearLayout, week: Int, row: Int): String? =
-        layout.dayKeyAt(week, row)?.takeIf { monthKeyOf(it).month in months }
+        layout.dayKeyAt(week, row)?.takeIf { layout.monthAt(week, row) in months }
 }
 
 internal data class CalendarView(val zoom: CalendarZoom, val year: Int, val index: Int) {
@@ -118,7 +177,7 @@ internal class CalendarMonthLabel(val band: Int, val col: Int, val month: Int)
  * view is in [slots] exactly once.
  */
 internal class CalendarGridPlan(val view: CalendarView, val firstDayOfWeek: Int) {
-    private val layout = YearLayout(view.year, firstDayOfWeek)
+    private val layout = YearLayout.of(view.year, firstDayOfWeek)
     val bands: List<YearBand> = layout.bandsFor(view)
 
     /** Weeks (columns) in each band. */
@@ -129,7 +188,7 @@ internal class CalendarGridPlan(val view: CalendarView, val firstDayOfWeek: Int)
             for (week in band.startWeek..band.endWeek) {
                 for (row in 0 until 7) {
                     val key = band.dayKeyAt(layout, week, row) ?: continue
-                    add(CalendarSlot(key, monthKeyOf(key).month, dayOfMonthOf(key), bandIndex, week - band.startWeek, row))
+                    add(CalendarSlot(key, layout.monthAt(week, row), layout.dayOfMonthAt(week, row), bandIndex, week - band.startWeek, row))
                 }
             }
         }

@@ -12,8 +12,9 @@ data class BuilderState(
     val rows: List<SetRow> = emptyList(),
     val nextTempId: Long = -1L
 ) {
-    val cards: List<SetCard> get() = SetTree.cards(rows)
-    val depthById: Map<Long, Int> get() = SetTree.depthById(rows)
+    // Computed once per state instance; not part of equals/hashCode/copy.
+    val cards: List<SetCard> by lazy { SetTree.cards(rows) }
+    val depthById: Map<Long, Int> by lazy { SetTree.depthById(rows) }
 
     /** Rows to hand to TrainingRepository.saveTemplate. */
     fun rowsForSave(): List<SetRow> = SetTree.dropUnsetRows(rows)
@@ -40,7 +41,44 @@ data class BuilderState(
     fun moveCard(from: Int, to: Int): BuilderState = copy(rows = SetTree.moveCard(rows, from, to))
 
     /** New empty set at the bottom of the card that contains [anyRowIdInCard]. */
-    fun addSet(anyRowIdInCard: Long): BuilderState = mutate { SetTree.addSetToCard(rows, anyRowIdInCard, it) }
+    fun addSet(anyRowIdInCard: Long, copyWeight: Boolean = false): BuilderState =
+        mutate { SetTree.addSetToCard(rows, anyRowIdInCard, it, copyWeight) }
+
+    /**
+     * Undo of [delete]: [before] is the row list from before the delete. Removed rows come back with
+     * fresh temporary ids and their values, at their old place; rows that moved up to the deleted
+     * row's parent go back under it. Rows edited since stay as they are.
+     */
+    fun restoreDeleted(before: List<SetRow>, deletedId: Long): BuilderState {
+        val deleted = before.firstOrNull { it.id == deletedId } ?: return this
+        val old = before.associateBy { it.id }
+        val present = rows.mapTo(HashSet()) { it.id }
+        val ids = DescendingIds(nextTempId)
+        val newId = HashMap<Long, Long>()
+        before.forEach { if (it.id !in present) newId[it.id] = ids.next() }
+        fun fix(id: Long?): Long? = id?.let { newId[it] ?: it }
+        val kept = rows.map { r ->
+            val o = old[r.id]
+            if (o != null && (o.parentId != r.parentId || o.kind != r.kind)) {
+                r.copy(parentId = fix(o.parentId), kind = o.kind, position = o.position)
+            } else {
+                r
+            }
+        }
+        val back = before.filter { it.id !in present }.map { r ->
+            r.copy(id = newId.getValue(r.id), parentId = fix(r.parentId))
+        }
+        val parent = fix(deleted.parentId)
+        val all = kept + back
+        val restoredId = newId.getValue(deletedId)
+        val siblings = all.filter { it.parentId == parent && it.id != restoredId }
+            .sortedWith(compareBy<SetRow>({ it.position }, { it.id }))
+        val order = siblings.toMutableList()
+        order.add(deleted.position.coerceIn(0, order.size), all.first { it.id == restoredId })
+        val position = order.withIndex().associate { (i, r) -> r.id to i }
+        val fixed = all.map { r -> position[r.id]?.let { r.copy(position = it) } ?: r }
+        return BuilderState(SetTree.ordered(fixed), ids.peek())
+    }
 
     /** Removes a whole card: every one of its rows (drops and supersets included). */
     fun deleteRows(rowIds: List<Long>): BuilderState = rowIds.fold(this) { state, id -> state.delete(id) }
@@ -63,6 +101,19 @@ data class BuilderState(
     /** Type [text] into a logger field; invalid text keeps the old value, blank clears it. */
     fun setField(rowId: Long, field: LogField, text: String): BuilderState =
         updateRow(rowId) { applyFieldText(it, field, text) }
+
+    /** Tapping the "Previous:" line: fills the row's EMPTY weight / reps / seconds from [prev] (never RPE). */
+    fun fillFromPrevious(rowId: Long, prev: SetRow): BuilderState = updateRow(rowId) { r ->
+        val weight = prev.weightKg?.takeIf { it != 0.0 }
+        val reps = prev.reps?.takeIf { it > 0 }
+        val seconds = prev.durationSec?.takeIf { it > 0 }
+        val filled = r.copy(
+            weightKg = r.weightKg ?: weight,
+            reps = r.reps ?: reps,
+            durationSec = r.durationSec ?: seconds
+        )
+        if (filled == r) null else filled
+    }
 
     /** Tapping a "Suggest ..." hint. */
     fun applySuggestion(rowId: Long, type: ExerciseType, fieldKg: Double): BuilderState =

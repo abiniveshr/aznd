@@ -29,10 +29,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -42,6 +44,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,12 +63,14 @@ import com.ashrdev.aznd.ui.common.AdvancedColorPickerDialog
 import com.ashrdev.aznd.ui.common.FillCopySource
 import com.ashrdev.aznd.ui.common.FillEditor
 import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.share.FlexFont
 import com.ashrdev.aznd.ui.common.TaperLineControls
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
 import com.ashrdev.aznd.ui.components.OutlinedTextField
+import com.ashrdev.aznd.ui.theme.AzndTheme
 import com.ashrdev.aznd.ui.theme.ContrastBase
 import com.ashrdev.aznd.ui.theme.ContrastShade
 import com.ashrdev.aznd.ui.theme.HighContrast
@@ -76,6 +81,7 @@ import com.ashrdev.aznd.ui.theme.ThemeMode
 import com.ashrdev.aznd.ui.theme.ThemePreset
 import com.ashrdev.aznd.ui.theme.ThemePresets
 import com.ashrdev.aznd.ui.theme.ThemeStore
+import com.ashrdev.aznd.ui.theme.UiDensity
 import com.ashrdev.aznd.ui.theme.azndFill
 import com.ashrdev.aznd.ui.theme.colorOf
 import com.ashrdev.aznd.ui.theme.fillOf
@@ -87,6 +93,7 @@ import com.ashrdev.aznd.ui.theme.withColor
 import com.ashrdev.aznd.ui.theme.withFill
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.ashrdev.aznd.ui.theme.Space
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -96,7 +103,9 @@ fun AppearanceScreen(
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
-    val settings by ThemeStore.settings.collectAsState()
+    // The draft, so every control follows the finger; the app itself gets the theme a moment after the last edit.
+    val settings by ThemeStore.draft.collectAsState()
+    val pending by ThemeStore.pending.collectAsState()
     var editingDark by remember { mutableStateOf(false) }
     var pickerFor by remember { mutableStateOf<ThemeColor?>(null) }
     // The element whose gradient and pattern editor is open under its row.
@@ -104,6 +113,8 @@ fun AppearanceScreen(
     var confirmReset by remember { mutableStateOf(false) }
     var confirmPreset by remember { mutableStateOf<ThemePreset?>(null) }
     var pickContrast by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) { onDispose { ThemeStore.commitNow() } }
 
     fun editPalette(change: (Palette) -> Palette) {
         ThemeStore.update { s ->
@@ -117,7 +128,7 @@ fun AppearanceScreen(
         if (uri != null) {
             val ok = runCatching {
                 context.contentResolver.openOutputStream(uri)?.use {
-                    it.write(ThemeStore.settings.value.toJson().toByteArray())
+                    it.write(ThemeStore.draft.value.toJson().toByteArray())
                 } ?: error("no output stream")
             }.isSuccess
             Toast.makeText(
@@ -194,10 +205,11 @@ fun AppearanceScreen(
         AlertDialog(
             onDismissRequest = { confirmPreset = null },
             title = { Text(preset.name) },
-            text = { Text("Replace your colours, patterns and borders with this theme? Your corner sizes stay as they are.") },
+            text = { Text("Replace your colours, patterns and borders with this theme? Your corner sizes, font and spacing stay as they are.") },
             confirmButton = {
                 TextButton(onClick = {
                     ThemeStore.update { ThemePresets.applyTo(it, preset) }
+                    ThemeStore.commitNow()
                     confirmPreset = null
                 }) { Text("Apply") }
             },
@@ -212,43 +224,52 @@ fun AppearanceScreen(
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        settingsEnabled = false
+        settingsEnabled = false,
+        topBarActions = {
+            if (pending) {
+                IconButton(onClick = { ThemeStore.commitNow() }) {
+                    Icon(Icons.Default.Check, contentDescription = "Apply")
+                }
+            }
+        }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize()) {
             // Pinned preview: stays put while the options below scroll.
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            AzndTheme(settings) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = Space.lg, end = Space.lg, top = Space.sm, bottom = Space.xs)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(Space.md),
+                        verticalArrangement = Arrangement.spacedBy(Space.sm)
                     ) {
-                        Text("Preview", style = MaterialTheme.typography.titleMedium)
-                        Card(highlight = true) {
-                            Text(
-                                "Highlight",
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Preview", style = MaterialTheme.typography.titleMedium)
+                            Card(highlight = true) {
+                                Text(
+                                    "Highlight",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.padding(horizontal = Space.md, vertical = Space.sm)
+                                )
+                            }
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
+                            Button(onClick = {}) { Text("Button") }
+                            OutlinedButton(onClick = {}) { Text("Outlined") }
+                        }
+                        OutlinedTextField(
+                            value = "Text field",
+                            onValueChange = {},
+                            label = { Text("Label") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {}) { Text("Button") }
-                        OutlinedButton(onClick = {}) { Text("Outlined") }
-                    }
-                    OutlinedTextField(
-                        value = "Text field",
-                        onValueChange = {},
-                        label = { Text("Label") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
 
@@ -256,11 +277,11 @@ fun AppearanceScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(Space.lg)
             ) {
                 SectionTitle("Preset themes")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     items(ThemePresets.all) { preset ->
                         PresetTile(preset) { confirmPreset = preset }
                     }
@@ -301,6 +322,33 @@ fun AppearanceScreen(
                         value = settings.buttonCorner,
                         range = 0..50,
                         onChange = { v -> ThemeStore.update { it.copy(buttonCorner = v) } }
+                    )
+                }
+
+                AppearanceSection("Text and spacing") {
+                    Text("Font", style = MaterialTheme.typography.titleSmall)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.sm)
+                    ) {
+                        FilterChip(
+                            selected = settings.appFont == null,
+                            onClick = { ThemeStore.update { it.copy(appFont = null) } },
+                            label = { Text("System default") }
+                        )
+                        FlexFont.entries.forEach { font ->
+                            FilterChip(
+                                selected = settings.appFont == font,
+                                onClick = { ThemeStore.update { it.copy(appFont = font) } },
+                                label = { Text(font.label) }
+                            )
+                        }
+                    }
+                    Text("Spacing", style = MaterialTheme.typography.titleSmall)
+                    SegmentedChoice(
+                        options = listOf("Compact", "Regular", "Roomy"),
+                        selected = settings.density.ordinal,
+                        onSelect = { i -> ThemeStore.update { it.copy(density = UiDensity.entries[i]) } }
                     )
                 }
 
@@ -368,7 +416,7 @@ fun AppearanceScreen(
                         )
                         if (element.fillable) {
                             AnimatedVisibility(visible = open) {
-                                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                                Column(modifier = Modifier.padding(bottom = Space.sm)) {
                                     FillEditor(
                                         baseLabel = "Colour",
                                         baseColor = palette.colorOf(element).toArgb(),
@@ -390,8 +438,8 @@ fun AppearanceScreen(
                 AppearanceSection("Data") {
                     // Wraps onto a second line on a narrow screen rather than squeezing the buttons.
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.sm)
                     ) {
                         OutlinedButton(onClick = { exportLauncher.launch("aznd-theme.json") }) { Text("Export") }
                         OutlinedButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) { Text("Import") }
@@ -415,8 +463,8 @@ private fun HighContrastCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             Text("High contrast", style = MaterialTheme.typography.titleMedium)
             Row(
@@ -424,7 +472,7 @@ private fun HighContrastCard(
                     .fillMaxWidth()
                     .clip(MaterialTheme.shapes.small)
                     .clickable(onClick = onPickColor)
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = Space.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -446,7 +494,7 @@ private fun HighContrastCard(
                 onSelect = { i -> onShade(ContrastShade.entries[i]) }
             )
             // The shades the choice makes, so the person sees what each does before leaving the page.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 listOf(1f, HighContrast.OUTLINE, HighContrast.HIGHLIGHT).forEach { k ->
                     Box(
                         modifier = Modifier
@@ -482,7 +530,7 @@ private fun AppearanceSection(title: String, content: @Composable ColumnScope.()
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { open = !open }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = Space.lg, vertical = Space.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -494,8 +542,8 @@ private fun AppearanceSection(title: String, content: @Composable ColumnScope.()
         }
         AnimatedVisibility(visible = open) {
             Column(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(start = Space.lg, end = Space.lg, bottom = Space.lg),
+                verticalArrangement = Arrangement.spacedBy(Space.lg),
                 content = content
             )
         }
@@ -556,7 +604,7 @@ private fun BorderSlider(label: String, value: Float, line: Boolean, onLine: (Bo
         ) {
             Text(label, modifier = Modifier.weight(1f))
             FilterChip(selected = line, onClick = { onLine(!line) }, label = { Text("Line only") })
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Space.md))
             Text(
                 if (value <= 0f) "Off" else String.format(Locale.US, "%.1f dp", value),
                 style = MaterialTheme.typography.bodySmall
@@ -584,17 +632,17 @@ private fun ElementRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
-                .padding(vertical = 8.dp),
+                .padding(vertical = Space.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .azndFill(palette.resolved(element), CircleShape)
+                    .azndFill(palette.resolved(element), CircleShape, preview = true)
                     .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
             )
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(Space.lg))
             Column(modifier = Modifier.weight(1f)) {
                 Text(element.label)
                 if (element.fillable) {
@@ -610,7 +658,7 @@ private fun ElementRow(
                 Icon(
                     Icons.Default.ExpandMore,
                     contentDescription = if (open) "Close ${element.label} editor" else "Edit ${element.label}",
-                    modifier = Modifier.padding(start = 8.dp).rotate(if (open) 180f else 0f)
+                    modifier = Modifier.padding(start = Space.sm).rotate(if (open) 180f else 0f)
                 )
             }
         }
@@ -626,7 +674,7 @@ private fun PresetTile(preset: ThemePreset, onClick: () -> Unit) {
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .padding(4.dp),
+            .padding(Space.xs),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Column(
@@ -634,18 +682,18 @@ private fun PresetTile(preset: ThemePreset, onClick: () -> Unit) {
                 .width(124.dp)
                 .height(96.dp)
                 .clip(frame)
-                .azndFill(pal.resolved(ThemeColor.BACKGROUND), frame)
+                .azndFill(pal.resolved(ThemeColor.BACKGROUND), frame, preview = true)
                 .border(1.dp, pal.outline, frame)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(16.dp)
-                    .azndFill(pal.resolved(ThemeColor.TOP_BAR))
+                    .azndFill(pal.resolved(ThemeColor.TOP_BAR), preview = true)
             )
             Column(
-                modifier = Modifier.padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.padding(Space.sm),
+                verticalArrangement = Arrangement.spacedBy(Space.sm)
             ) {
                 val cardShape = RoundedCornerShape(6.dp)
                 Box(
@@ -653,24 +701,24 @@ private fun PresetTile(preset: ThemePreset, onClick: () -> Unit) {
                         .fillMaxWidth()
                         .height(26.dp)
                         .clip(cardShape)
-                        .azndFill(pal.resolved(ThemeColor.CARD), cardShape)
+                        .azndFill(pal.resolved(ThemeColor.CARD), cardShape, preview = true)
                         .border(1.dp, pal.outline, cardShape)
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                     val pill = RoundedCornerShape(50)
                     Box(
                         modifier = Modifier
                             .width(44.dp)
                             .height(16.dp)
                             .clip(pill)
-                            .azndFill(pal.resolved(ThemeColor.BUTTON), pill)
+                            .azndFill(pal.resolved(ThemeColor.BUTTON), pill, preview = true)
                     )
                     Box(
                         modifier = Modifier
                             .width(32.dp)
                             .height(16.dp)
                             .clip(cardShape)
-                            .azndFill(pal.resolved(ThemeColor.HIGHLIGHT), cardShape)
+                            .azndFill(pal.resolved(ThemeColor.HIGHLIGHT), cardShape, preview = true)
                     )
                 }
             }

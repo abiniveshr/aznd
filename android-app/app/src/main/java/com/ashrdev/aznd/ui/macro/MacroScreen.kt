@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.macro.FoodEntry
 import com.ashrdev.aznd.data.macro.MacroTargetsStore
 import com.ashrdev.aznd.domain.macro.CalorieTarget
@@ -44,6 +43,7 @@ import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.ashrdev.aznd.ui.theme.Space
 
 private const val PAGE_GRAPHS = 0
 private const val PAGE_TODAY = 1
@@ -134,15 +134,15 @@ fun MacroScreen(
         onOpenSettings = onOpenSettings,
         subPages = subPages
     ) { padding ->
-        val bottom = padding.calculateBottomPadding() + 16.dp
+        val bottom = padding.calculateBottomPadding() + Space.lg
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 PAGE_GRAPHS -> Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottom)),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottom)),
+                    verticalArrangement = Arrangement.spacedBy(Space.lg)
                 ) {
                     if (byDay.isNotEmpty() || burnt.isNotEmpty()) {
                         MacroGraph(byDay, burnt)

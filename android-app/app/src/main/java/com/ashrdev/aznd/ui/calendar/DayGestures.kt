@@ -32,6 +32,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.delay
+import com.ashrdev.aznd.ui.theme.Space
 
 internal data class DayHit(val dayKey: String, val bounds: IntRect)
 
@@ -212,7 +213,7 @@ internal fun DayHoverOverlay(hover: DayHoverState, tooltip: ((String) -> String)
             shape = MaterialTheme.shapes.small,
             shadowElevation = 4.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Column(modifier = Modifier.padding(horizontal = Space.md, vertical = Space.sm)) {
                 Text(
                     formatDayLong(day),
                     style = MaterialTheme.typography.labelSmall,

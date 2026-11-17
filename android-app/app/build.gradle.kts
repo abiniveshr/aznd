@@ -1,3 +1,4 @@
+
 plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.android.application)
@@ -26,11 +27,26 @@ android {
                 enable = false
             }
         }
+
+        create("device") {
+            initWith(getByName("release"))
+
+            // Sign with the default Android debug key
+            signingConfig = signingConfigs.getByName("debug")
+
+            // Disable debugger support for better runtime performance
+            isDebuggable = false
+
+            // Match dependencies against release variants
+            matchingFallbacks += listOf("release")
+        }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     buildFeatures {
         compose = true
     }
@@ -46,18 +62,24 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
+
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
     testImplementation(libs.junit)
+
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
     implementation("androidx.navigation:navigation-compose:2.8.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.material:material-icons-extended")
-implementation("com.github.yalantis:ucrop:2.2.11-native")
+    implementation("com.github.yalantis:ucrop:2.2.11-native")
 }

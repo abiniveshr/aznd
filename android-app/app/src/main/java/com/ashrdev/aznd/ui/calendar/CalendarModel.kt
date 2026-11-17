@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
@@ -103,29 +104,51 @@ fun intensityFill(
     if (value <= 0f || max <= 0f) DayFill.None
     else DayFill.Intensity(value / max, minAlpha)
 
-/** The colour a fill paints (transparent for none). Intensity keeps its opacity here. */
-@Composable
-internal fun DayFill.resolveColor(): Color {
-    val colors = MaterialTheme.colorScheme
-    return when (this) {
+/**
+ * The theme colours a calendar day needs, read once in composition so each day can be resolved in a draw with plain
+ * functions.
+ */
+@Immutable
+internal class CalendarColors(
+    val onSurface: Color,
+    val primary: Color,
+    val primaryContainer: Color,
+    val onPrimaryContainer: Color,
+    val background: Color,
+    val onSurfaceVariant: Color
+) {
+    /** The colour a fill paints (transparent for none). Intensity keeps its opacity here. */
+    fun fillColor(fill: DayFill): Color = when (fill) {
         DayFill.None -> Color.Transparent
-        DayFill.Highlight -> colors.primaryContainer
-        is DayFill.Custom -> color
-        is DayFill.Intensity -> colors.primaryContainer.copy(alpha = alpha)
+        DayFill.Highlight -> primaryContainer
+        is DayFill.Custom -> fill.color
+        is DayFill.Intensity -> primaryContainer.copy(alpha = fill.alpha)
+    }
+
+    /** Readable text colour for a day with this fill. Faded fills are judged as they look on screen. */
+    fun fillTextColor(fill: DayFill): Color = when (fill) {
+        DayFill.None -> onSurface
+        DayFill.Highlight -> onPrimaryContainer
+        is DayFill.Custom -> readableOn(fill.color)
+        is DayFill.Intensity -> readableOn(fillColor(fill).compositeOver(background))
     }
 }
 
-/** Readable text colour for a day with this fill. Faded fills are judged as they look on screen. */
 @Composable
-internal fun DayFill.defaultTextColor(): Color {
-    val colors = MaterialTheme.colorScheme
-    return when (this) {
-        DayFill.None -> colors.onSurface
-        DayFill.Highlight -> colors.onPrimaryContainer
-        is DayFill.Custom -> readableOn(color)
-        is DayFill.Intensity -> readableOn(resolveColor().compositeOver(colors.background))
+internal fun rememberCalendarColors(): CalendarColors {
+    val c = MaterialTheme.colorScheme
+    return remember(c.onSurface, c.primary, c.primaryContainer, c.onPrimaryContainer, c.background, c.onSurfaceVariant) {
+        CalendarColors(c.onSurface, c.primary, c.primaryContainer, c.onPrimaryContainer, c.background, c.onSurfaceVariant)
     }
 }
+
+/** The colour a fill paints (transparent for none). Intensity keeps its opacity here. */
+@Composable
+internal fun DayFill.resolveColor(): Color = rememberCalendarColors().fillColor(this)
+
+/** Readable text colour for a day with this fill. Faded fills are judged as they look on screen. */
+@Composable
+internal fun DayFill.defaultTextColor(): Color = rememberCalendarColors().fillTextColor(this)
 
 @Stable
 class CalendarState(

@@ -59,6 +59,7 @@ import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.workout.exercise.MuscleBadge
 import com.ashrdev.aznd.ui.workout.session.formatPreviousSet
+import com.ashrdev.aznd.ui.theme.Space
 
 /** The workout screen's pages, for opening it on one: WorkoutDetail.createRoute(id, page). */
 object WorkoutDetailPage {
@@ -279,7 +280,7 @@ private fun WorkoutPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(Space.xl)
         ) {
             Text(
                 "No exercises yet. Swipe to Edit (or tap it below) to add some.",
@@ -292,9 +293,9 @@ private fun WorkoutPage(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottom
+                start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottom
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.md)
         ) {
             items(view.cards, key = { it.rows.first().id }) { card ->
                 val exercise = card.exerciseId?.let { view.exercises[it] }
@@ -309,8 +310,8 @@ private fun WorkoutPage(
                             else Modifier
                         )
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                             if (exercise != null) MuscleBadge(exercise.primaryMuscle, exercise.photoPath)
                             Text(exercise?.name ?: "Unknown exercise", style = MaterialTheme.typography.titleMedium)
                         }
@@ -321,7 +322,7 @@ private fun WorkoutPage(
                             val name = if (row.kind == SetKind.SUPERSET) " · ${rowExercise?.name.orEmpty()}" else ""
                             val prev = previousRowFor(row, allRows, previous)
                                 ?.let { formatPreviousSet(rowExercise?.type ?: ExerciseType.WEIGHTED, it, false) }
-                            Column(modifier = Modifier.padding(start = if (row.kind == SetKind.NORMAL) 0.dp else 12.dp)) {
+                            Column(modifier = Modifier.padding(start = if (row.kind == SetKind.NORMAL) 0.dp else Space.md)) {
                                 Text(
                                     text = label + name + if (target != null) " · target $target" else "",
                                     style = MaterialTheme.typography.bodySmall

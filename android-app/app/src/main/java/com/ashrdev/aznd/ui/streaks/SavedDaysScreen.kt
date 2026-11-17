@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun SavedDaysScreen(
@@ -43,7 +44,7 @@ fun SavedDaysScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp)
+                    .padding(Space.xl)
             ) {
                 Text("No saved days yet.", style = MaterialTheme.typography.bodyMedium)
             }
@@ -51,9 +52,9 @@ fun SavedDaysScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = padding.calculateBottomPadding()
+                    start = Space.lg, end = Space.lg, top = Space.lg, bottom = padding.calculateBottomPadding()
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(Space.md)
             ) {
                 items(streaks, key = { it.id }) { streak ->
                     Card(
@@ -64,7 +65,7 @@ fun SavedDaysScreen(
                         Text(
                             streak.name,
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(16.dp)
+                            modifier = Modifier.padding(Space.lg)
                         )
                     }
                 }

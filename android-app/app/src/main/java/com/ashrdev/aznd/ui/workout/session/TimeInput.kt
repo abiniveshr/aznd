@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.theme.Space
 
 @Composable
 fun TimeInput(
@@ -46,7 +47,7 @@ fun TimeInput(
         onTotalChange(t)
     }
 
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
         TimePart("h", hours, { hours = it; onTotalChange(total()) }, ::normalize)
         TimePart("m", minutes, { minutes = it; onTotalChange(total()) }, ::normalize)
         TimePart("s", seconds, { seconds = it; onTotalChange(total()) }, ::normalize)

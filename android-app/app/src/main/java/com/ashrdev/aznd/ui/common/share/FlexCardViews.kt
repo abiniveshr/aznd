@@ -120,6 +120,7 @@ import com.ashrdev.aznd.ui.theme.GradientKind
 import com.ashrdev.aznd.ui.theme.GradientSpec
 import com.ashrdev.aznd.ui.theme.LocalAzndStyle
 import com.ashrdev.aznd.ui.theme.ResolvedFill
+import com.ashrdev.aznd.ui.theme.Space
 import com.ashrdev.aznd.ui.theme.ThemeColor
 import com.ashrdev.aznd.ui.theme.ThemePresets
 import com.ashrdev.aznd.ui.theme.azndFill
@@ -152,7 +153,7 @@ internal fun EditorPage(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = Space.lg, vertical = Space.sm)
             ) {
                 val cardHeight = maxHeight
                 FlexPinchBox(enabled = !open, oneFinger = true, modifier = Modifier.fillMaxSize()) {
@@ -167,12 +168,12 @@ internal fun EditorPage(
                     )
                 }
             }
-            FlexWarning(spec, plan, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            FlexWarning(spec, plan, Modifier.padding(horizontal = Space.lg, vertical = Space.xs))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { open = !open }
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = Space.lg, vertical = Space.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -396,12 +397,12 @@ internal fun LookTab(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottom + 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.sm, bottom = bottom + Space.sm),
+        verticalArrangement = Arrangement.spacedBy(Space.md)
     ) {
         item {
             FlexFoldSection("Starter looks", "Palettes and app themes") {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     item {
                         // The app's own theme: screen fill, card fill, borders, corners and colours carry over.
                         val bg = app.fill(ThemeColor.BACKGROUND)
@@ -416,7 +417,7 @@ internal fun LookTab(
                     }
                 }
                 Text("App theme presets", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                     items(ThemePresets.all) { preset ->
                         val presetStyle = azndStyleOf(preset.settings, dark = true)
                         val look = FlexStyle().withAppTheme(presetStyle)
@@ -603,14 +604,14 @@ private fun LookChip(label: String, fillOf: ResolvedFill, accent: Int, onClick: 
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .padding(4.dp),
+            .padding(Space.xs),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
                 .size(52.dp)
                 .clip(CircleShape)
-                .azndFill(fillOf, CircleShape)
+                .azndFill(fillOf, CircleShape, preview = true)
                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -672,10 +673,10 @@ private fun LazyListScope.backgroundItems(
                     else -> "No photo yet. Choose one to use as the background."
                 }
                 Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = onPickPhoto) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(Space.sm))
                         Text("Choose photo")
                     }
                     if (st.photoUri != null) {

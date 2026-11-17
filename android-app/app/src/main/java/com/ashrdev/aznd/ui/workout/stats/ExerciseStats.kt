@@ -27,6 +27,7 @@ import com.ashrdev.aznd.domain.workout.SetKind
 import com.ashrdev.aznd.ui.common.StatsGraph
 import com.ashrdev.aznd.ui.workout.WorkoutViewModel
 import com.ashrdev.aznd.ui.workout.exercise.ExercisePicker
+import com.ashrdev.aznd.ui.theme.Space
 
 /*
  * Per-exercise statistics, built as three independent layers so any screen can reuse them:
@@ -206,7 +207,7 @@ fun ExerciseStatsView(data: ExerciseStatsData, modifier: Modifier = Modifier, ti
             "No logged sets for this exercise yet.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = modifier.padding(16.dp)
+            modifier = modifier.padding(Space.lg)
         )
         return
     }
@@ -237,7 +238,7 @@ fun ExerciseStatsPane(
         Text(
             "No exercises to show stats for yet.",
             style = MaterialTheme.typography.bodyMedium,
-            modifier = modifier.padding(24.dp)
+            modifier = modifier.padding(Space.xl)
         )
         return
     }
@@ -245,12 +246,12 @@ fun ExerciseStatsPane(
     val selected = pool.firstOrNull { it.id == selectedId } ?: pool.first()
     val data by produceState(ExerciseStatsData(), selected.id) { value = loader(selected) }
 
-    Column(modifier = modifier.fillMaxSize().padding(top = 16.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(top = Space.lg)) {
         ExercisePicker(
             selected = selected,
             exercises = pool,
             onPick = { selectedId = it.id },
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = Space.lg),
             allowAddCustom = false
         )
         if (data.loaded) ExerciseStatsView(data, Modifier.weight(1f))

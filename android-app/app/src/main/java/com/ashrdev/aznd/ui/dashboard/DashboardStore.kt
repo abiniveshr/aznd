@@ -9,12 +9,19 @@ import com.ashrdev.aznd.ui.common.tiling.TileNode
 import com.ashrdev.aznd.ui.common.tiling.TileTree
 import com.ashrdev.aznd.ui.common.tiling.TileTreeJson
 import com.ashrdev.aznd.ui.theme.BorderKind
+import com.ashrdev.aznd.ui.theme.FillAnchor
 import com.ashrdev.aznd.ui.theme.fillStyleFromJson
 import com.ashrdev.aznd.ui.theme.gradientFromJson
 import com.ashrdev.aznd.ui.theme.patternsFromJson
 import com.ashrdev.aznd.ui.theme.taperLineFromJson
 import com.ashrdev.aznd.ui.theme.toJson
 import com.ashrdev.aznd.ui.theme.toJsonArray
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -203,8 +210,30 @@ class DashboardStore(context: Context) {
         persist()
     }
 
+    // Changes show at once; the JSON is encoded and written a moment after the last one, off the main thread.
+    private val writer = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var pending: Job? = null
+
     private fun persist() {
-        prefs.edit().putString(KEY, encode(presets, active, look).toString()).apply()
+        pending?.cancel()
+        pending = writer.launch {
+            delay(WRITE_DELAY_MS)
+            write()
+        }
+    }
+
+    /** Writes a change still waiting for its delay now. Call it when a screen that edits leaves. */
+    fun flush() {
+        if (pending?.isActive != true) return
+        pending?.cancel()
+        pending = writer.launch { write() }
+    }
+
+    private fun write() {
+        // Reads the latest state, so overlapping writes can never leave an older one behind.
+        synchronized(prefs) {
+            prefs.edit().putString(KEY, encode(presets, active, look).toString()).apply()
+        }
     }
 
     private fun nextPresetId(): Int = (presets.maxOfOrNull { it.id } ?: 0) + 1
@@ -238,6 +267,7 @@ class DashboardStore(context: Context) {
         const val KEY = "presets"
         const val OLD_KEY = "layout"
         const val VERSION = 2
+        const val WRITE_DELAY_MS = 350L
 
         fun encode(presets: List<DashPreset>, active: List<Int>, look: DashLook): JSONObject {
             val arr = JSONArray()
@@ -331,6 +361,8 @@ class DashboardStore(context: Context) {
             .put("angle", l.gradientAngle)
             .apply { l.bgGradient?.let { put("gradient", it.toJson()) } }
             .put("patterns", l.bgPatterns.toJsonArray())
+            .put("gradientAnchor", l.bgGradientAnchor.name)
+            .put("patternAnchor", l.bgPatternAnchor.name)
             .apply { l.photoUri?.let { put("photo", it) } }
             .put("blur", l.photoBlur.toDouble())
             .put("dim", l.photoDim.toDouble())
@@ -365,6 +397,8 @@ class DashboardStore(context: Context) {
                 gradientAngle = o.optInt("angle", d.gradientAngle).coerceIn(0, 360),
                 bgGradient = o.optJSONObject("gradient")?.let { gradientFromJson(it) },
                 bgPatterns = patternsFromJson(o.optJSONArray("patterns")),
+                bgGradientAnchor = FillAnchor.entries.firstOrNull { it.name == o.optString("gradientAnchor") } ?: d.bgGradientAnchor,
+                bgPatternAnchor = FillAnchor.entries.firstOrNull { it.name == o.optString("patternAnchor") } ?: d.bgPatternAnchor,
                 photoUri = o.optString("photo").takeIf { it.isNotEmpty() },
                 photoBlur = f("blur", d.photoBlur, 0f..1f),
                 photoDim = f("dim", d.photoDim, 0f..0.9f),
