@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.ashrdev.aznd.ui.common
 
@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,6 +66,7 @@ import com.ashrdev.aznd.ui.common.share.ColorRow
 import com.ashrdev.aznd.ui.common.share.LabeledSlider
 import com.ashrdev.aznd.ui.components.AlertDialog
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.theme.ColorEngine
 import com.ashrdev.aznd.ui.theme.FillAnchor
 import com.ashrdev.aznd.ui.theme.FillBase
 import com.ashrdev.aznd.ui.theme.FillStyle
@@ -72,6 +76,7 @@ import com.ashrdev.aznd.ui.theme.GradientStop
 import com.ashrdev.aznd.ui.theme.PatternKind
 import com.ashrdev.aznd.ui.theme.PatternSpec
 import com.ashrdev.aznd.ui.theme.ResolvedFill
+import com.ashrdev.aznd.ui.theme.ThemeDerive
 import com.ashrdev.aznd.ui.theme.azndFill
 import com.ashrdev.aznd.ui.theme.mixArgb
 import java.util.Locale
@@ -90,6 +95,21 @@ private val GradientPresets = listOf(
     GradientPreset("Aurora", GradientKind.LINEAR, 120, intArrayOf(0xFF0B1F3A.toInt(), 0xFF1FBF6B.toInt(), 0xFF7C9CFF.toInt(), 0xFFC58CFF.toInt())),
     GradientPreset("Rainbow", GradientKind.SWEEP, 0, intArrayOf(0xFFFF5A5F.toInt(), 0xFFFFD166.toInt(), 0xFF5CE0A0.toInt(), 0xFF7C9CFF.toInt(), 0xFFC58CFF.toInt(), 0xFFFF5A5F.toInt()))
 )
+
+private fun greyOf(argb: Int): Int =
+    if (ColorEngine.isNeutral(argb)) argb else ColorEngine.smartGrey(ColorEngine.lightness(argb), ColorEngine.alphaOf(argb))
+
+private fun greyFill(fill: FillStyle): FillStyle = ThemeDerive.mapFill(fill) { greyOf(it) }
+
+@Composable
+private fun BrightnessSlider(color: Int, onChange: (Int) -> Unit) {
+    val percent = (ColorEngine.lightness(color) * 100.0).roundToInt().coerceIn(0, 100)
+    LabeledSlider("Brightness", "$percent", percent.toFloat(), 0f..100f) { v ->
+        onChange(ColorEngine.smartGrey(v.roundToInt() / 100.0, ColorEngine.alphaOf(color)))
+    }
+}
+
+enum class FillSection { ALL, COLOUR, PATTERNS }
 
 /** Another element of the theme the editor can copy from: its name, its base colour and its fill. */
 class FillCopySource(val label: String, val baseColor: Int, val fill: FillStyle)
@@ -117,9 +137,16 @@ fun FillEditor(
     onChange: (baseColor: Int, fill: FillStyle) -> Unit,
     modifier: Modifier = Modifier,
     chooseBase: Boolean = true,
-    copyFrom: List<FillCopySource> = emptyList()
+    copyFrom: List<FillCopySource> = emptyList(),
+    grayscale: Boolean = false,
+    showAnchors: Boolean = true,
+    section: FillSection = FillSection.ALL
 ) {
+    val showColour = section != FillSection.PATTERNS
+    val showPatterns = section != FillSection.COLOUR
     val color = baseColor
+    val shownColor = if (grayscale) greyOf(color) else color
+    val shownFill = if (grayscale) greyFill(fill) else fill
     val patterns = fill.patterns
     // Each pattern keeps an id while others are added and removed, so open/closed state follows the card.
     var ids by remember { mutableStateOf(List(patterns.size) { it }) }
@@ -140,7 +167,9 @@ fun FillEditor(
     }
     val layerIds = if (ids.size == patterns.size) ids else List(patterns.size) { -1 - it }
 
-    fun emit(c: Int = color, f: FillStyle = fill) = onChange(c, f)
+    fun emit(c: Int = color, f: FillStyle = fill) {
+        if (grayscale) onChange(greyOf(c), greyFill(f)) else onChange(c, f)
+    }
 
     fun gradient(change: (GradientSpec) -> GradientSpec) {
         emit(f = fill.copy(gradient = change(fill.gradient)))
@@ -236,14 +265,23 @@ fun FillEditor(
                                 modifier = Modifier
                                     .size(32.dp)
                                     .clip(CircleShape)
-                                    .azndFill(ResolvedFill(Color(source.baseColor), source.fill), CircleShape, preview = true)
+                                    .azndFill(
+                                        ResolvedFill(
+                                            Color(if (grayscale) greyOf(source.baseColor) else source.baseColor),
+                                            if (grayscale) greyFill(source.fill) else source.fill
+                                        ),
+                                        CircleShape,
+                                        preview = true
+                                    )
                                     .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             )
                             Spacer(Modifier.width(Space.md))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(source.label)
                                 Text(
-                                    if (source.fill.isPlain) String.format(Locale.US, "#%06X", 0xFFFFFF and source.baseColor) else source.fill.summary(),
+                                    if (source.fill.isPlain) {
+                                        String.format(Locale.US, "#%06X", 0xFFFFFF and (if (grayscale) greyOf(source.baseColor) else source.baseColor))
+                                    } else source.fill.summary(),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -258,103 +296,116 @@ fun FillEditor(
     }
 
     val shape = RoundedCornerShape(12.dp)
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.md)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(shape)
-                .azndFill(ResolvedFill(Color(color), fill), shape, preview = true)
-                .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-        )
-        if (chooseBase) {
-            ChipChoice(FillBase.entries, fill.base, { it.label }) { picked ->
-                emit(
-                    f = if (picked == FillBase.GRADIENT && fill.gradient == GradientSpec()) {
-                        // First time: start from the current colour fading to a darker one.
-                        fill.copy(
-                            base = picked,
-                            gradient = GradientSpec.of(GradientKind.LINEAR, 90, color, mixArgb(color, 0xFF000000.toInt(), 0.55f))
-                        )
-                    } else fill.copy(base = picked)
-                )
-            }
-        }
-
-        if (fill.base == FillBase.SOLID) {
-            ColorRow(baseLabel, color) { emit(c = it) }
-        } else {
-            GradientSection(
-                g = fill.gradient,
-                onChange = { change -> gradient(change) },
-                onPickStop = { pickStop = it },
-                onPreset = { p -> gradient { cur -> GradientSpec.of(p.kind, p.angle, *p.colors).copy(centerX = cur.centerX, centerY = cur.centerY, radius = cur.radius) } }
-            )
-            ChipChoice(FillAnchor.entries, fill.gradientAnchor, { it.label }) { picked ->
-                emit(f = fill.copy(gradientAnchor = picked))
-            }
-        }
-
-        val under = ResolvedFill(Color(fill.representative(color)), FillStyle.Plain)
-        FillFold(
-            title = "Patterns",
-            summary = patternSummary(patterns),
-            open = patternsOpen,
-            onToggle = { patternsOpen = !patternsOpen }
-        ) {
-            // The patterns to pick from. Tapping one adds it as a card below (or opens its card if it is already there).
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
-                items(PatternKind.entries.filter { it != PatternKind.NONE }) { kind ->
-                    PatternTile(
-                        kind = kind,
-                        under = under,
-                        count = patterns.count { it.kind == kind },
-                        tint = patterns.firstOrNull { it.kind == kind }?.tint ?: 0xFFFFFFFF.toInt()
-                    ) {
-                        val at = patterns.indexOfFirst { it.kind == kind }
-                        if (at < 0) insertLayer(PatternSpec.of(kind)) else expanded = expanded + layerIds[at]
-                    }
+    val under = ResolvedFill(Color(shownFill.representative(shownColor)), FillStyle.Plain)
+    val patternBody: @Composable () -> Unit = {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.md)) {
+            items(PatternKind.entries.filter { it != PatternKind.NONE }) { kind ->
+                PatternTile(
+                    kind = kind,
+                    under = under,
+                    count = patterns.count { it.kind == kind },
+                    tint = (patterns.firstOrNull { it.kind == kind }?.tint ?: 0xFFFFFFFF.toInt()).let { if (grayscale) greyOf(it) else it }
+                ) {
+                    val at = patterns.indexOfFirst { it.kind == kind }
+                    if (at < 0) insertLayer(PatternSpec.of(kind)) else expanded = expanded + layerIds[at]
                 }
             }
-            if (patterns.isEmpty()) {
-                Text(
-                    "No patterns yet. Tap one above to add it.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        }
+        if (patterns.isEmpty()) {
+            Text(
+                "No patterns yet. Tap one above to add it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        patterns.forEachIndexed { index, spec ->
+            val id = layerIds[index]
+            key(id) {
+                val sameKind = patterns.filter { it.kind == spec.kind }
+                PatternLayerCard(
+                    spec = spec,
+                    number = if (sameKind.size > 1) patterns.take(index).count { it.kind == spec.kind } + 1 else 0,
+                    under = under.base,
+                    grayscale = grayscale,
+                    expanded = id in expanded,
+                    onToggleExpanded = { expanded = if (id in expanded) expanded - id else expanded + id },
+                    onChange = { change -> updateLayer(id, change) },
+                    onPickTint = { pickTintFor = id },
+                    onAdd = { duplicateLayer(id) },
+                    onRemove = { removeLayer(id) }
                 )
             }
-            patterns.forEachIndexed { index, spec ->
-                val id = layerIds[index]
-                key(id) {
-                    val sameKind = patterns.filter { it.kind == spec.kind }
-                    PatternLayerCard(
-                        spec = spec,
-                        // "Dots 2" when there are several of one kind, plain "Dots" otherwise.
-                        number = if (sameKind.size > 1) patterns.take(index).count { it.kind == spec.kind } + 1 else 0,
-                        under = under.base,
-                        expanded = id in expanded,
-                        onToggleExpanded = { expanded = if (id in expanded) expanded - id else expanded + id },
-                        onChange = { change -> updateLayer(id, change) },
-                        onPickTint = { pickTintFor = id },
-                        onAdd = { duplicateLayer(id) },
-                        onRemove = { removeLayer(id) }
+        }
+        if (showAnchors && patterns.isNotEmpty()) {
+            ChipChoice(FillAnchor.entries, fill.patternAnchor, { it.label }) { picked ->
+                emit(f = fill.copy(patternAnchor = picked))
+            }
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+        if (section == FillSection.ALL) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(shape)
+                    .azndFill(ResolvedFill(Color(shownColor), shownFill), shape, preview = true)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            )
+        }
+        if (showColour) {
+            if (chooseBase) {
+                ChipChoice(FillBase.entries, fill.base, { it.label }) { picked ->
+                    emit(
+                        f = if (picked == FillBase.GRADIENT && fill.gradient == GradientSpec()) {
+                            fill.copy(
+                                base = picked,
+                                gradient = GradientSpec.of(GradientKind.LINEAR, 90, color, mixArgb(color, 0xFF000000.toInt(), 0.55f))
+                            )
+                        } else fill.copy(base = picked)
                     )
                 }
             }
-            if (patterns.isNotEmpty()) {
-                ChipChoice(FillAnchor.entries, fill.patternAnchor, { it.label }) { picked ->
-                    emit(f = fill.copy(patternAnchor = picked))
+
+            if (fill.base == FillBase.SOLID) {
+                if (grayscale) BrightnessSlider(color) { emit(c = it) } else ColorRow(baseLabel, color) { emit(c = it) }
+            } else {
+                GradientSection(
+                    g = fill.gradient,
+                    grayscale = grayscale,
+                    onChange = { change -> gradient(change) },
+                    onPickStop = { pickStop = it },
+                    onPreset = { p -> gradient { cur -> GradientSpec.of(p.kind, p.angle, *p.colors).copy(centerX = cur.centerX, centerY = cur.centerY, radius = cur.radius) } }
+                )
+                if (showAnchors) {
+                    ChipChoice(FillAnchor.entries, fill.gradientAnchor, { it.label }) { picked ->
+                        emit(f = fill.copy(gradientAnchor = picked))
+                    }
                 }
             }
         }
 
-        if (copyFrom.isNotEmpty()) {
+        if (showPatterns) {
+            if (section == FillSection.PATTERNS) {
+                patternBody()
+            } else {
+                FillFold(
+                    title = "Patterns",
+                    summary = patternSummary(patterns),
+                    open = patternsOpen,
+                    onToggle = { patternsOpen = !patternsOpen }
+                ) { patternBody() }
+            }
+        }
+
+        if (showColour && copyFrom.isNotEmpty()) {
             OutlinedButton(onClick = { showCopy = true }, modifier = Modifier.fillMaxWidth()) { Text("Copy from another element") }
         }
     }
 }
 
-private fun patternSummary(patterns: List<PatternSpec>): String {
+internal fun patternSummary(patterns: List<PatternSpec>): String {
     val on = patterns.filter { it.enabled }
     return when {
         patterns.isEmpty() -> "None"
@@ -416,14 +467,16 @@ private fun FillFold(
 @Composable
 private fun GradientSection(
     g: GradientSpec,
+    grayscale: Boolean,
     onChange: ((GradientSpec) -> GradientSpec) -> Unit,
     onPickStop: (Int) -> Unit,
     onPreset: (GradientPreset) -> Unit
 ) {
+    var selectedStop by remember { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
             items(GradientPresets) { p ->
-                val spec = GradientSpec.of(p.kind, p.angle, *p.colors)
+                val spec = GradientSpec.of(p.kind, p.angle, *(if (grayscale) IntArray(p.colors.size) { greyOf(p.colors[it]) } else p.colors))
                 Column(
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.small)
@@ -466,9 +519,15 @@ private fun GradientSection(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(Color(stop.color))
+                        .background(Color(if (grayscale) greyOf(stop.color) else stop.color))
                         .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .clickable { onPickStop(index) }
+                        .clickable {
+                            if (grayscale) {
+                                selectedStop = if (selectedStop == index) null else index
+                            } else {
+                                onPickStop(index)
+                            }
+                        }
                 )
                 Column(modifier = Modifier
                     .weight(1f)
@@ -481,6 +540,11 @@ private fun GradientSection(
                         },
                         valueRange = 0f..1f
                     )
+                    if (grayscale && selectedStop == index) {
+                        BrightnessSlider(greyOf(stop.color)) { grey ->
+                            onChange { cur -> cur.copy(stops = cur.stops.mapIndexed { i, s -> if (i == index) s.copy(color = grey) else s }) }
+                        }
+                    }
                 }
                 IconButton(
                     enabled = g.stops.size > 2,
@@ -488,12 +552,14 @@ private fun GradientSection(
                 ) { Icon(Icons.Default.Delete, contentDescription = "Remove colour") }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.sm)
+        ) {
             OutlinedButton(
                 enabled = g.stops.size < 8,
                 onClick = {
                     onChange { cur ->
-                        // New colour goes into the widest gap, mixed from its two neighbours.
                         val sorted = cur.cleanStops()
                         var at = 0
                         var gap = -1f
@@ -506,7 +572,8 @@ private fun GradientSection(
                         }
                         val a = sorted[at]
                         val b = sorted[at + 1]
-                        cur.copy(stops = cur.stops + GradientStop((a.position + b.position) / 2f, mixArgb(a.color, b.color, 0.5f)))
+                        val kept = if (cur.stops.size < 2) sorted else cur.stops
+                        cur.copy(stops = kept + GradientStop((a.position + b.position) / 2f, mixArgb(a.color, b.color, 0.5f)))
                     }
                 }
             ) {
@@ -519,13 +586,21 @@ private fun GradientSection(
                 Spacer(Modifier.width(Space.sm))
                 Text("Reverse")
             }
-            OutlinedButton(onClick = {
-                onChange { cur ->
-                    val sorted = cur.cleanStops()
-                    val n = sorted.size
-                    cur.copy(stops = sorted.mapIndexed { i, s -> GradientStop(i / (n - 1).toFloat(), s.color) })
+            OutlinedButton(
+                enabled = g.stops.size >= 2,
+                onClick = {
+                    onChange { cur ->
+                        val sorted = cur.cleanStops()
+                        val n = sorted.size
+                        if (cur.stops.size < 2 || n < 2) cur
+                        else cur.copy(stops = sorted.mapIndexed { i, s -> GradientStop(i / (n - 1).toFloat(), s.color) })
+                    }
                 }
-            }) { Text("Even") }
+            ) {
+                Icon(Icons.Default.Straighten, contentDescription = null)
+                Spacer(Modifier.width(Space.sm))
+                Text("Even")
+            }
         }
     }
 }
@@ -572,6 +647,7 @@ private fun PatternLayerCard(
     under: Color,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
+    grayscale: Boolean,
     onChange: ((PatternSpec) -> PatternSpec) -> Unit,
     onPickTint: () -> Unit,
     onAdd: () -> Unit,
@@ -591,7 +667,8 @@ private fun PatternLayerCard(
                     .padding(start = Space.md, end = Space.sm, top = Space.sm, bottom = Space.sm),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val preview = FillStyle(patterns = listOf(spec.copy(enabled = true, intensity = maxOf(spec.intensity, 0.3f))))
+                val previewSpec = if (grayscale) spec.copy(tint = greyOf(spec.tint)) else spec
+                val preview = FillStyle(patterns = listOf(previewSpec.copy(enabled = true, intensity = maxOf(spec.intensity, 0.3f))))
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -643,7 +720,9 @@ private fun PatternLayerCard(
                     LabeledSlider("Size", "${(spec.scale * 100).roundToInt()}%", spec.scale, 0.5f..4f) { v ->
                         onChange { it.copy(scale = v) }
                     }
-                    if (spec.kind.tinted) {
+                    if (spec.kind.tinted && grayscale) {
+                        BrightnessSlider(spec.tint) { grey -> onChange { it.copy(tint = grey) } }
+                    } else if (spec.kind.tinted) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.md)) {
                             Box(
                                 modifier = Modifier

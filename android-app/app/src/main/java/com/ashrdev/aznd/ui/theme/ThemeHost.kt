@@ -59,7 +59,7 @@ private const val BLUR_RADIUS = 6
 private const val BLUR_PASSES = 3
 
 private class HostMemo {
-    var lastSets: Set<PatternSet>? = null
+    var lastSets: Set<BakeId>? = null
     var settledMode: PatternMode? = null
     var seenMode: PatternMode? = null
 }

@@ -252,8 +252,9 @@ private class FieldGradientBrush(private val g: GradientSpec, private val fieldW
  * composition), and this element shows the piece of it under it: the same pattern on two cards shows two different
  * pieces, and a card that scrolls or moves slides over a pattern that stays put. With [FillAnchor.ELEMENT] it starts at
  * the element's corner and moves with it. A gradient spans its own element, or with [FillAnchor.SCREEN] the whole screen
- * ([LocalFillField]). A pattern whose [ScreenBakes] bake is in memory is drawn from the bake; while its set is required
- * and not baked yet only the base is drawn; otherwise the tiles are drawn live. The element's position is read only
+ * ([LocalFillField]). A pattern whose [ScreenBakes] bake is in memory is drawn from the bake, which also holds the base
+ * colour or the stationary gradient when its [BakeId] has one (then the bake is the only draw); while its bake is required
+ * and not made yet only the base is drawn; otherwise the tiles are drawn live. The element's position is read only
  * when drawing, and only when an anchor in play is [FillAnchor.SCREEN].
  */
 fun Modifier.azndFill(fill: ResolvedFill?, shape: Shape = RectangleShape, preview: Boolean = false): Modifier {
@@ -261,12 +262,14 @@ fun Modifier.azndFill(fill: ResolvedFill?, shape: Shape = RectangleShape, previe
     val mode = if (preview) PatternMode.LIVE else PerformanceStore.patternMode
     val style = fill.style
     val base = fill.base
-    val set = if (mode == PatternMode.OFF) null else ScreenBakes.setOf(style)
+    val active = if (mode == PatternMode.OFF) emptyList() else style.activePatterns
+    val hasPatterns = active.isNotEmpty()
+    val id = if (hasPatterns && mode == PatternMode.BAKED) ScreenBakes.idOf(fill) else null
     val gradient = style.base == FillBase.GRADIENT
-    if (!gradient && set == null) return this.background(base, shape)
+    if (!gradient && !hasPatterns) return this.background(base, shape)
     val screenGradient = gradient && style.gradientAnchor == FillAnchor.SCREEN
-    val screenPattern = set != null && style.patternAnchor == FillAnchor.SCREEN
-    if (set == null && !screenGradient) {
+    val screenPattern = hasPatterns && style.patternAnchor == FillAnchor.SCREEN
+    if (!hasPatterns && !screenGradient) {
         return this.drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
             val baseBrush: Brush = gradientBrush(style.gradient)
@@ -290,14 +293,15 @@ fun Modifier.azndFill(fill: ResolvedFill?, shape: Shape = RectangleShape, previe
         }
         watcher.drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
-            val fieldBrush = if (useField) FieldGradientBrush(style.gradient, field.width.toFloat(), field.height.toFloat()) else null
+            val bakeSize = if (id != null) ScreenBakes.size else null
+            val bake = if (id != null && bakeSize != null) ScreenBakes.bakeFor(id, bakeSize) else null
+            val bakeOnly = bake != null && id != null && (id.solid != null || id.gradient != null)
+            val fieldBrush = if (useField && !bakeOnly) FieldGradientBrush(style.gradient, field.width.toFloat(), field.height.toFloat()) else null
             val baseBrush: Brush = when {
                 !gradient -> SolidColor(base)
                 fieldBrush != null -> fieldBrush
                 else -> gradientBrush(style.gradient)
             }
-            val bakeSize = if (set != null && mode == PatternMode.BAKED) ScreenBakes.size else null
-            val bake = if (set != null && bakeSize != null) ScreenBakes.bakeFor(set, bakeSize) else null
             val bakeShader = if (bake != null) BitmapShader(bake, Shader.TileMode.MIRROR, Shader.TileMode.MIRROR) else null
             val bakeBrush: Brush? = if (bakeShader != null) {
                 object : ShaderBrush() {
@@ -306,13 +310,15 @@ fun Modifier.azndFill(fill: ResolvedFill?, shape: Shape = RectangleShape, previe
             } else {
                 null
             }
-            val live = set != null && bake == null && (mode == PatternMode.LIVE || !ScreenBakes.isRequired(set))
-            val overlays = if (live && set != null) set.flatMap { p -> patternOverlays(p, density) } else emptyList()
+            val live = hasPatterns && bake == null && (mode == PatternMode.LIVE || (id != null && !ScreenBakes.isRequired(id)))
+            val overlays = if (live) active.flatMap { p -> patternOverlays(p, density) } else emptyList()
             val bakeMatrix = Matrix()
             onDrawBehind {
                 val origin = if (watch) corner.value else Offset.Zero
-                fieldBrush?.moveTo(origin.x, origin.y)
-                drawOutline(outline, baseBrush)
+                if (!bakeOnly) {
+                    fieldBrush?.moveTo(origin.x, origin.y)
+                    drawOutline(outline, baseBrush)
+                }
                 if (bakeShader != null && bakeBrush != null) {
                     if (screenPattern) {
                         bakeMatrix.setTranslate(-origin.x.roundToInt().toFloat(), -origin.y.roundToInt().toFloat())

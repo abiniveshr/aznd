@@ -27,12 +27,11 @@ import androidx.compose.ui.unit.Dp
 import com.ashrdev.aznd.ui.common.FillCopySource
 import com.ashrdev.aznd.ui.common.FillEditor
 import com.ashrdev.aznd.ui.common.TaperLineControls
+import com.ashrdev.aznd.ui.common.FontPicker
 import com.ashrdev.aznd.ui.common.rememberImagePicker
 import com.ashrdev.aznd.ui.common.share.ChipChoice
 import com.ashrdev.aznd.ui.common.share.ColorRow
-import com.ashrdev.aznd.ui.common.share.DropdownField
 import com.ashrdev.aznd.ui.common.share.FlexFoldSection
-import com.ashrdev.aznd.ui.common.share.FlexFont
 import com.ashrdev.aznd.ui.common.share.LabeledSlider
 import com.ashrdev.aznd.ui.common.share.SwitchRow
 import com.ashrdev.aznd.ui.components.Button
@@ -101,7 +100,7 @@ fun DashLookPage(
         }
         item {
             FlexFoldSection("Text", "${look.font.label} · ${(look.textScale * 100).roundToInt()}%") {
-                DropdownField("Font", FlexFont.entries, look.font, { it.label }) { picked -> style { it.copy(font = picked) } }
+                FontPicker("Font", look.font, { picked -> if (picked != null) style { it.copy(font = picked) } })
                 LabeledSlider("Size", "${(look.textScale * 100).roundToInt()}%", look.textScale, LOOK_TEXT_MIN..LOOK_TEXT_MAX) { v ->
                     style { it.copy(textScale = (v * 20f).roundToInt() / 20f) }
                 }

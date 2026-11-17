@@ -55,10 +55,12 @@ fun ProvideDashLook(look: DashLook, content: @Composable () -> Unit) {
     val family = rememberDashFont(look.font)
     val text = remember(family, look.textScale) { DashText(family, look.textScale) }
     val owner = remember { Any() }
-    val bgSet = if (look.bgMode == DashBgMode.SOLID || look.bgMode == DashBgMode.GRADIENT) ScreenBakes.setOf(look.backgroundFill()) else null
-    val tileSet = if (look.tiles == DashTileStyle.FILLED) ScreenBakes.setOf(look.tileFill) else null
-    DisposableEffect(bgSet, tileSet) {
-        ScreenBakes.require(owner, setOfNotNull(bgSet, tileSet))
+    val appCard = LocalAzndStyle.current.card
+    val bgId = if (look.bgMode == DashBgMode.SOLID || look.bgMode == DashBgMode.GRADIENT) ScreenBakes.idOf(ResolvedFill(Color(look.bgA), look.backgroundFill())) else null
+    val panel = if (look.customColors) Color(look.tileColor) else appCard
+    val tileId = if (look.tiles == DashTileStyle.FILLED) ScreenBakes.idOf(ResolvedFill(panel, look.tileFill)) else null
+    DisposableEffect(bgId, tileId) {
+        ScreenBakes.require(owner, setOfNotNull(bgId, tileId))
         onDispose { ScreenBakes.release(owner) }
     }
     CompositionLocalProvider(LocalDashLook provides look, LocalDashText provides text, content = content)

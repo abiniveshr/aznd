@@ -236,7 +236,7 @@ fun AzndTheme(settings: ThemeSettings, content: @Composable () -> Unit) {
     }
     val shapes = remember(settings.cardCorner) { shapesFor(settings.cardCorner) }
     val fontFamily = remember(settings.appFont, context) { AppFonts.familyOf(settings.appFont, context) }
-    val typography = remember(fontFamily) { azndTypography(fontFamily) }
+    val typography = remember(fontFamily, settings.textScale) { azndTypography(fontFamily, settings.textScale) }
 
     MaterialTheme(
         colorScheme = colorScheme,

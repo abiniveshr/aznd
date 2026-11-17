@@ -65,8 +65,8 @@ import com.ashrdev.aznd.ui.theme.Space
 /*
  * Configure: the step-by-step popup that asks what each card of a poster shows, before the poster is used.
  * One step per card that has a choice (see dataNeed), in the order the cards are on the poster; the poster is drawn
- * on top with the current card lit and the rest dimmed. Skip puts a card back to its default (the value the caller
- * passed in as [initial]).
+ * on top with the current card lit and the rest dimmed. Skip finishes the popup at once with every card at its
+ * default (the value the caller passed in as [initial]).
  */
 
 /** The short side of the preview poster, in pixels: small, it is only a guide. */
@@ -119,7 +119,7 @@ private fun stepName(block: FlexBlock): String =
 
 /**
  * The Configure popup (a full-screen dialog). [initial] holds each card's default choice: where the popup starts and
- * what Skip goes back to. [previewContent] makes the poster's content for the choices so far (the caller wires
+ * what Skip finishes with. [previewContent] makes the poster's content for the choices so far (the caller wires
  * loadBoundContent); the preview is drawn off the main thread, and again 300 ms after the last change.
  * [onDone] gets all the choices; [onCancel] is the close button, and the system back button on the first step.
  */
@@ -209,11 +209,11 @@ internal fun FlexConfigureDialog(
                     OutlinedButton(onClick = { goBack() }, enabled = index > 0) { Text("Back") }
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         TextButton(onClick = {
-                            // Skip: this card goes back to its default.
-                            val default = initial[block.id]
-                            val reset = if (default != null) bindings + (block.id to default) else bindings - block.id
-                            bindings = reset
-                            if (last) onDone(reset) else step = index + 1
+                            val defaults = steps.fold(bindings) { acc, b ->
+                                val default = initial[b.id]
+                                if (default != null) acc + (b.id to default) else acc - b.id
+                            }
+                            onDone(defaults)
                         }) { Text("Skip") }
                     }
                     Button(onClick = { if (last) onDone(bindings) else step = index + 1 }) { Text(if (last) "Done" else "Next") }

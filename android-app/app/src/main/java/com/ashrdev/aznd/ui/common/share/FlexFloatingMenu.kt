@@ -42,7 +42,8 @@ internal class FlexMenuAction(
 internal fun FlexFloatingMenu(
     actions: List<FlexMenuAction>,
     modifier: Modifier = Modifier,
-    hidden: Boolean = false
+    hidden: Boolean = false,
+    label: String = "Poster tools"
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     var spotX by rememberSaveable { mutableStateOf(1f) }
@@ -77,7 +78,7 @@ internal fun FlexFloatingMenu(
             ) {
                 if (!open) {
                     IconButton(onClick = { open = true }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Poster tools")
+                        Icon(Icons.Default.MoreVert, contentDescription = label)
                     }
                 } else {
                     Column(
@@ -86,7 +87,7 @@ internal fun FlexFloatingMenu(
                     ) {
                         val toggle: @Composable () -> Unit = {
                             IconButton(onClick = { open = false }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Hide poster tools")
+                                Icon(Icons.Default.Close, contentDescription = "Hide ${label.lowercase()}")
                             }
                         }
                         if (!low) toggle()

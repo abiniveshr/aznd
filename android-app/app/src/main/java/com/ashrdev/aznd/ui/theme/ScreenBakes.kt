@@ -7,6 +7,7 @@ import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Build
 import android.os.Handler
@@ -14,7 +15,11 @@ import android.os.Looper
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.IntSize
 import com.ashrdev.aznd.ui.dashboard.DashboardStore
 import com.ashrdev.aznd.ui.settings.PatternMode
@@ -44,7 +49,7 @@ import kotlin.coroutines.resume
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-typealias PatternSet = List<PatternSpec>
+data class BakeId(val patterns: List<PatternSpec>, val solid: Int?, val gradient: GradientSpec?)
 
 data class BakeSize(val width: Int, val height: Int, val density: Float)
 
@@ -63,9 +68,9 @@ object ScreenBakes {
     private const val MAX_SIZES = 8
     private const val IO_BUFFER = 64 * 1024
 
-    private class BakeKey(val size: BakeSize, val set: PatternSet) {
-        override fun equals(other: Any?): Boolean = other is BakeKey && other.size == size && other.set == set
-        override fun hashCode(): Int = size.hashCode() * 31 + set.hashCode()
+    private class BakeKey(val size: BakeSize, val id: BakeId) {
+        override fun equals(other: Any?): Boolean = other is BakeKey && other.size == size && other.id == id
+        override fun hashCode(): Int = size.hashCode() * 31 + id.hashCode()
     }
 
     private class Pending {
@@ -85,9 +90,9 @@ object ScreenBakes {
     private val version = mutableIntStateOf(0)
 
     private val sizeState = mutableStateOf<BakeSize?>(null)
-    private val themeRequired = mutableStateOf<Set<PatternSet>>(emptySet())
-    private val owners = LinkedHashMap<Any, Set<PatternSet>>()
-    private val requiredState = mutableStateOf<Set<PatternSet>>(emptySet())
+    private val themeRequired = mutableStateOf<Set<BakeId>>(emptySet())
+    private val owners = LinkedHashMap<Any, Set<BakeId>>()
+    private val requiredState = mutableStateOf<Set<BakeId>>(emptySet())
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -113,18 +118,22 @@ object ScreenBakes {
             sizeState.value = value
         }
 
-    fun setOf(style: FillStyle): PatternSet? {
+    fun idOf(fill: ResolvedFill): BakeId? {
+        val style = fill.style
         val active = style.activePatterns
-        return if (active.isEmpty()) null else active
+        if (active.isEmpty()) return null
+        if (style.base == FillBase.SOLID) return BakeId(active, fill.base.toArgb(), null)
+        if (style.gradientAnchor == FillAnchor.SCREEN && style.patternAnchor == FillAnchor.SCREEN) return BakeId(active, null, style.gradient)
+        return BakeId(active, null, null)
     }
 
-    fun themeSets(settings: ThemeSettings, dark: Boolean): Set<PatternSet> {
+    fun themeSets(settings: ThemeSettings, dark: Boolean): Set<BakeId> {
         if (settings.useDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return emptySet()
         val palette = if (dark) settings.dark else settings.light
-        val out = LinkedHashSet<PatternSet>()
+        val out = LinkedHashSet<BakeId>()
         for (element in ThemeColor.entries) {
             if (!element.fillable) continue
-            setOf(palette.fillOf(element))?.let { out += it }
+            idOf(palette.resolved(element))?.let { out += it }
         }
         return out
     }
@@ -148,12 +157,12 @@ object ScreenBakes {
         return synchronized(lock) { sets.all { memory.containsKey(BakeKey(s, it)) } }
     }
 
-    fun setThemeRequired(sets: Set<PatternSet>) {
+    fun setThemeRequired(sets: Set<BakeId>) {
         themeRequired.value = sets
         refreshRequired()
     }
 
-    fun require(owner: Any, sets: Set<PatternSet>) {
+    fun require(owner: Any, sets: Set<BakeId>) {
         synchronized(owners) { owners[owner] = sets }
         refreshRequired()
     }
@@ -164,26 +173,26 @@ object ScreenBakes {
     }
 
     private fun refreshRequired() {
-        val out = LinkedHashSet<PatternSet>(themeRequired.value)
+        val out = LinkedHashSet<BakeId>(themeRequired.value)
         synchronized(owners) { for (v in owners.values) out += v }
         requiredState.value = out
     }
 
-    val required: Set<PatternSet> get() = requiredState.value
+    val required: Set<BakeId> get() = requiredState.value
 
-    internal fun isRequired(set: PatternSet): Boolean = set in requiredState.value
+    internal fun isRequired(set: BakeId): Boolean = set in requiredState.value
 
-    internal fun bakeFor(set: PatternSet, size: BakeSize): Bitmap? {
+    internal fun bakeFor(set: BakeId, size: BakeSize): Bitmap? {
         version.intValue
         return synchronized(lock) { memory[BakeKey(size, set)] }
     }
 
-    fun missing(sets: Set<PatternSet>, size: BakeSize): Set<PatternSet> {
+    fun missing(sets: Set<BakeId>, size: BakeSize): Set<BakeId> {
         version.intValue
         return synchronized(lock) { sets.filterTo(LinkedHashSet()) { !memory.containsKey(BakeKey(size, it)) } }
     }
 
-    suspend fun ensure(sets: Set<PatternSet>, size: BakeSize, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }) {
+    suspend fun ensure(sets: Set<BakeId>, size: BakeSize, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }) {
         val todo = missing(sets, size).toList()
         if (todo.isEmpty()) return
         val total = todo.size
@@ -272,7 +281,7 @@ object ScreenBakes {
         if (fresh && bitmap != null) runCatching { save(key, bitmap) }
     }
 
-    fun prebake(sets: Set<PatternSet>, size: BakeSize) {
+    fun prebake(sets: Set<BakeId>, size: BakeSize) {
         for (set in sets) {
             val key = BakeKey(size, set)
             try {
@@ -298,13 +307,13 @@ object ScreenBakes {
         }
     }
 
-    fun retainOnly(sets: Set<PatternSet>, size: BakeSize) {
+    fun retainOnly(sets: Set<BakeId>, size: BakeSize) {
         val changed = synchronized(lock) {
             val iter = memory.keys.iterator()
             var any = false
             while (iter.hasNext()) {
                 val k = iter.next()
-                if (k.size != size || k.set !in sets) {
+                if (k.size != size || k.id !in sets) {
                     iter.remove()
                     any = true
                 }
@@ -323,7 +332,14 @@ object ScreenBakes {
             val paint = Paint()
             paint.isAntiAlias = true
             paint.isFilterBitmap = true
-            for (p in key.set) {
+            val id = key.id
+            id.solid?.let { canvas.drawColor(it) }
+            id.gradient?.let { g ->
+                paint.shader = FillRender.gradientShader(g, RectF(0f, 0f, w.toFloat(), h.toFloat()))
+                canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+                paint.shader = null
+            }
+            for (p in id.patterns) {
                 if (p.kind == PatternKind.NONE) continue
                 for (layer in PatternMath.placed(p.kind, p.scale, key.size.density)) {
                     val tile = PatternTiles.tile(p.kind, p.tint, p.seed + layer.seedShift) ?: continue
@@ -345,11 +361,12 @@ object ScreenBakes {
         return bitmap
     }
 
-    private fun canonical(set: PatternSet, size: BakeSize): String =
-        "v${PatternMath.GENERATOR_VERSION}|${size.width}x${size.height}|${size.density}|" + set.toJsonArray().toString()
+    private fun canonical(id: BakeId, size: BakeSize): String =
+        "v${PatternMath.GENERATOR_VERSION}|${size.width}x${size.height}|${size.density}|" + id.patterns.toJsonArray().toString() +
+            "|" + (id.solid?.toString() ?: "-") + "|" + (id.gradient?.toJson()?.toString() ?: "-")
 
-    private fun nameOf(set: PatternSet, size: BakeSize): String {
-        val bytes = MessageDigest.getInstance("SHA-1").digest(canonical(set, size).toByteArray(Charsets.UTF_8))
+    private fun nameOf(id: BakeId, size: BakeSize): String {
+        val bytes = MessageDigest.getInstance("SHA-1").digest(canonical(id, size).toByteArray(Charsets.UTF_8))
         val sb = StringBuilder(bytes.size * 2)
         for (b in bytes) {
             val v = b.toInt() and 0xFF
@@ -360,7 +377,7 @@ object ScreenBakes {
 
     private fun fileOf(key: BakeKey): File? {
         val d = dir ?: return null
-        return File(d, nameOf(key.set, key.size) + EXT)
+        return File(d, nameOf(key.id, key.size) + EXT)
     }
 
     private fun loadFile(key: BakeKey): Bitmap? {
@@ -399,7 +416,7 @@ object ScreenBakes {
     private fun save(key: BakeKey, bitmap: Bitmap) {
         if (PerformanceStore.patternMode != PatternMode.BAKED) return
         val d = dir ?: return
-        val name = nameOf(key.set, key.size)
+        val name = nameOf(key.id, key.size)
         val temp = File(d, "$name.${System.nanoTime()}$TEMP")
         val deflater = Deflater(Deflater.BEST_SPEED)
         try {
@@ -476,6 +493,15 @@ object ScreenBakes {
         }
     }
 
+    private fun appCardArgb(context: Context, settings: ThemeSettings, dark: Boolean): Int {
+        if (settings.useDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val scheme = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            return scheme.surfaceVariant.toArgb()
+        }
+        val palette = if (dark) settings.dark else settings.light
+        return palette.resolved(ThemeColor.CARD).representative().toArgb()
+    }
+
     private fun sweep(context: Context, settings: ThemeSettings) {
         val d = dir ?: return
         val files = d.listFiles() ?: return
@@ -490,11 +516,18 @@ object ScreenBakes {
             }
         }
         val look = runCatching { DashboardStore(context).look }.getOrNull() ?: return
-        val keepSets = LinkedHashSet<PatternSet>()
+        val keepSets = LinkedHashSet<BakeId>()
         keepSets += themeSets(settings, false)
         keepSets += themeSets(settings, true)
-        setOf(look.backgroundFill())?.let { keepSets += it }
-        setOf(look.tileFill)?.let { keepSets += it }
+        idOf(ResolvedFill(Color(look.bgA), look.backgroundFill()))?.let { keepSets += it }
+        val panels = LinkedHashSet<Int>()
+        if (look.customColors) {
+            panels += look.tileColor
+        } else {
+            panels += appCardArgb(context, settings, false)
+            panels += appCardArgb(context, settings, true)
+        }
+        for (panel in panels) idOf(ResolvedFill(Color(panel), look.tileFill))?.let { keepSets += it }
         val current = size
         val sizes = LinkedHashSet<BakeSize>(readSizes(d))
         if (current != null) sizes += current

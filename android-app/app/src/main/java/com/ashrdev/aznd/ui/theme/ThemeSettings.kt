@@ -123,7 +123,7 @@ val DefaultDarkPalette = Palette(
     outline = Color(0xFF938F99)
 )
 
-/** How the high contrast theme makes its shades from its base colour (see [HighContrast]). */
+/** How the Mono theme makes its shades from its base colour (see [HighContrast]). */
 enum class ContrastShade(val label: String) {
     /** The base colour at less and less opacity over black: darker shades of the same colour. */
     ALPHA("Opacity"),
@@ -131,14 +131,11 @@ enum class ContrastShade(val label: String) {
     SATURATION("Saturation")
 }
 
-/**
- * The high contrast theme's own setting: every surface pitch black, every accent a shade of [color], made by
- * [shade]. A theme that has one was made by [HighContrast] and is remade from it whenever it changes.
- */
-data class ContrastBase(val color: Color, val shade: ContrastShade = ContrastShade.ALPHA)
-
 /** Largest border width the Appearance sliders offer, in dp. */
 const val MAX_BORDER_DP = 8f
+
+const val MIN_TEXT_SCALE = 0.85f
+const val MAX_TEXT_SCALE = 1.3f
 
 data class ThemeSettings(
     val mode: ThemeMode = ThemeMode.SYSTEM,
@@ -161,14 +158,18 @@ data class ThemeSettings(
     val borderTaper: TaperLine = TaperLine(),
     val light: Palette = DefaultLightPalette,
     val dark: Palette = DefaultDarkPalette,
-    /** Set only for the high contrast theme: the base colour its palette is made from (see [HighContrast]). */
-    val contrast: ContrastBase? = null,
+    val themeId: String = "carbon",
+    val baseColor: Int? = null,
+    val shade: ContrastShade = ContrastShade.ALPHA,
+    val textScale: Float = 1f,
     /** The font of the whole app: one of Flex's fonts, or null for the system default. */
     val appFont: FlexFont? = null,
     val density: UiDensity = UiDensity.REGULAR
 )
 
 fun Color.toHexString(): String = String.format(Locale.US, "#%06X", 0xFFFFFF and toArgb())
+
+private fun hex(argb: Int): String = String.format(Locale.US, "#%06X", 0xFFFFFF and argb)
 
 private fun parseHex(hex: String?, fallback: Color): Color {
     if (hex == null) return fallback
@@ -177,7 +178,7 @@ private fun parseHex(hex: String?, fallback: Color): Color {
 
 private fun JSONObject.str(key: String): String? = if (has(key)) optString(key) else null
 
-private fun Palette.toJson(): JSONObject = JSONObject().apply {
+internal fun Palette.toJson(): JSONObject = JSONObject().apply {
     put("background", background.toHexString())
     put("card", card.toHexString())
     put("topBar", topBar.toHexString())
@@ -193,7 +194,7 @@ private fun Palette.toJson(): JSONObject = JSONObject().apply {
     }
 }
 
-private fun paletteFrom(o: JSONObject?, fb: Palette): Palette {
+internal fun paletteFrom(o: JSONObject?, fb: Palette): Palette {
     if (o == null) return fb
     val fills = HashMap<ThemeColor, FillStyle>()
     o.optJSONObject("fills")?.let { f ->
@@ -238,7 +239,10 @@ fun ThemeSettings.toJson(): String = JSONObject().apply {
     put("dark", dark.toJson())
     appFont?.let { put("appFont", it.name) }
     put("density", density.name)
-    contrast?.let { put("contrast", JSONObject().put("color", it.color.toHexString()).put("shade", it.shade.name)) }
+    put("themeId", themeId)
+    baseColor?.let { put("baseColor", hex(it)) }
+    put("shade", shade.name)
+    put("textScale", textScale.toDouble())
 }.toString(2)
 
 /** Reads a border width: the new key if there is one, else the old on/off switch (on = 1 dp). */
@@ -279,12 +283,10 @@ fun themeFromJson(text: String): ThemeSettings {
         dark = paletteFrom(o.optJSONObject("dark"), d.dark),
         appFont = FlexFont.entries.firstOrNull { it.name == o.optString("appFont") },
         density = UiDensity.entries.firstOrNull { it.name == o.optString("density") } ?: d.density,
-        contrast = o.optJSONObject("contrast")?.let { c ->
-            ContrastBase(
-                color = parseHex(c.str("color"), Color.White),
-                shade = runCatching { ContrastShade.valueOf(c.optString("shade")) }.getOrDefault(ContrastShade.ALPHA)
-            )
-        }
+        themeId = o.optString("themeId", d.themeId).ifEmpty { d.themeId },
+        baseColor = if (o.has("baseColor")) parseHex(o.str("baseColor"), Color.Unspecified).takeIf { it != Color.Unspecified }?.toArgb() else null,
+        shade = ContrastShade.entries.firstOrNull { it.name == o.optString("shade") } ?: d.shade,
+        textScale = o.optDouble("textScale", d.textScale.toDouble()).toFloat().coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE)
     )
 }
 
@@ -306,6 +308,8 @@ object ThemeStore {
     val draft: StateFlow<ThemeSettings> = _draft.asStateFlow()
 
     private var prefs: SharedPreferences? = null
+
+    internal var startupJson: JSONObject? = null
     private val handler = Handler(Looper.getMainLooper())
     private val commitTask = Runnable { if (ScreenBakes.readyFor(_draft.value)) commitNow() }
 
@@ -329,8 +333,11 @@ object ThemeStore {
             runCatching { themeFromJson(saved) }.getOrNull()?.let {
                 _settings.value = it
                 _draft.value = it
+                startupJson = runCatching { JSONObject(saved) }.getOrNull()
             }
         }
+        ThemeLibrary.init(context)
+        startupJson = null
         publishDensity(_settings.value)
         val startDark = when (_settings.value.mode) {
             ThemeMode.LIGHT -> false
@@ -374,5 +381,17 @@ object ThemeStore {
         commitNow()
     }
 
-    fun reset() = replace(ThemeSettings())
+    internal fun adopt(next: ThemeSettings) {
+        _draft.value = next
+        _settings.value = next
+        _pending.value = false
+        val p = prefs
+        saver.execute { p?.edit()?.putString(KEY, next.toJson())?.apply() }
+    }
+
+    fun reset() {
+        ThemeLibrary.select(ThemeLibrary.ID_CARBON)
+        val def = ThemeLibrary.working.value
+        replace(ThemeDerive.apply(ThemeSettings(), def, ThemeLibrary.baseOf(def.id), ThemeLibrary.shadeOf(def.id)))
+    }
 }

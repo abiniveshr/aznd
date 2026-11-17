@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dashboard
@@ -100,7 +101,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.FillCopySource
-import com.ashrdev.aznd.ui.common.FillEditor
+import com.ashrdev.aznd.ui.common.FillEditDialog
+import com.ashrdev.aznd.ui.common.FontPicker
 import com.ashrdev.aznd.ui.common.ReorderableItem
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.dragReorderHandle
@@ -133,6 +135,45 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+
+@Composable
+private fun FillEditEntry(
+    title: String,
+    baseColor: Int,
+    fill: FillStyle,
+    onChange: (Int, FillStyle) -> Unit,
+    copyFrom: List<FillCopySource>,
+    chooseBase: Boolean = true
+) {
+    var editing by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space.md)
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(56.dp)
+                .clip(shape)
+                .azndFill(ResolvedFill(Color(baseColor), fill), shape, preview = true)
+                .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+        )
+        OutlinedButton(onClick = { editing = true }) { Text("Edit") }
+    }
+    if (editing) {
+        FillEditDialog(
+            title = title,
+            baseColor = baseColor,
+            fill = fill,
+            onChange = onChange,
+            onDismiss = { editing = false },
+            chooseBase = chooseBase,
+            copyFrom = copyFrom
+        )
+    }
+}
 
 /** A page with the live card on top and one tab's controls below it. A warning appears under it when the card is too full. */
 @Composable
@@ -482,7 +523,7 @@ internal fun LookTab(
         }
         item {
             FlexFoldSection("Text", "${st.font.label} · ${(st.textScale * 100).roundToInt()}%") {
-                DropdownField("Font", FlexFont.entries, st.font, { it.label }) { picked -> style { it.copy(font = picked) } }
+                FontPicker("Font", st.font, { picked -> if (picked != null) style { it.copy(font = picked) } })
                 LabeledSlider("Size", "${(st.textScale * 100).roundToInt()}%", st.textScale, 0.7f..1.5f) { v ->
                     style { it.copy(textScale = v) }
                 }
@@ -509,8 +550,8 @@ internal fun LookTab(
                     LabeledSlider("Opacity", "${(st.panelAlpha * 100).roundToInt()}%", st.panelAlpha, 0.04f..1f) { v ->
                         style { it.copy(panelAlpha = v) }
                     }
-                    FillEditor(
-                        baseLabel = "Panel colour",
+                    FillEditEntry(
+                        title = "Panel colour",
                         baseColor = st.panelColor,
                         fill = st.panelFill,
                         onChange = { color, fill -> style { it.copy(panelColor = color, panelFill = fill) } },
@@ -643,8 +684,8 @@ private fun LazyListScope.backgroundItems(
             ChipChoice(FlexBgMode.entries, st.bgMode, { it.label }) { picked -> style { it.copy(bgMode = picked) } }
             if (st.bgMode != FlexBgMode.PHOTO) {
                 // Solid or gradient, with its patterns: edited right here. Solid / Gradient is the chips above.
-                FillEditor(
-                    baseLabel = "Colour",
+                FillEditEntry(
+                    title = "Colour",
                     baseColor = st.bgA,
                     fill = st.backgroundFill(),
                     chooseBase = false,

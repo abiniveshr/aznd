@@ -20,41 +20,42 @@ private fun TextStyle.sized(
     weight: FontWeight,
     size: TextUnit,
     lineHeight: TextUnit,
-    letterSpacing: TextUnit
+    letterSpacing: TextUnit,
+    scale: Float
 ): TextStyle = copy(
     // The system default keeps the family Material gave the style.
     fontFamily = if (family == FontFamily.Default) fontFamily else family,
     fontWeight = weight,
-    fontSize = size,
-    lineHeight = lineHeight,
+    fontSize = size * scale,
+    lineHeight = lineHeight * scale,
     letterSpacing = letterSpacing
 )
 
-/** aznd's type scale in [family]. Sizes, weights, line heights and letter spacing are Material 3's. */
-fun azndTypography(family: FontFamily): Typography = MaterialDefaults.let { m ->
+/** aznd's type scale in [family], sizes and line heights multiplied by [scale]. Weights and letter spacing are Material 3's. */
+fun azndTypography(family: FontFamily, scale: Float = 1f): Typography = MaterialDefaults.let { m ->
     Typography(
-        displayLarge = m.displayLarge.sized(family, FontWeight.Normal, 57.sp, 64.sp, (-0.25).sp),
-        displayMedium = m.displayMedium.sized(family, FontWeight.Normal, 45.sp, 52.sp, 0.sp),
-        displaySmall = m.displaySmall.sized(family, FontWeight.Normal, 36.sp, 44.sp, 0.sp),
-        headlineLarge = m.headlineLarge.sized(family, FontWeight.Normal, 32.sp, 40.sp, 0.sp),
-        headlineMedium = m.headlineMedium.sized(family, FontWeight.Normal, 28.sp, 36.sp, 0.sp),
-        headlineSmall = m.headlineSmall.sized(family, FontWeight.Normal, 24.sp, 32.sp, 0.sp),
-        titleLarge = m.titleLarge.sized(family, FontWeight.Normal, 22.sp, 28.sp, 0.sp),
-        titleMedium = m.titleMedium.sized(family, FontWeight.Medium, 16.sp, 24.sp, 0.15.sp),
-        titleSmall = m.titleSmall.sized(family, FontWeight.Medium, 14.sp, 20.sp, 0.1.sp),
+        displayLarge = m.displayLarge.sized(family, FontWeight.Normal, 57.sp, 64.sp, (-0.25).sp, scale),
+        displayMedium = m.displayMedium.sized(family, FontWeight.Normal, 45.sp, 52.sp, 0.sp, scale),
+        displaySmall = m.displaySmall.sized(family, FontWeight.Normal, 36.sp, 44.sp, 0.sp, scale),
+        headlineLarge = m.headlineLarge.sized(family, FontWeight.Normal, 32.sp, 40.sp, 0.sp, scale),
+        headlineMedium = m.headlineMedium.sized(family, FontWeight.Normal, 28.sp, 36.sp, 0.sp, scale),
+        headlineSmall = m.headlineSmall.sized(family, FontWeight.Normal, 24.sp, 32.sp, 0.sp, scale),
+        titleLarge = m.titleLarge.sized(family, FontWeight.Normal, 22.sp, 28.sp, 0.sp, scale),
+        titleMedium = m.titleMedium.sized(family, FontWeight.Medium, 16.sp, 24.sp, 0.15.sp, scale),
+        titleSmall = m.titleSmall.sized(family, FontWeight.Medium, 14.sp, 20.sp, 0.1.sp, scale),
         // The one style aznd has always set itself: a plain TextStyle, not Material's.
         bodyLarge = TextStyle(
             fontFamily = family,
             fontWeight = FontWeight.Normal,
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
+            fontSize = 16.sp * scale,
+            lineHeight = 24.sp * scale,
             letterSpacing = 0.5.sp
         ),
-        bodyMedium = m.bodyMedium.sized(family, FontWeight.Normal, 14.sp, 20.sp, 0.25.sp),
-        bodySmall = m.bodySmall.sized(family, FontWeight.Normal, 12.sp, 16.sp, 0.4.sp),
-        labelLarge = m.labelLarge.sized(family, FontWeight.Medium, 14.sp, 20.sp, 0.1.sp),
-        labelMedium = m.labelMedium.sized(family, FontWeight.Medium, 12.sp, 16.sp, 0.5.sp),
-        labelSmall = m.labelSmall.sized(family, FontWeight.Medium, 11.sp, 16.sp, 0.5.sp)
+        bodyMedium = m.bodyMedium.sized(family, FontWeight.Normal, 14.sp, 20.sp, 0.25.sp, scale),
+        bodySmall = m.bodySmall.sized(family, FontWeight.Normal, 12.sp, 16.sp, 0.4.sp, scale),
+        labelLarge = m.labelLarge.sized(family, FontWeight.Medium, 14.sp, 20.sp, 0.1.sp, scale),
+        labelMedium = m.labelMedium.sized(family, FontWeight.Medium, 12.sp, 16.sp, 0.5.sp, scale),
+        labelSmall = m.labelSmall.sized(family, FontWeight.Medium, 11.sp, 16.sp, 0.5.sp, scale)
     )
 }
 
