@@ -26,8 +26,15 @@ import java.util.Locale
 import kotlin.math.roundToLong
 
 /** The navigation route that opens Flex on this preset. */
-fun FlexPreset.route(a: Long = -1L, b: Long = -1L, s: String = ""): String =
-    Destination.Flex.createRoute(id, a, b, Uri.encode(s))
+fun FlexPreset.route(
+    a: Long = -1L,
+    b: Long = -1L,
+    s: String = "",
+    aspect: FlexAspect? = null,
+    card: String = "",
+    then: Long = -1L
+): String =
+    Destination.Flex.createRoute(id, a, b, Uri.encode(s), aspect?.name.orEmpty(), Uri.encode(card), then)
 
 private fun block(
     id: Int,

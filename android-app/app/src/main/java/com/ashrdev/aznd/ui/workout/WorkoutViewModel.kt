@@ -126,6 +126,28 @@ class WorkoutViewModel(
         }
     }
 
+    fun reorderWorkouts(ids: List<Long>) {
+        viewModelScope.launch { dao.setWorkoutOrder(ids) }
+    }
+
+    fun renameWorkout(id: Long, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            dao.renameWorkout(id, trimmed)
+            dao.renameWorkoutHistory(id, trimmed)
+        }
+    }
+
+    fun duplicateWorkout(id: Long) {
+        viewModelScope.launch {
+            val original = dao.getWorkoutWithExercises(id)?.workout ?: return@launch
+            val rows = training.templateRows(id)
+            val copyId = dao.insertWorkoutAfter(id, "${original.name} copy")
+            training.saveTemplate(copyId, rows)
+        }
+    }
+
     /** Deletes the workout, its template and any session of it that is still running. */
     fun deleteWorkout(id: Long) {
         viewModelScope.launch {

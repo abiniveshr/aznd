@@ -61,6 +61,9 @@ private class UseTarget(val preset: FlexCardPreset, val bindings: FlexBindings)
  * routine or streak day the share started at (see [FlexShareContext]); opened from Home there is no such context.
  * Opened from any other screen than Home, Flex skips the pages: it goes straight to the Use screen with that screen's
  * blueprint filled with that screen's data ([FlexScreenShareFlow]); back leaves Flex.
+ * With [card] (the shipped key of a card preset, e.g. "then_vs_now"), [then] and [a] (history session ids) Flex skips the pages and
+ * Configure too: it opens that preset on the Use screen with the "then" cards (2 and 3) on session [then] and the "now" cards (4 and 5)
+ * on session [a] ([FlexCardShareFlow]).
  */
 @Composable
 fun FlexScreen(
@@ -72,8 +75,24 @@ fun FlexScreen(
     streakViewModel: StreakViewModel,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    aspect: FlexAspect? = null,
+    card: String = "",
+    then: Long = -1L
 ) {
+    if (card.isNotBlank() && then > 0L && a > 0L) {
+        FlexCardShareFlow(
+            card = card,
+            then = then,
+            now = a,
+            workoutViewModel = workoutViewModel,
+            streakViewModel = streakViewModel,
+            onBack = onBack,
+            onHome = onHome,
+            onOpenSettings = onOpenSettings
+        )
+        return
+    }
     // A share from a screen (workout, routine, exercise, streak day) has no pages: straight to the Use screen.
     if (preset != FlexPreset.HOME) {
         FlexScreenShareFlow(
@@ -81,6 +100,7 @@ fun FlexScreen(
             a = a,
             b = b,
             s = s,
+            aspect = aspect,
             workoutViewModel = workoutViewModel,
             streakViewModel = streakViewModel,
             onBack = onBack,
@@ -249,6 +269,76 @@ fun FlexScreen(
     }
 }
 
+private class CardStart(val preset: FlexCardPreset, val library: FlexLibrary, val bindings: FlexBindings)
+
+@Composable
+private fun FlexCardShareFlow(
+    card: String,
+    then: Long,
+    now: Long,
+    workoutViewModel: WorkoutViewModel,
+    streakViewModel: StreakViewModel,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val context = LocalContext.current
+    var failed by remember { mutableStateOf(false) }
+    val start by produceState<CardStart?>(null, card, then, now) {
+        value = runCatching {
+            withContext(Dispatchers.IO) {
+                val store = FlexPresetStore(context)
+                store.ensureShipped()
+                val chosen = store.all().first { it.shippedKey == card }
+                val library = FlexLibrary.load(context, workoutViewModel, streakViewModel)
+                val base = defaultBindings(chosen.spec, library, FlexBindingStore.load(context, chosen.id), null)
+                val bound = base.mapValues { (id, binding) ->
+                    when (id) {
+                        2, 3 -> binding.copy(sessionId = then)
+                        4, 5 -> binding.copy(sessionId = now)
+                        else -> binding
+                    }
+                }
+                CardStart(chosen, library, bound)
+            }
+        }.getOrNull()
+        if (value == null) failed = true
+    }
+    LaunchedEffect(failed) {
+        if (failed) {
+            Toast.makeText(context, "Couldn't open the poster maker", Toast.LENGTH_SHORT).show()
+            onBack()
+        }
+    }
+    val ready = start
+    if (ready == null) {
+        ScreenScaffold(
+            title = "Flex",
+            subtitle = "Use preset",
+            onBack = onBack,
+            onHome = onHome,
+            onOpenSettings = onOpenSettings
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        return
+    }
+    FlexPresetEditor(
+        initial = ready.preset,
+        onSaved = {},
+        onClose = onBack,
+        onHome = onHome,
+        onOpenSettings = onOpenSettings,
+        mode = FlexEditorMode.USE,
+        library = ready.library,
+        initialBindings = ready.bindings,
+        workoutViewModel = workoutViewModel,
+        streakViewModel = streakViewModel
+    )
+}
+
 /** What the screen-share flow starts from: the person's data, the stored blueprint and the blueprint filled for this item. */
 private class ScreenStart(val library: FlexLibrary, val blueprint: FlexSpec, val shared: FlexScreenShare)
 
@@ -265,6 +355,7 @@ private fun FlexScreenShareFlow(
     a: Long,
     b: Long,
     s: String,
+    aspect: FlexAspect?,
     workoutViewModel: WorkoutViewModel,
     streakViewModel: StreakViewModel,
     onBack: () -> Unit,
@@ -306,8 +397,14 @@ private fun FlexScreenShareFlow(
         }
         return
     }
-    val preset = remember(ready) {
-        FlexCardPreset(id = 0L, name = source.defaultsName() + " default", spec = ready.shared.spec, updatedAt = 0L)
+    val preset = remember(ready, aspect) {
+        val spec = ready.shared.spec
+        FlexCardPreset(
+            id = 0L,
+            name = source.defaultsName() + " default",
+            spec = if (aspect != null) spec.copy(style = spec.style.copy(aspect = aspect)) else spec,
+            updatedAt = 0L
+        )
     }
     FlexPresetEditor(
         initial = preset,

@@ -30,7 +30,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.ashrdev.aznd.ui.common.ScreenScaffold
 import com.ashrdev.aznd.ui.common.ThirdAction
 import com.ashrdev.aznd.ui.common.rememberImagePicker
-import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
 import com.ashrdev.aznd.data.workout.toMeta
 import com.ashrdev.aznd.ui.workout.exercise.ExercisePickerDialog
 import com.ashrdev.aznd.ui.theme.Space
@@ -39,9 +38,9 @@ import com.ashrdev.aznd.ui.theme.Space
  * Screen for logging an active workout session. Exercises are swipeable cards (see [LoggerPager]).
  * The bottom bar holds Photo, Discard and Finish. Photo adds a picture when there is none; once
  * there is one it opens the picture with Replace / Remove / Save to gallery. Finish first shows a
- * summary; with [onShare] set (and not in Freestyle) it also offers "Finish and share", which finishes
- * and then calls [onShare] with the history session id instead of [onFinished]: the caller swaps this
- * screen for the share screen.
+ * summary; with [onSummary] set it finishes and then calls [onSummary] with the history session id
+ * instead of [onFinished] (when there is no history row, [onFinished] is called): the caller swaps this
+ * screen for the workout summary screen.
  */
 @Composable
 fun WorkoutSessionScreen(
@@ -52,7 +51,7 @@ fun WorkoutSessionScreen(
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSettings: () -> Unit,
-    onShare: ((historySessionId: Long) -> Unit)? = null
+    onSummary: ((historySessionId: Long) -> Unit)? = null
 ) {
     LaunchedEffect(workoutId) { viewModel.begin(workoutId) }
     // Typed values are written shortly after the last keystroke; leaving the app writes them at once.
@@ -93,13 +92,13 @@ fun WorkoutSessionScreen(
         )
     }
 
-    // Sharing replaces this screen with the share screen in one step: leaving first would start a
+    // The summary replaces this screen in one step: leaving first would start a
     // screen transition, and navigation is ignored while one is running.
     LaunchedEffect(phase) {
         if (phase == LoggerPhase.Closed) {
             // Read from the view model: it is set before the phase closes, the collected copy may lag a frame.
             val id = viewModel.shareId.value
-            if (id != null && onShare != null) onShare(id) else onFinished()
+            if (id != null && onSummary != null) onSummary(id) else onFinished()
         }
     }
 
@@ -108,15 +107,7 @@ fun WorkoutSessionScreen(
             summary = s,
             onFinish = {
                 summary = null
-                viewModel.finish()
-            },
-            onFinishAndShare = if (onShare != null && workoutId != EMPTY_WORKOUT_ID) {
-                {
-                    summary = null
-                    viewModel.finish(share = true)
-                }
-            } else {
-                null
+                viewModel.finish(share = true)
             },
             onKeepGoing = { summary = null }
         )

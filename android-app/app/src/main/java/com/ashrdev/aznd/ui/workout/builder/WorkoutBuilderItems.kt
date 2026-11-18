@@ -1,5 +1,8 @@
 package com.ashrdev.aznd.ui.workout.builder
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -27,9 +31,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.ui.common.ReorderState
@@ -129,12 +135,15 @@ private fun ExerciseCard(
 ) {
     val first = card.rows.first()
     val exercise = card.exerciseId?.let { byId[it] }
+    var collapsed by rememberSaveable(first.id) { mutableStateOf(false) }
+    val chevron by animateFloatAsState(if (collapsed) 0f else 180f, label = "exerciseChevron")
     Card(modifier = Modifier.fillMaxWidth().then(dragModifier)) {
-        Column(
-            modifier = Modifier.padding(Space.md),
-            verticalArrangement = Arrangement.spacedBy(Space.sm)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
+        Column(modifier = Modifier.padding(Space.md)) {
+            Row(
+                modifier = Modifier.clickable(enabled = card.exerciseId != null) { collapsed = !collapsed },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.sm)
+            ) {
                 if (exercise != null) MuscleBadge(exercise.primaryMuscle, exercise.photoPath)
                 ExercisePicker(
                     selected = exercise,
@@ -142,6 +151,13 @@ private fun ExerciseCard(
                     onPick = { actions.onPickCardExercise(first.id, it.id) },
                     modifier = Modifier.weight(1f)
                 )
+                if (card.exerciseId != null) {
+                    Icon(
+                        Icons.Default.ExpandMore,
+                        contentDescription = if (collapsed) "Expand sets" else "Collapse sets",
+                        modifier = Modifier.rotate(chevron)
+                    )
+                }
                 if (handleModifier != null) {
                     Icon(
                         Icons.Default.Menu,
@@ -159,20 +175,35 @@ private fun ExerciseCard(
                 }
             }
             if (card.exerciseId != null) {
-                val labels = setLabels(card)
-                val connectors = connectorInfo(card.rows)
-                card.rows.forEach { row ->
-                    key(row.id) {
-                        SetRowLine(
-                            row = row,
-                            connector = connectors[row.id],
-                            depth = depth[row.id] ?: 0,
-                            label = labels[row.id].orEmpty(),
-                            exercise = row.exerciseId?.let { byId[it] },
-                            all = all,
-                            showTargets = showTargets,
-                            actions = actions
-                        )
+                AnimatedVisibility(visible = collapsed) {
+                    Text(
+                        text = if (card.rows.size == 1) "1 set" else "${card.rows.size} sets",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Space.xs)
+                    )
+                }
+                AnimatedVisibility(visible = !collapsed) {
+                    val labels = setLabels(card)
+                    val connectors = connectorInfo(card.rows)
+                    Column(
+                        modifier = Modifier.padding(top = Space.sm),
+                        verticalArrangement = Arrangement.spacedBy(Space.sm)
+                    ) {
+                        card.rows.forEach { row ->
+                            key(row.id) {
+                                SetRowLine(
+                                    row = row,
+                                    connector = connectors[row.id],
+                                    depth = depth[row.id] ?: 0,
+                                    label = labels[row.id].orEmpty(),
+                                    exercise = row.exerciseId?.let { byId[it] },
+                                    all = all,
+                                    showTargets = showTargets,
+                                    actions = actions
+                                )
+                            }
+                        }
                     }
                 }
             }

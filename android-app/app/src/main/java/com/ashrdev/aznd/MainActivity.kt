@@ -27,6 +27,7 @@ import com.ashrdev.aznd.data.AppDatabase
 import com.ashrdev.aznd.data.manage.DataApp
 import com.ashrdev.aznd.data.manage.DataRegistry
 import com.ashrdev.aznd.data.manage.DataTransfer
+import com.ashrdev.aznd.ui.common.share.FlexAspect
 import com.ashrdev.aznd.ui.common.share.FlexPreset
 import com.ashrdev.aznd.ui.common.share.FlexScreen
 import com.ashrdev.aznd.ui.common.share.route
@@ -74,6 +75,8 @@ import com.ashrdev.aznd.ui.workout.exercise.CustomExerciseListViewModel
 import com.ashrdev.aznd.ui.workout.session.LoggerViewModel
 import com.ashrdev.aznd.ui.workout.builder.WorkoutBuilderScreen
 import com.ashrdev.aznd.ui.workout.session.WorkoutSessionScreen
+import com.ashrdev.aznd.ui.workout.summary.WorkoutSummaryScreen
+import com.ashrdev.aznd.ui.workout.summary.WorkoutSummaryViewModel
 import com.ashrdev.aznd.ui.streaks.SavedDayDetailScreen
 import com.ashrdev.aznd.ui.streaks.SavedDaysForStreakScreen
 import com.ashrdev.aznd.ui.streaks.SavedDaysScreen
@@ -474,13 +477,34 @@ class MainActivity : ComponentActivity() {
                                 onBack = goBack,
                                 onHome = goHome,
                                 onOpenSettings = openSettings,
-                                // The share screen takes the logger's place, so Back from it lands where Finish would.
-                                onShare = { historyId ->
+                                // The summary takes the logger's place, so Back from it lands where Finish would.
+                                onSummary = { historyId ->
                                     navigateTo(
-                                        FlexPreset.WORKOUT.route(a = historyId),
+                                        Destination.WorkoutSummary.createRoute(historyId),
                                         popUpToRoute = Destination.WorkoutSession.route,
                                         popUpInclusive = true
                                     )
+                                }
+                            )
+                        }
+                        composable(
+                            route = Destination.WorkoutSummary.route,
+                            arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
+                            val summaryVm: WorkoutSummaryViewModel = viewModel(
+                                factory = WorkoutSummaryViewModel.factory(sessionId, trainingRepository, dao)
+                            )
+                            WorkoutSummaryScreen(
+                                viewModel = summaryVm,
+                                onBack = goBack,
+                                onHome = goHome,
+                                onOpenSettings = openSettings,
+                                onShare = { aspect ->
+                                    navigateTo(FlexPreset.WORKOUT.route(a = sessionId, aspect = aspect))
+                                },
+                                onShareCompare = { thenId ->
+                                    navigateTo(FlexPreset.WORKOUT.route(a = sessionId, card = "then_vs_now", then = thenId))
                                 }
                             )
                         }
@@ -806,6 +830,18 @@ class MainActivity : ComponentActivity() {
                                 navArgument("s") {
                                     type = NavType.StringType
                                     defaultValue = ""
+                                },
+                                navArgument("aspect") {
+                                    type = NavType.StringType
+                                    defaultValue = ""
+                                },
+                                navArgument("card") {
+                                    type = NavType.StringType
+                                    defaultValue = ""
+                                },
+                                navArgument("then") {
+                                    type = NavType.LongType
+                                    defaultValue = -1L
                                 }
                             )
                         ) { backStackEntry ->
@@ -819,7 +855,10 @@ class MainActivity : ComponentActivity() {
                                 streakViewModel = streakViewModel,
                                 onBack = goBack,
                                 onHome = goHome,
-                                onOpenSettings = openSettings
+                                onOpenSettings = openSettings,
+                                aspect = FlexAspect.entries.firstOrNull { it.name == args?.getString("aspect") },
+                                card = args?.getString("card") ?: "",
+                                then = args?.getLong("then") ?: -1L
                             )
                         }
                     }

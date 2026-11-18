@@ -36,6 +36,12 @@ interface SessionDao {
     @Query("UPDATE logged_session SET legacySessionId = :legacyId WHERE id = :id")
     suspend fun setLegacySessionId(id: Long, legacyId: Long)
 
+    @Query("SELECT * FROM logged_session WHERE legacySessionId = :legacyId LIMIT 1")
+    suspend fun getByLegacySession(legacyId: Long): LoggedSession?
+
+    @Query("UPDATE sessions SET photoUri = :uri WHERE id = :historyId")
+    suspend fun setHistoryPhoto(historyId: Long, uri: String?)
+
     /** The history screens deleted their copy of a session; remove ours too. */
     @Query("DELETE FROM logged_session WHERE legacySessionId = :legacyId")
     suspend fun deleteByLegacySession(legacyId: Long)

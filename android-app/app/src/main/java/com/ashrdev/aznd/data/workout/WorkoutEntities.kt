@@ -1,5 +1,6 @@
 package com.ashrdev.aznd.data.workout
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -13,7 +14,8 @@ enum class SetMode { REPS, TIME }
 @Entity(tableName = "workouts")
 data class WorkoutEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val name: String
+    val name: String,
+    @ColumnInfo(defaultValue = "0") val orderIndex: Int = 0
 )
 
 data class RecentWorkoutSession(

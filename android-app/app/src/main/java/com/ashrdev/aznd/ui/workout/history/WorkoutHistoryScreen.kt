@@ -28,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
+import com.ashrdev.aznd.data.workout.FREESTYLE_NAME
 import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.ui.calendar.BottomAnchoredPage
 import com.ashrdev.aznd.ui.calendar.DayDecoration
@@ -62,7 +64,7 @@ fun WorkoutHistoryScreen(
     // Name for the title: from the logged sessions, or the workout itself while none exist yet.
     var workoutName by remember { mutableStateOf("") }
     LaunchedEffect(workoutId) {
-        workoutName = viewModel.getWorkout(workoutId)?.workout?.name ?: ""
+        workoutName = if (workoutId == EMPTY_WORKOUT_ID) FREESTYLE_NAME else viewModel.getWorkout(workoutId)?.workout?.name ?: ""
     }
     val displayName = sessions.firstOrNull()?.session?.workoutName
         ?: workoutName.ifEmpty { "Workout" }
@@ -94,7 +96,7 @@ fun WorkoutHistoryScreen(
         onBack = onBack,
         onHome = onHome,
         onOpenSettings = onOpenSettings,
-        third = ThirdAction(
+        third = if (workoutId == EMPTY_WORKOUT_ID) null else ThirdAction(
             icon = Icons.AutoMirrored.Filled.MenuBook,
             label = "Stats",
             onClick = { onOpenStats(workoutId) }

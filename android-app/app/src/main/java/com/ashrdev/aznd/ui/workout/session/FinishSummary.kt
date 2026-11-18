@@ -8,7 +8,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.Exercise
@@ -67,12 +66,11 @@ fun buildFinishSummary(session: LoggerSession, rows: List<SetRow>, exercises: Li
     )
 }
 
-/** Finish: summary with "Finish" / "Keep going", plus "Finish and share" when [onFinishAndShare] is given. */
+/** Finish: summary with "Finish" / "Keep going". */
 @Composable
 fun FinishSummaryDialog(
     summary: FinishSummary,
     onFinish: () -> Unit,
-    onFinishAndShare: (() -> Unit)?,
     onKeepGoing: () -> Unit
 ) {
     AlertDialog(
@@ -88,10 +86,7 @@ fun FinishSummaryDialog(
             }
         },
         confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                if (onFinishAndShare != null) TextButton(onClick = onFinishAndShare) { Text("Finish and share") }
-                TextButton(onClick = onFinish) { Text("Finish") }
-            }
+            TextButton(onClick = onFinish) { Text("Finish") }
         },
         dismissButton = { TextButton(onClick = onKeepGoing) { Text("Keep going") } }
     )

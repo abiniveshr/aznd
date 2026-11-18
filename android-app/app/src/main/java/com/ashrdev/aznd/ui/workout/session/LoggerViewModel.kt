@@ -158,7 +158,7 @@ class LoggerViewModel(
     private var undoJob: Job? = null
 
     private val _shareId = MutableStateFlow<Long?>(null)
-    /** History row of the session finished with "Finish and share"; set before the phase turns Closed. */
+    /** History row of the session finished with share = true; set before the phase turns Closed. */
     val shareId: StateFlow<Long?> = _shareId.asStateFlow()
 
     private var begun = false

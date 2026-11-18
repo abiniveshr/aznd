@@ -71,7 +71,7 @@ class WorkoutRoutinesModule(
                 skipped++
                 continue
             }
-            val workoutId = db.workoutDao().insertWorkout(WorkoutEntity(name = name))
+            val workoutId = db.workoutDao().insertWorkout(WorkoutEntity(name = name, orderIndex = db.workoutDao().nextWorkoutOrder()))
             val rows = ArrayList<SetRow>()
             for (row in routine.arrayOrEmpty("rows").mapObjects { it }) {
                 val exercise = reader.resolve(row.intOrNull("exercise")) ?: continue

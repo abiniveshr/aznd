@@ -25,21 +25,52 @@ interface WorkoutDao {
     /** Save only the workout record for the new template-based builder and return its real id. */
     @Transaction
     suspend fun saveWorkoutRecord(id: Long?, name: String): Long {
-        if (id == null) return insertWorkout(WorkoutEntity(name = name))
-        updateWorkout(WorkoutEntity(id = id, name = name))
+        if (id == null) return insertWorkout(WorkoutEntity(name = name, orderIndex = nextWorkoutOrder()))
+        renameWorkout(id, name)
+        renameWorkoutHistory(id, name)
         deleteExercisesForWorkout(id)
         return id
+    }
+
+    @Query("UPDATE workouts SET name = :name WHERE id = :id")
+    suspend fun renameWorkout(id: Long, name: String)
+
+    @Query("UPDATE sessions SET workoutName = :name WHERE workoutId = :id")
+    suspend fun renameWorkoutHistory(id: Long, name: String)
+
+    @Query("SELECT COALESCE(MAX(orderIndex), -1) + 1 FROM workouts")
+    suspend fun nextWorkoutOrder(): Int
+
+    @Query("SELECT id FROM workouts ORDER BY orderIndex, id")
+    suspend fun workoutIdsInOrder(): List<Long>
+
+    @Query("UPDATE workouts SET orderIndex = :orderIndex WHERE id = :id")
+    suspend fun setWorkoutOrderIndex(id: Long, orderIndex: Int)
+
+    @Transaction
+    suspend fun setWorkoutOrder(ids: List<Long>) {
+        ids.forEachIndexed { index, id -> setWorkoutOrderIndex(id, index) }
+    }
+
+    @Transaction
+    suspend fun insertWorkoutAfter(afterId: Long, name: String): Long {
+        val newId = insertWorkout(WorkoutEntity(name = name, orderIndex = nextWorkoutOrder()))
+        val ids = workoutIdsInOrder().filter { it != newId }.toMutableList()
+        val at = ids.indexOf(afterId)
+        ids.add(if (at < 0) ids.size else at + 1, newId)
+        setWorkoutOrder(ids)
+        return newId
     }
 
     @Query("SELECT DISTINCT workoutId, workoutName FROM sessions ORDER BY workoutName")
     fun getWorkoutHistorySummaries(): Flow<List<WorkoutHistorySummary>>
 
     @Transaction
-    @Query("SELECT * FROM workouts ORDER BY name")
+    @Query("SELECT * FROM workouts ORDER BY orderIndex, id")
     fun getWorkoutsWithExercises(): Flow<List<WorkoutWithExercises>>
 
     @Transaction
-    @Query("SELECT * FROM workouts ORDER BY name")
+    @Query("SELECT * FROM workouts ORDER BY orderIndex, id")
     suspend fun getAllWorkoutsWithExercisesOnce(): List<WorkoutWithExercises>
 
     @Transaction
@@ -114,9 +145,10 @@ interface WorkoutDao {
     @Transaction
     suspend fun saveWorkout(workout: WorkoutEntity, exercises: List<ExerciseWithSets>) {
         val workoutId = if (workout.id == 0L) {
-            insertWorkout(workout)
+            insertWorkout(workout.copy(orderIndex = nextWorkoutOrder()))
         } else {
-            updateWorkout(workout)
+            renameWorkout(workout.id, workout.name)
+            renameWorkoutHistory(workout.id, workout.name)
             deleteExercisesForWorkout(workout.id)
             workout.id
         }

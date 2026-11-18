@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,7 +30,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -552,11 +550,12 @@ private fun GradientSection(
                 ) { Icon(Icons.Default.Delete, contentDescription = "Remove colour") }
             }
         }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Space.sm),
-            verticalArrangement = Arrangement.spacedBy(Space.sm)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.sm)
         ) {
             OutlinedButton(
+                modifier = Modifier.weight(1f),
                 enabled = g.stops.size < 8,
                 onClick = {
                     onChange { cur ->
@@ -581,25 +580,10 @@ private fun GradientSection(
                 Spacer(Modifier.width(Space.sm))
                 Text("Add colour")
             }
-            OutlinedButton(onClick = { onChange { it.reversed() } }) {
+            OutlinedButton(modifier = Modifier.weight(1f), onClick = { onChange { it.reversed() } }) {
                 Icon(Icons.Default.SwapHoriz, contentDescription = null)
                 Spacer(Modifier.width(Space.sm))
                 Text("Reverse")
-            }
-            OutlinedButton(
-                enabled = g.stops.size >= 2,
-                onClick = {
-                    onChange { cur ->
-                        val sorted = cur.cleanStops()
-                        val n = sorted.size
-                        if (cur.stops.size < 2 || n < 2) cur
-                        else cur.copy(stops = sorted.mapIndexed { i, s -> GradientStop(i / (n - 1).toFloat(), s.color) })
-                    }
-                }
-            ) {
-                Icon(Icons.Default.Straighten, contentDescription = null)
-                Spacer(Modifier.width(Space.sm))
-                Text("Even")
             }
         }
     }
@@ -619,7 +603,12 @@ private fun PatternTile(kind: PatternKind, under: ResolvedFill, count: Int, tint
             .padding(Space.xs),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val sample = FillStyle(patterns = listOf(PatternSpec.of(kind, intensity = maxOf(kind.defaultIntensity, 0.3f), tint = tint)))
+        val sample = remember(kind, tint) {
+            FillStyle(
+                patterns = listOf(PatternSpec.of(kind, intensity = maxOf(kind.defaultIntensity, 0.3f), tint = tint)),
+                patternAnchor = FillAnchor.ELEMENT
+            )
+        }
         Box(
             modifier = Modifier
                 .size(60.dp)
@@ -668,7 +657,10 @@ private fun PatternLayerCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val previewSpec = if (grayscale) spec.copy(tint = greyOf(spec.tint)) else spec
-                val preview = FillStyle(patterns = listOf(previewSpec.copy(enabled = true, intensity = maxOf(spec.intensity, 0.3f))))
+                val preview = FillStyle(
+                    patterns = listOf(previewSpec.copy(enabled = true, intensity = maxOf(spec.intensity, 0.3f))),
+                    patternAnchor = FillAnchor.ELEMENT
+                )
                 Box(
                     modifier = Modifier
                         .size(32.dp)

@@ -115,6 +115,8 @@ class TrainingRepository(
 
     // ---- sessions ----
 
+    suspend fun currentBodyweightKg(): Double = bodyweight.currentKg()
+
     /** Starts a session from the workout's template. Null if the template has no usable rows. */
     suspend fun startSession(workoutId: Long): Long? =
         if (workoutId == EMPTY_WORKOUT_ID) sessions.startEmptySession(bodyweight.currentKg(), clock())
@@ -137,7 +139,7 @@ class TrainingRepository(
     /**
      * The Finish button: only this makes a session "completed". Finishing twice (double tap) is a
      * no-op the second time, so the history never gets a duplicate. Returns the id of the history
-     * row written for it, or null when there is none (Freestyle, nothing to write, already finished).
+     * row written for it, or null when there is none (nothing to write, already finished).
      */
     suspend fun finishSession(sessionId: Long): Long? {
         val s = sessions.getSession(sessionId) ?: return null
@@ -156,6 +158,16 @@ class TrainingRepository(
 
     /** Attaches (or with null removes) the session's photo. */
     suspend fun setSessionPhoto(sessionId: Long, uri: String?) = sessions.setPhoto(sessionId, uri)
+
+    suspend fun sessionOfHistory(historyId: Long): LoggedSession? = sessions.getByLegacySession(historyId)
+
+    suspend fun setHistoryPhoto(historyId: Long, uri: String?) {
+        sessions.setHistoryPhoto(historyId, uri)
+        sessions.getByLegacySession(historyId)?.let { sessions.setPhoto(it.id, uri) }
+    }
+
+    suspend fun sessionRows(sessionId: Long): List<SetRow> =
+        SetTree.ordered(sessions.setsFor(sessionId).map { it.toRow() })
 
     // ---- history screens ----
 
@@ -217,16 +229,17 @@ class TrainingRepository(
     private suspend fun mirrorSession(session: LoggedSession): Long? {
         val old = legacy ?: return null
         val finishedAt = session.finishedAt ?: return null
-        if (session.workoutId == EMPTY_WORKOUT_ID) return null // per-exercise stats only, no history entry
-        val workout = old.getWorkoutWithExercises(session.workoutId)?.workout ?: return null
+        val workoutName = if (session.workoutId == EMPTY_WORKOUT_ID) FREESTYLE_NAME
+        else old.getWorkoutWithExercises(session.workoutId)?.workout?.name ?: return null
         val rows = SetTree.ordered(sessions.setsFor(session.id).map { it.toRow() })
         val byId = exercisesById(rows.mapNotNull { it.exerciseId })
         val legacyId = old.insertSession(
             SessionEntity(
-                workoutId = workout.id,
-                workoutName = workout.name,
+                workoutId = session.workoutId,
+                workoutName = workoutName,
                 startedAt = session.startedAt,
-                finishedAt = finishedAt
+                finishedAt = finishedAt,
+                photoUri = session.photoUri
             )
         )
         val logged = rows

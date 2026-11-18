@@ -11,7 +11,7 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *
  * Home (pager: History | Dashboard | Apps) - opens on Dashboard
  *  |- Workouts (pager: Exercises | Workouts | Split) -------- Workouts
- *  |     |- Workouts page: Start on a card ------------- WorkoutSession -- Finish --> (back)
+ *  |     |- Workouts page: Start on a card ------------- WorkoutSession -- Finish --> WorkoutSummary (replaces the session; Share -- Flex)
  *  |     |                 a workout ------------------- WorkoutDetail (pager: Edit | Workout | Stats;
  *  |     |                                                 Stats has two vertical pages: the workout, its exercises)
  *  |     |                                                 |- Start ---- WorkoutSession
@@ -46,7 +46,7 @@ import com.ashrdev.aznd.ui.body.CompositionMetric
  *                     graph widget -> DashboardGraph, 3D model widget -> BodyPage
  *
  * Flex (share card maker): Share in the pull-up bar on Home, and the Share button of SessionDetail,
- * WorkoutDetail, ExerciseProgress and SavedDayDetail, each with its own preset.
+ * WorkoutSummary, WorkoutDetail, ExerciseProgress and SavedDayDetail, each with its own preset.
  * Settings -> Appearance opens from the pull-up bar on every screen.
  * Manage data (Delete | Export | Import) opens from the pull-up bar on every screen: from Home,
  * Settings and Appearance it lists all data, from a screen inside an app it is pre-filtered to
@@ -96,10 +96,23 @@ sealed class Destination(val route: String) {
     /**
      * Flex, the share-card maker. [preset] is a FlexPreset id; a / b are ids and s a text key whose meaning
      * depends on the preset (see FlexPreset). Callers use FlexPreset.route(...), which also encodes [s].
+     * [card] is the shipped key of a card preset and [then] a history session id: with both and [a] (the other session) Flex opens that
+     * preset on its Use screen with those sessions bound (the "Then vs now" share of the workout summary).
      */
-    object Flex : Destination("flex/{preset}?a={a}&b={b}&s={s}") {
-        fun createRoute(preset: String, a: Long = -1L, b: Long = -1L, s: String = "") =
-            "flex/$preset?a=$a&b=$b&s=$s"
+    object Flex : Destination("flex/{preset}?a={a}&b={b}&s={s}&aspect={aspect}&card={card}&then={then}") {
+        fun createRoute(
+            preset: String,
+            a: Long = -1L,
+            b: Long = -1L,
+            s: String = "",
+            aspect: String = "",
+            card: String = "",
+            then: Long = -1L
+        ) = "flex/$preset?a=$a&b=$b&s=$s&aspect=$aspect&card=$card&then=$then"
+    }
+
+    object WorkoutSummary : Destination("workout_summary/{sessionId}") {
+        fun createRoute(sessionId: Long) = "workout_summary/$sessionId"
     }
 
     object Routines : Destination("routines")

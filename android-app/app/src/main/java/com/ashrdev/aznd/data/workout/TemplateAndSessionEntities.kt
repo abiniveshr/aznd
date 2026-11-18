@@ -25,9 +25,12 @@ data class TemplateSet(
 
 /**
  * workoutId of a session started from "Empty workout" (no template). Real workouts start at 1.
- * Such sessions feed only the per-exercise statistics: no history entry, no workout or muscle stats.
+ * Such sessions are written to the history as [FREESTYLE_NAME] but feed no workout or muscle stats.
  */
 const val EMPTY_WORKOUT_ID = 0L
+
+/** The name a freestyle session carries in the history. */
+const val FREESTYLE_NAME = "Freestyle"
 
 @Entity(tableName = "logged_session", indices = [Index("workoutId"), Index("finishedAt"), Index("legacySessionId")])
 data class LoggedSession(

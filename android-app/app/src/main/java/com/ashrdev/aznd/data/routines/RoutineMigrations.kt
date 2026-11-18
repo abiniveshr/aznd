@@ -44,3 +44,13 @@ val MIGRATION_21_22 = object : Migration(21, 22) {
         db.execSQL("ALTER TABLE `streak_checkins` ADD COLUMN `at` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+val MIGRATION_22_23 = object : Migration(22, 23) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `workouts` ADD COLUMN `orderIndex` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "UPDATE `workouts` SET `orderIndex` = (SELECT COUNT(*) FROM `workouts` AS w2 " +
+                "WHERE w2.`name` < `workouts`.`name` OR (w2.`name` = `workouts`.`name` AND w2.`id` < `workouts`.`id`))"
+        )
+    }
+}

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -21,15 +22,19 @@ import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import com.ashrdev.aznd.ui.components.AlertDialog
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,10 +50,14 @@ import com.ashrdev.aznd.data.workout.Exercise
 import com.ashrdev.aznd.data.workout.WorkoutWithExercises
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.PrimaryAction
+import com.ashrdev.aznd.ui.common.ReorderableItem
 import com.ashrdev.aznd.ui.common.ScreenScaffold
+import com.ashrdev.aznd.ui.common.dragReorderOnLongPress
+import com.ashrdev.aznd.ui.common.rememberReorderState
 import com.ashrdev.aznd.ui.common.rememberSubPageBar
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.workout.exercise.ExerciseSearchContent
 import com.ashrdev.aznd.ui.workout.exercise.LocalOpenCustomExercise
 import com.ashrdev.aznd.ui.theme.Space
@@ -142,7 +151,14 @@ fun WorkoutsScreen(
         subPages = subPages,
         reservePrimarySpace = true,
         pagePrimaryActions = { page ->
-            if (page == PAGE_VIEW) listOf(
+            val running = active
+            if (page == PAGE_VIEW && running != null) listOf(
+                PrimaryAction(
+                    icon = Icons.Default.PlayArrow,
+                    label = "Resume ${running.workoutName}",
+                    onClick = { onOpenSession(running.workoutId) }
+                )
+            ) else if (page == PAGE_VIEW) listOf(
                 PrimaryAction(
                     icon = Icons.Default.Add,
                     label = "New workout",
@@ -150,7 +166,7 @@ fun WorkoutsScreen(
                 ),
                 PrimaryAction(
                     icon = Icons.Default.PlayArrow,
-                    label = if (active?.workoutId == EMPTY_WORKOUT_ID) "Resume" else "Freestyle",
+                    label = "Freestyle",
                     onClick = startEmpty
                 )
             ) else emptyList()
@@ -179,7 +195,11 @@ fun WorkoutsScreen(
                     runningSession = active,
                     onOpenWorkout = onOpenWorkout,
                     onOpenSession = onOpenSession,
-                    onStart = start
+                    onStart = start,
+                    onReorder = viewModel::reorderWorkouts,
+                    onRename = viewModel::renameWorkout,
+                    onDuplicate = viewModel::duplicateWorkout,
+                    onDelete = viewModel::deleteWorkout
                 )
             }
         }
@@ -195,9 +215,64 @@ private fun ViewPage(
     runningSession: ActiveSessionInfo?,
     onOpenWorkout: (Long) -> Unit,
     onOpenSession: (Long) -> Unit,
-    onStart: (WorkoutWithExercises) -> Unit
+    onStart: (WorkoutWithExercises) -> Unit,
+    onReorder: (List<Long>) -> Unit,
+    onRename: (Long, String) -> Unit,
+    onDuplicate: (Long) -> Unit,
+    onDelete: (Long) -> Unit
 ) {
+    var renaming by remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    var deleting by remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    var local by remember { mutableStateOf<List<WorkoutWithExercises>?>(null) }
+    val shown = local ?: workouts
+    val listState = rememberLazyListState()
+    val reorder = rememberReorderState(
+        listState = listState,
+        firstItemIndex = if (runningSession != null) 1 else 0,
+        itemCount = shown.size
+    ) { from, to ->
+        val list = (local ?: workouts).toMutableList()
+        if (from in list.indices && to in list.indices) {
+            list.add(to, list.removeAt(from))
+            local = list
+        }
+    }
+    LaunchedEffect(reorder.draggingKey) {
+        if (reorder.draggingKey == null) {
+            local?.let { moved -> onReorder(moved.map { it.workout.id }) }
+        }
+    }
+    LaunchedEffect(workouts) {
+        if (reorder.draggingKey == null) local = null
+    }
+
+    renaming?.let { target ->
+        RenameWorkoutDialog(
+            initial = target.workout.name,
+            onDismiss = { renaming = null },
+            onConfirm = { name ->
+                renaming = null
+                onRename(target.workout.id, name)
+            }
+        )
+    }
+    deleting?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete workout?") },
+            text = { Text("\"${target.workout.name}\" and its exercises will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    onDelete(target.workout.id)
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } }
+        )
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = Space.lg, end = Space.lg, top = Space.lg, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(Space.md)
@@ -220,46 +295,91 @@ private fun ViewPage(
                 }
             }
         }
-        if (workouts.isEmpty()) {
+        if (shown.isEmpty()) {
             item(key = "empty") {
                 Text("No workouts yet.", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
-            items(workouts, key = { it.workout.id }) { item ->
+            items(shown, key = { it.workout.id }) { item ->
                 val isRunning = runningSession?.workoutId == item.workout.id
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenWorkout(item.workout.id) }
-                ) {
-                    Row(
+                ReorderableItem(reorder, item.workout.id) {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = Space.lg, top = Space.md, bottom = Space.md, end = Space.md),
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable { onOpenWorkout(item.workout.id) }
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                "${item.exercises.size} exercises · ${item.exercises.sumOf { it.sets.size }} sets",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(Modifier.width(Space.sm))
-                        Button(
-                            onClick = { onStart(item) },
-                            enabled = item.exercises.isNotEmpty()
+                        Row(
+                            modifier = Modifier
+                                .dragReorderOnLongPress(reorder, item.workout.id)
+                                .fillMaxWidth()
+                                .padding(start = Space.lg, top = Space.md, bottom = Space.md, end = Space.xs),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(Modifier.width(Space.xs))
-                            Text(if (isRunning) "Resume" else "Start")
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "${item.exercises.size} exercises · ${item.exercises.sumOf { it.sets.size }} sets",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(Space.sm))
+                            Button(
+                                onClick = { onStart(item) },
+                                enabled = item.exercises.isNotEmpty()
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                Spacer(Modifier.width(Space.xs))
+                                Text(if (isRunning) "Resume" else "Start")
+                            }
+                            PresetMenu(
+                                onRename = { renaming = item },
+                                onDuplicate = { onDuplicate(item.workout.id) },
+                                onDelete = { deleting = item }
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun PresetMenu(onRename: () -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "More")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Rename") }, onClick = { open = false; onRename() })
+            DropdownMenuItem(text = { Text("Duplicate") }, onClick = { open = false; onDuplicate() })
+            DropdownMenuItem(text = { Text("Delete") }, onClick = { open = false; onDelete() })
+        }
+    }
+}
+
+@Composable
+private fun RenameWorkoutDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename workout") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Workout name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text.trim()) }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 // ---- Exercises page: every exercise ----
