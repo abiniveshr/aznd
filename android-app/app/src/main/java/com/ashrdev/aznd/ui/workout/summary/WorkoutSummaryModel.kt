@@ -11,6 +11,9 @@ import com.ashrdev.aznd.domain.workout.SetTree
 import com.ashrdev.aznd.domain.workout.formatWeightKg
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.workout.stats.estimatedOneRepMax
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -45,7 +48,7 @@ data class ExerciseSummary(
     val notInCompared: Boolean = false
 )
 
-data class CompareOption(val id: Long, val label: String)
+data class ComparePick(val sessionId: Long, val startedAt: Long, val workoutName: String, val topSet: String)
 
 data class SummaryTotal(val label: String, val value: String)
 
@@ -64,10 +67,18 @@ data class SummaryData(
     val canUpdatePreset: Boolean,
     val canRename: Boolean,
     val suggestedName: String,
-    val compareOptions: List<CompareOption> = emptyList(),
     val compareWithId: Long? = null,
-    val lastTimeId: Long? = null
+    val compareWithAt: Long? = null,
+    val exerciseCompareAt: Map<String, Long> = emptyMap(),
+    val lastTimeId: Long? = null,
+    val fallbackThenId: Long? = null,
+    val overallPicks: Map<String, ComparePick> = emptyMap(),
+    val exercisePicks: Map<String, Map<String, ComparePick>> = emptyMap()
 )
+
+private val compareDateFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+
+fun formatCompareDate(millis: Long): String = compareDateFormat.format(Date(millis))
 
 fun roundKg(kg: Double): Double = (kg * 10.0).roundToLong() / 10.0
 
@@ -167,3 +178,17 @@ fun templateShape(rows: List<SetRow>): List<Pair<Long?, List<Pair<SetKind, Long?
 
 fun templateFromSession(rows: List<SetRow>): List<SetRow> =
     SetTree.dropUnsetRows(rows).map { it.copy(weightKg = null, reps = null, durationSec = null, rpe = null) }
+
+fun topSetOf(lines: List<SetLine>, context: E1rmContext? = null): Pair<SetLine, Double?>? {
+    val scored = lines.mapNotNull { line -> setE1rm(line, context)?.let { line to it } }.maxByOrNull { it.second }
+    if (scored != null) return scored.first to scored.second
+    val timed = lines.filter { it.mode == SetMode.TIME }.maxByOrNull { it.value }
+    if (timed != null) return timed to null
+    val any = lines.maxByOrNull { it.value } ?: return null
+    return any to null
+}
+
+fun topSetText(top: Pair<SetLine, Double?>, context: E1rmContext? = null): String {
+    val e1rm = top.second ?: return formatSetValueText(top.first)
+    return formatSetValueText(top.first) + " · e1RM " + formatE1rmText(e1rm, context)
+}

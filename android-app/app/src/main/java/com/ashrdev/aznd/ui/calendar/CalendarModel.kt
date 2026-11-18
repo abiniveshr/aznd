@@ -115,7 +115,8 @@ internal class CalendarColors(
     val primaryContainer: Color,
     val onPrimaryContainer: Color,
     val background: Color,
-    val onSurfaceVariant: Color
+    val onSurfaceVariant: Color,
+    val onPrimary: Color
 ) {
     /** The colour a fill paints (transparent for none). Intensity keeps its opacity here. */
     fun fillColor(fill: DayFill): Color = when (fill) {
@@ -137,8 +138,8 @@ internal class CalendarColors(
 @Composable
 internal fun rememberCalendarColors(): CalendarColors {
     val c = MaterialTheme.colorScheme
-    return remember(c.onSurface, c.primary, c.primaryContainer, c.onPrimaryContainer, c.background, c.onSurfaceVariant) {
-        CalendarColors(c.onSurface, c.primary, c.primaryContainer, c.onPrimaryContainer, c.background, c.onSurfaceVariant)
+    return remember(c.onSurface, c.primary, c.primaryContainer, c.onPrimaryContainer, c.background, c.onSurfaceVariant, c.onPrimary) {
+        CalendarColors(c.onSurface, c.primary, c.primaryContainer, c.onPrimaryContainer, c.background, c.onSurfaceVariant, c.onPrimary)
     }
 }
 

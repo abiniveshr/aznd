@@ -57,6 +57,8 @@ fun ZoomCalendar(
     maxGridHeight: Dp = Dp.Unspecified,
     dayTooltip: ((String) -> String)? = null,
     onDayDoubleClick: ((String) -> Unit)? = null,
+    pickableDays: ((String) -> Boolean)? = null,
+    chosenDay: String? = null,
     onDayClick: (String) -> Unit = {}
 ) {
     val thisMonth = remember { monthKeyOf(todayDayKey()) }
@@ -82,8 +84,9 @@ fun ZoomCalendar(
         )
     }
 
-    val previous = view.step(-1, first, last)
-    val next = view.step(1, first, last)
+    val chooser = pickableDays != null
+    val previous = if (chooser) allowed.lastOrNull { it < view.firstMonth() } else view.step(-1, first, last)
+    val next = if (chooser) allowed.firstOrNull { it > view.lastMonth() } else view.step(1, first, last)
     val goPrevious: () -> Unit = { if (previous != null) state.visibleMonth = previous }
     val goNext: () -> Unit = { if (next != null) state.visibleMonth = next }
 
@@ -154,10 +157,18 @@ fun ZoomCalendar(
                     decorate = decorate,
                     gridHeight = gridHeight,
                     dayTooltip = dayTooltip,
+                    pickableDays = pickableDays,
+                    chosenDay = chosenDay,
                     onDayTap = { dayKey ->
-                        if (selectable) state.selectedDay = dayKey
-                        state.visibleMonth = monthKeyOf(dayKey)
-                        onDayClick(dayKey)
+                        if (chooser) {
+                            val zoomedIn = state.zoom == CalendarZoom.MONTH
+                            state.visibleMonth = monthKeyOf(dayKey)
+                            if (zoomedIn) onDayClick(dayKey) else state.zoom = CalendarZoom.MONTH
+                        } else {
+                            if (selectable) state.selectedDay = dayKey
+                            state.visibleMonth = monthKeyOf(dayKey)
+                            onDayClick(dayKey)
+                        }
                     },
                     onDayDoubleTap = onDayDoubleClick,
                     onPinch = { zoomIn, near ->

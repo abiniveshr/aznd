@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.ashrdev.aznd.data.workout.EMPTY_WORKOUT_ID
 import com.ashrdev.aznd.data.workout.FREESTYLE_NAME
 import com.ashrdev.aznd.data.workout.LoggedSession
+import com.ashrdev.aznd.data.workout.SessionWithSets
 import com.ashrdev.aznd.data.workout.TrainingRepository
 import com.ashrdev.aznd.data.workout.WorkoutDao
 import com.ashrdev.aznd.domain.workout.ExerciseProfile
@@ -17,8 +18,8 @@ import com.ashrdev.aznd.domain.workout.SetRow
 import com.ashrdev.aznd.domain.workout.SetTree
 import com.ashrdev.aznd.domain.workout.formatKcal
 import com.ashrdev.aznd.domain.workout.formatWeightKg
+import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.workout.formatDuration
-import com.ashrdev.aznd.ui.workout.formatTimestamp
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +48,7 @@ class WorkoutSummaryViewModel(
 
     private var savedCopy = false
     private var compareWithId: Long? = null
+    private val exerciseCompare = HashMap<String, Long>()
     private var busy = false
 
     init {
@@ -56,6 +58,12 @@ class WorkoutSummaryViewModel(
     fun setCompareWith(id: Long?) {
         if (id == compareWithId) return
         compareWithId = id
+        reload()
+    }
+
+    fun setExerciseCompareWith(exerciseName: String, id: Long?) {
+        if (exerciseCompare[exerciseName] == id) return
+        if (id == null) exerciseCompare.remove(exerciseName) else exerciseCompare[exerciseName] = id
         reload()
     }
 
@@ -139,18 +147,14 @@ class WorkoutSummaryViewModel(
         val earlier = legacy.getSessionsOnce()
             .filter { it.session.id != session.id && it.session.startedAt < session.startedAt }
         val previous = if (freestyle) null else earlier.firstOrNull { it.session.workoutId == session.workoutId }
-        val chosen = compareWithId?.let { id -> earlier.firstOrNull { it.session.id == id } }
+        val chosen = if (freestyle) null else compareWithId?.let { id -> earlier.firstOrNull { it.session.id == id } }
+        val overrides = if (freestyle) emptyMap() else exerciseCompare.mapNotNull { (name, id) ->
+            earlier.firstOrNull { it.session.id == id }?.let { name to it }
+        }.toMap()
         val currentNames = sets.map { it.exerciseName }.toSet()
         val sharing = earlier.filter { s -> s.sets.any { it.exerciseName in currentNames } }
         val ordered = if (freestyle) sharing else {
             sharing.filter { it.session.workoutId == session.workoutId } + sharing.filter { it.session.workoutId != session.workoutId }
-        }
-        val labelCounts = HashMap<String, Int>()
-        val compareOptions = ordered.map { s ->
-            val base = "${s.session.workoutName} · ${formatTimestamp(s.session.startedAt)}"
-            val n = (labelCounts[base] ?: 0) + 1
-            labelCounts[base] = n
-            CompareOption(s.session.id, if (n > 1) "$base ($n)" else base)
         }
         val lastTime = if (freestyle) sharing.firstOrNull() else previous
 
@@ -161,8 +165,9 @@ class WorkoutSummaryViewModel(
 
         val exercises = sets.groupBy { it.exerciseName }.map { (name, list) ->
             val lines = list.map { it.toLine() }
+            val picked = overrides[name] ?: chosen
             val source = when {
-                chosen != null -> chosen
+                picked != null -> picked
                 freestyle -> earlier.firstOrNull { s -> s.sets.any { it.exerciseName == name } }
                 else -> previous
             }
@@ -187,8 +192,33 @@ class WorkoutSummaryViewModel(
                     compareExercise(lines, before, source.session.startedAt, currentContext, previousContext)
                 } else null,
                 e1rmContext = currentContext,
-                notInCompared = chosen != null && before.isEmpty()
+                notInCompared = picked != null && before.isEmpty()
             )
+        }
+
+        val overallPicks = HashMap<String, ComparePick>()
+        val exercisePicks = HashMap<String, Map<String, ComparePick>>()
+        if (!freestyle) {
+            for (s in latestPerDay(earlier.filter { it.session.workoutId == session.workoutId })) {
+                val pick = overallPick(s, profiles, currentBodyweight, previousBodyweights) ?: continue
+                overallPicks[dayKeyOf(s.session.startedAt)] = pick
+            }
+            for (name in currentNames) {
+                val profile = profiles[name]
+                val byDay = HashMap<String, ComparePick>()
+                for (s in latestPerDay(earlier.filter { s -> s.sets.any { it.exerciseName == name } })) {
+                    val context = contextOf(s, profile, currentBodyweight, previousBodyweights)
+                    val lines = s.sets.filter { it.exerciseName == name }.sortedBy { it.orderIndex }.map { it.toLine() }
+                    val top = topSetOf(lines, context) ?: continue
+                    byDay[dayKeyOf(s.session.startedAt)] = ComparePick(
+                        s.session.id,
+                        s.session.startedAt,
+                        s.session.workoutName,
+                        topSetText(top, context)
+                    )
+                }
+                if (byDay.isNotEmpty()) exercisePicks[name] = byDay
+            }
         }
 
         val elapsed = ((session.finishedAt - session.startedAt) / 1000L).toInt().coerceAtLeast(0)
@@ -227,10 +257,53 @@ class WorkoutSummaryViewModel(
                 canUpdatePreset = differs,
                 canRename = preset != null,
                 suggestedName = "Workout ${legacy.workoutCount() + 1}",
-                compareOptions = compareOptions,
                 compareWithId = chosen?.session?.id,
-                lastTimeId = lastTime?.session?.id
+                compareWithAt = chosen?.session?.startedAt,
+                exerciseCompareAt = overrides.mapValues { it.value.session.startedAt },
+                lastTimeId = lastTime?.session?.id,
+                fallbackThenId = ordered.firstOrNull()?.session?.id,
+                overallPicks = overallPicks,
+                exercisePicks = exercisePicks
             )
+        )
+    }
+
+    private fun latestPerDay(sessions: List<SessionWithSets>): List<SessionWithSets> {
+        val seen = HashSet<String>()
+        return sessions.sortedByDescending { it.session.startedAt }.filter { seen.add(dayKeyOf(it.session.startedAt)) }
+    }
+
+    private suspend fun contextOf(
+        s: SessionWithSets,
+        profile: ExerciseProfile?,
+        fallbackBodyweight: Double?,
+        cache: HashMap<Long, Double?>
+    ): E1rmContext {
+        if (profile?.type?.isBodyweight != true) return E1rmContext(profile, fallbackBodyweight)
+        val id = s.session.id
+        if (!cache.containsKey(id)) cache[id] = repository.sessionOfHistory(id)?.bodyweightKgSnapshot
+        return E1rmContext(profile, cache[id] ?: fallbackBodyweight)
+    }
+
+    private suspend fun overallPick(
+        s: SessionWithSets,
+        profiles: Map<String, ExerciseProfile>,
+        fallbackBodyweight: Double?,
+        cache: HashMap<Long, Double?>
+    ): ComparePick? {
+        var best: Triple<String, Pair<SetLine, Double?>, E1rmContext>? = null
+        for ((name, list) in s.sets.sortedBy { it.orderIndex }.groupBy { it.exerciseName }) {
+            val context = contextOf(s, profiles[name], fallbackBodyweight, cache)
+            val top = topSetOf(list.map { it.toLine() }, context) ?: continue
+            val current = best
+            if (current == null || (top.second ?: -1.0) > (current.second.second ?: -1.0)) best = Triple(name, top, context)
+        }
+        val found = best ?: return null
+        return ComparePick(
+            s.session.id,
+            s.session.startedAt,
+            s.session.workoutName,
+            found.first + ": " + topSetText(found.second, found.third)
         )
     }
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +30,10 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -56,6 +60,9 @@ private val BadgeMinCell = 30.dp
 private val InnerRingMinCell = 24.dp
 private val ReferenceButtonHeight = 48.dp
 private const val MAX_BUTTON_CORNER_DP = 50f
+private const val CHOOSER_DIM_ALPHA = 0.38f
+
+private fun Color.fade(scale: Float): Color = if (scale >= 1f) this else copy(alpha = alpha * scale)
 
 internal fun cellSizeFor(view: CalendarView, width: Dp, height: Dp): Dp {
     val rows = view.monthRanges.size
@@ -104,7 +111,9 @@ internal fun CalendarGrid(
     onDayTap: (String) -> Unit,
     onDayDoubleTap: ((String) -> Unit)?,
     onPinch: (zoomIn: Boolean, near: MonthKey) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    pickableDays: ((String) -> Boolean)? = null,
+    chosenDay: String? = null
 ) {
     val colors = rememberCalendarColors()
     val today = todayDayKey()
@@ -148,8 +157,8 @@ internal fun CalendarGrid(
             DayNumberLayouts(measurer, numberStyle, (cell.value * 0.38f).coerceAtMost(14f).sp)
         }
 
-        val geometry = remember(bands, layout, first, last, cell, bandHeight, cellGap) {
-            GridGeometry(bands, layout, first, last, cell, bandHeight, cellGap)
+        val geometry = remember(bands, layout, first, last, cell, bandHeight, cellGap, pickableDays) {
+            GridGeometry(bands, layout, first, last, cell, bandHeight, cellGap, pickableDays)
         }
         val hitTest = remember<DayHitTest>(geometry) { { position, _, density -> geometry.hit(position, density) } }
         val paint = GridPaint(
@@ -166,7 +175,9 @@ internal fun CalendarGrid(
             lastMonth = last.year * 12 + last.month,
             monthLabels = monthLabels,
             numbers = numbers,
-            badges = badgePainter
+            badges = badgePainter,
+            pickable = pickableDays,
+            chosenDay = chosenDay
         )
 
         Box(
@@ -198,6 +209,25 @@ internal fun CalendarGrid(
                         drawDays(paint, if (showHover) hover.day else null, decorations.value)
                     }
                     DayHoverOverlay(hover, dayTooltip)
+                    if (pickableDays != null && view.zoom == CalendarZoom.MONTH) {
+                        for (slot in plan.slots) {
+                            val dayKey = slot.dayKey
+                            if (!pickableDays(dayKey)) continue
+                            Box(
+                                modifier = Modifier
+                                    .offset(cell * slot.col, (bandHeight + BandGap) * slot.band + MonthLabelHeight + cell * slot.row)
+                                    .size(cell)
+                                    .semantics {
+                                        role = Role.Button
+                                        contentDescription = formatDayLong(dayKey)
+                                        onClick(label = "Choose " + formatDayLong(dayKey)) {
+                                            onDayTap(dayKey)
+                                            true
+                                        }
+                                    }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -211,7 +241,8 @@ private class GridGeometry(
     val last: MonthKey,
     val cell: Dp,
     val bandHeight: Dp,
-    val cellGap: Dp
+    val cellGap: Dp,
+    val pickable: ((String) -> Boolean)?
 ) {
     fun hit(position: Offset, density: Density): DayHit? = with(density) {
         val cellPx = cell.toPx()
@@ -231,6 +262,7 @@ private class GridGeometry(
         val week = band.startWeek + col
         val dayKey = band.dayKeyAt(layout, week, row)
         if (dayKey == null || MonthKey(layout.year, layout.monthAt(week, row)) !in first..last) return@with null
+        if (pickable != null && !pickable.invoke(dayKey)) return@with null
         val left = col * cellPx + gapPx
         val top = bandIndex * bandPx + labelPx + row * cellPx + gapPx
         DayHit(
@@ -278,7 +310,9 @@ private class GridPaint(
     val lastMonth: Int,
     val monthLabels: List<TextLayoutResult>,
     val numbers: DayNumberLayouts,
-    val badges: VectorBadgePainter
+    val badges: VectorBadgePainter,
+    val pickable: ((String) -> Boolean)?,
+    val chosenDay: String?
 )
 
 /** Day numbers 1-31 measured once per style; the colour is given when drawing. */
@@ -387,6 +421,7 @@ private fun DrawScope.drawDays(g: GridPaint, hovered: String?, decorations: List
     val dotPx = (g.cell * 0.12f).coerceIn(3.dp, 5.dp).toPx()
     val symbolPx = (g.cell * 0.24f).coerceIn(8.dp, 12.dp).toPx()
     val insetPx = (g.cell * 0.08f).coerceIn(2.dp, 4.dp).toPx()
+    val pickable = g.pickable
 
     for (label in g.plan.labels) {
         drawTextIn(
@@ -405,11 +440,19 @@ private fun DrawScope.drawDays(g: GridPaint, hovered: String?, decorations: List
         val monthIndex = g.plan.view.year * 12 + slot.month
         val reachable = monthIndex in g.firstMonth..g.lastMonth
         val isToday = slot.dayKey == g.today
-        val isSelected = g.selectable && slot.dayKey == g.selectedDay
+        val isPickable = pickable != null && pickable(slot.dayKey)
+        val isChosen = pickable != null && slot.dayKey == g.chosenDay
+        val dimmed = pickable != null && !isPickable && !isChosen
+        val fade = if (dimmed) CHOOSER_DIM_ALPHA else 1f
+        val isSelected = pickable == null && g.selectable && slot.dayKey == g.selectedDay
         val showSelected = if (hovered != null) hovered == slot.dayKey else isSelected
 
-        val hasFill = decoration.fill != DayFill.None
-        val fillColor = colors.fillColor(decoration.fill)
+        val hasFill = isChosen || isPickable || decoration.fill != DayFill.None
+        val fillColor = when {
+            isChosen -> colors.primary
+            isPickable -> colors.primaryContainer
+            else -> colors.fillColor(decoration.fill)
+        }.fade(fade)
         val outlineColor = decoration.outlineColor ?: colors.primary
         val innerRing = showSelected && decoration.outline && innerRingAllowed
 
@@ -424,6 +467,10 @@ private fun DrawScope.drawDays(g: GridPaint, hovered: String?, decorations: List
                 borderPx = ringPx
                 borderColor = colors.onSurface
             }
+            isPickable && !isChosen -> {
+                borderPx = 1.dp.toPx()
+                borderColor = colors.primary
+            }
             decoration.outline -> {
                 borderPx = ringPx
                 borderColor = outlineColor
@@ -436,19 +483,23 @@ private fun DrawScope.drawDays(g: GridPaint, hovered: String?, decorations: List
 
         val origin = Offset(left, top)
         val cellSize = Size(inner, inner)
-        drawRoundRect(if (reachable) reachableBase else unreachableBase, origin, cellSize, corner)
+        drawRoundRect(if (reachable && !dimmed) reachableBase else unreachableBase, origin, cellSize, corner)
         if (hasFill) drawRoundRect(fillColor, origin, cellSize, corner)
 
         if (showNumber) {
-            val textColor = decoration.textColor ?: if (hasFill) colors.fillTextColor(decoration.fill) else colors.onSurface
+            val textColor = when {
+                isChosen -> colors.onPrimary
+                isPickable -> colors.onPrimaryContainer
+                else -> decoration.textColor ?: if (hasFill) colors.fillTextColor(decoration.fill) else colors.onSurface
+            }.fade(fade)
             drawTextIn(
-                g.numbers.get(slot.dayOfMonth, isToday || showSelected, isToday),
+                g.numbers.get(slot.dayOfMonth, isToday || showSelected || isChosen, isToday),
                 if (reachable) textColor else textColor.copy(alpha = 0.4f),
                 left, top, inner, inner, centerX = true, centerY = true
             )
         }
 
-        if (borderPx > 0f) drawCellBorder(borderColor, left, top, inner, g.cornerPercent, borderPx)
+        if (borderPx > 0f) drawCellBorder(borderColor.fade(fade), left, top, inner, g.cornerPercent, borderPx)
 
         if (innerRing) {
             val pad = (ring + 1.dp).toPx()
@@ -468,9 +519,9 @@ private fun DrawScope.drawDays(g: GridPaint, hovered: String?, decorations: List
                     BadgePosition.BOTTOM_CENTER -> inner - insetPx - size
                 }
                 when (badge) {
-                    is DayBadge.Dot -> drawCircle(badge.color, size / 2f, Offset(x + size / 2f, y + size / 2f))
+                    is DayBadge.Dot -> drawCircle(badge.color.fade(fade), size / 2f, Offset(x + size / 2f, y + size / 2f))
                     is DayBadge.Symbol -> g.badges.draw(
-                        this, badge.icon, if (badge.tint.isSpecified) badge.tint else colors.onSurface, x, y, size
+                        this, badge.icon, (if (badge.tint.isSpecified) badge.tint else colors.onSurface).fade(fade), x, y, size
                     )
                 }
             }

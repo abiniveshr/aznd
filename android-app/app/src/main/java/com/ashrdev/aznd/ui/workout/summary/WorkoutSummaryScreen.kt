@@ -33,6 +33,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -71,11 +73,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ashrdev.aznd.data.workout.SetMode
 import com.ashrdev.aznd.domain.workout.formatWeightKg
+import com.ashrdev.aznd.ui.calendar.CalendarDatePickerDialog
+import com.ashrdev.aznd.ui.calendar.dayKeyOf
 import com.ashrdev.aznd.ui.common.BarPage
 import com.ashrdev.aznd.ui.common.InfoButton
 import com.ashrdev.aznd.ui.common.PhotoViewerDialog
@@ -236,7 +241,7 @@ private fun SummaryContent(
         topBarActions = {
             IconButton(onClick = {
                 if (pagerState.currentPage == PAGE_COMPARE) {
-                    val thenId = data.compareWithId ?: data.lastTimeId ?: data.compareOptions.firstOrNull()?.id
+                    val thenId = data.compareWithId ?: data.lastTimeId ?: data.fallbackThenId
                     if (thenId == null) {
                         Toast.makeText(context, "Nothing to compare with yet", Toast.LENGTH_SHORT).show()
                     } else {
@@ -292,7 +297,8 @@ private fun SummaryContent(
                 PAGE_COMPARE -> ComparePage(
                     data = data,
                     bottomPadding = bottom,
-                    onCompareWith = { viewModel.setCompareWith(it) }
+                    onCompareWith = { viewModel.setCompareWith(it) },
+                    onCompareExercise = { name, id -> viewModel.setExerciseCompareWith(name, id) }
                 )
                 else -> SummaryPage(
                     data = data,
@@ -462,9 +468,13 @@ private fun SummaryPhoto(uri: String?, onPick: () -> Unit, onDelete: () -> Unit,
 }
 
 @Composable
-private fun ComparePage(data: SummaryData, bottomPadding: Dp, onCompareWith: (Long?) -> Unit) {
-    val compareLabels = remember(data.compareOptions) { listOf(LAST_TIME) + data.compareOptions.map { it.label } }
-    val compareSelected = data.compareOptions.firstOrNull { it.id == data.compareWithId }?.label ?: LAST_TIME
+private fun ComparePage(
+    data: SummaryData,
+    bottomPadding: Dp,
+    onCompareWith: (Long?) -> Unit,
+    onCompareExercise: (String, Long?) -> Unit
+) {
+    var calendarOpen by remember { mutableStateOf(false) }
     var selected by rememberSaveable { mutableStateOf(OVERALL) }
     val options = remember(data.exercises) { listOf(OVERALL) + data.exercises.map { it.name } }
     val exercise = remember(selected, data.exercises) { data.exercises.firstOrNull { it.name == selected } }
@@ -476,15 +486,46 @@ private fun ComparePage(data: SummaryData, bottomPadding: Dp, onCompareWith: (Lo
             .fillMaxSize()
             .padding(start = Space.lg, end = Space.lg, top = Space.lg)
     ) {
-        SearchableDropdown(
-            options = compareLabels,
-            selected = compareSelected,
-            onSelect = { label -> onCompareWith(data.compareOptions.firstOrNull { it.label == label }?.id) },
-            modifier = Modifier.fillMaxWidth(),
-            label = "Compare with",
-            emptyText = "No sessions match"
-        )
-        Spacer(modifier = Modifier.height(Space.sm))
+        val picks = if (exercise == null) data.overallPicks else data.exercisePicks[exercise.name].orEmpty()
+        val ownChoice = if (exercise == null) data.compareWithAt else data.exerciseCompareAt[exercise.name]
+        val inForce = ownChoice ?: data.compareWithAt
+        if (!data.freestyle) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = { calendarOpen = true },
+                    modifier = Modifier.weight(1f),
+                    enabled = picks.isNotEmpty()
+                ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(Space.sm))
+                    Text(
+                        "Compare with: " + (inForce?.let { formatCompareDate(it) } ?: LAST_TIME),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (ownChoice != null) {
+                    IconButton(onClick = {
+                        if (exercise == null) onCompareWith(null) else onCompareExercise(exercise.name, null)
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "Reset to last time")
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(Space.sm))
+        }
+        if (calendarOpen) {
+            CompareCalendarDialog(
+                picks = picks,
+                overall = exercise == null,
+                chosenAt = inForce,
+                onPick = { pick ->
+                    calendarOpen = false
+                    if (exercise == null) onCompareWith(pick.sessionId) else onCompareExercise(exercise.name, pick.sessionId)
+                },
+                onDismiss = { calendarOpen = false }
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             SearchableDropdown(
                 options = options,
@@ -495,8 +536,11 @@ private fun ComparePage(data: SummaryData, bottomPadding: Dp, onCompareWith: (Lo
             )
             InfoButton(
                 title = "Reading the comparison",
-                text = "Each exercise is compared with the last time you did it, or with the earlier session you pick under Compare with; " +
-                    "exercises missing from that session have nothing to compare with. " +
+                text = "Each exercise is compared with the last time you did it. " +
+                    "Compare with opens a calendar: with Overall selected, the days you did this preset are highlighted and your pick applies to every exercise; " +
+                    "with an exercise selected, the days you did that exercise are highlighted and your pick applies to that exercise only. " +
+                    "Exercises missing from the picked session have nothing to compare with. " +
+                    "Freestyle workouts have no calendar: each exercise is compared with the last time you did it. " +
                     "Share on this page opens a Then vs now card with that session beside this one. " +
                     "The ± values show how this session differs from that one, for sets, volume and e1RM. " +
                     "e1RM is the estimated one-rep max. For bodyweight exercises it is the added weight you could handle for one rep."
@@ -516,6 +560,49 @@ private fun ComparePage(data: SummaryData, bottomPadding: Dp, onCompareWith: (Lo
                 item(key = "sets") { SetTable(exercise, exercise.comparison, up, down, flat) }
             }
         }
+    }
+}
+
+@Composable
+private fun CompareCalendarDialog(
+    picks: Map<String, ComparePick>,
+    overall: Boolean,
+    chosenAt: Long?,
+    onPick: (ComparePick) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var pendingDay by remember { mutableStateOf<String?>(null) }
+    val pickableDays = remember(picks) { picks.keys }
+    val chosenDay = remember(chosenAt, picks) { chosenAt?.let { dayKeyOf(it) }?.takeIf { it in picks } }
+
+    CalendarDatePickerDialog(
+        title = "Compare with",
+        pickableDays = pickableDays,
+        onDismiss = onDismiss,
+        onPick = { dayKey -> pendingDay = dayKey },
+        chosenDay = chosenDay,
+        notPickableMessage = "No session on that day"
+    )
+
+    val pick = pendingDay?.let { picks[it] }
+    if (pick != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDay = null },
+            title = { Text("Compare with ${formatCompareDate(pick.startedAt)}?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    if (overall) Text(pick.workoutName, style = MaterialTheme.typography.bodyMedium)
+                    Text("Top set: ${pick.topSet}", style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDay = null
+                    onPick(pick)
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDay = null }) { Text("Cancel") } }
+        )
     }
 }
 
