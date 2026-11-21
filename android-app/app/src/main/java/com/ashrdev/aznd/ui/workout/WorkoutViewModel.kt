@@ -90,6 +90,9 @@ class WorkoutViewModel(
     suspend fun loggedSetsForExercise(exerciseId: Long): List<LoggedSetData> =
         training.loggedSetDataForExercise(exerciseId)
 
+    /** Every finished set of every session, Freestyle included (the Freestyle exercise stats page). */
+    suspend fun allLoggedSetData(): List<LoggedSetData> = training.loggedSetDataAll()
+
     suspend fun saveWorkoutRecord(id: Long?, name: String): Long =
         dao.saveWorkoutRecord(id, name)
 

@@ -115,6 +115,20 @@ interface SessionDao {
     suspend fun completedSetData(): List<LoggedSetData>
 
     /**
+     * Every set of every FINISHED session, empty-workout (Freestyle) sessions included. Feeds the
+     * Freestyle exercise stats page, which can show Freestyle sets only or sets from every workout.
+     */
+    @Query(
+        "SELECT ss.exerciseId AS exerciseId, ss.sessionId AS sessionId, ls.workoutId AS workoutId, " +
+            "ls.startedAt AS startedAt, ls.finishedAt AS finishedAt, " +
+            "ls.bodyweightKgSnapshot AS bodyweightKg, ss.kind AS kind, ss.weightKg AS weightKg, " +
+            "ss.reps AS reps, ss.durationSec AS durationSec, ss.rpe AS rpe " +
+            "FROM session_set ss INNER JOIN logged_session ls ON ls.id = ss.sessionId " +
+            "WHERE ls.finishedAt IS NOT NULL"
+    )
+    suspend fun completedSetDataAll(): List<LoggedSetData>
+
+    /**
      * Every finished set of ONE exercise from ANY session, empty-workout sessions included. This is
      * the source for the per-exercise statistics (the planned exercise page).
      */

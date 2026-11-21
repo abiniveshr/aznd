@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ashrdev.aznd.ui.calendar.CalendarDatePickerDialog
 import com.ashrdev.aznd.ui.calendar.MonthKey
 import com.ashrdev.aznd.ui.calendar.MonthYearPickerDialog
 import com.ashrdev.aznd.ui.calendar.currentMonth
@@ -152,13 +153,18 @@ private fun YearStepper(state: DateRangeState, availableMonths: Collection<Month
  * The From / To buttons (each opens the calendar) for a [DateRangeState] in CUSTOM kind. Side by
  * side by default; [stacked] puts them on two full-width lines for narrow spaces such as dialogs.
  * [buttonModifier] sizes each button (e.g. a fixed height).
+ *
+ * By default the buttons open the system date picker. Pass [pickableDays] (day keys "yyyy-MM-dd")
+ * to open the app's own calendar instead: days with data are offered, all others are dimmed.
  */
 @Composable
 fun CustomRangeRow(
     state: DateRangeState,
     buttonModifier: Modifier = Modifier,
-    stacked: Boolean = false
+    stacked: Boolean = false,
+    pickableDays: Set<String>? = null
 ) {
+    var picking by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val fmt = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
 
@@ -180,13 +186,39 @@ fun CustomRangeRow(
         ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
     }
 
+    fun applyFrom(picked: String) {
+        state.customStart = picked
+        if (picked > state.customEnd) state.customEnd = picked
+    }
+
+    fun applyTo(picked: String) {
+        state.customEnd = picked
+        if (picked < state.customStart) state.customStart = picked
+    }
+
+    if (pickableDays != null && picking != null) {
+        val isFrom = picking == "from"
+        val current = if (isFrom) state.customStart else state.customEnd
+        CalendarDatePickerDialog(
+            title = if (isFrom) "From" else "To",
+            pickableDays = pickableDays,
+            onDismiss = { picking = null },
+            onPick = { day ->
+                if (isFrom) applyFrom(day) else applyTo(day)
+                picking = null
+            },
+            chosenDay = current.takeIf { it in pickableDays },
+            // Open on that end's month when it has sessions, else on the latest month that does.
+            initialMonth = monthKeyOf(current).takeIf { m -> pickableDays.any { monthKeyOf(it) == m } },
+            notPickableMessage = "No session on that day"
+        )
+    }
+
     val fromButton: @Composable (Modifier) -> Unit = { layout ->
         OutlinedButton(
             onClick = {
-                pick(state.customStart) { picked ->
-                    state.customStart = picked
-                    if (picked > state.customEnd) state.customEnd = picked
-                }
+                if (pickableDays != null) picking = "from"
+                else pick(state.customStart) { picked -> applyFrom(picked) }
             },
             modifier = layout.then(buttonModifier)
         ) { Text("From ${label(state.customStart)}", maxLines = 1) }
@@ -194,10 +226,8 @@ fun CustomRangeRow(
     val toButton: @Composable (Modifier) -> Unit = { layout ->
         OutlinedButton(
             onClick = {
-                pick(state.customEnd) { picked ->
-                    state.customEnd = picked
-                    if (picked < state.customStart) state.customStart = picked
-                }
+                if (pickableDays != null) picking = "to"
+                else pick(state.customEnd) { picked -> applyTo(picked) }
             },
             modifier = layout.then(buttonModifier)
         ) { Text("To ${label(state.customEnd)}", maxLines = 1) }

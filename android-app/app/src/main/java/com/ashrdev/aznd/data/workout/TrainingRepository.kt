@@ -83,6 +83,9 @@ class TrainingRepository(
 
     suspend fun loggedSetData(): List<LoggedSetData> = sessions.completedSetData()
 
+    /** Every finished set of every session, empty (Freestyle) workouts included. */
+    suspend fun loggedSetDataAll(): List<LoggedSetData> = sessions.completedSetDataAll()
+
     /** One exercise's finished sets from every session, empty workouts included (per-exercise stats). */
     suspend fun loggedSetDataForExercise(exerciseId: Long): List<LoggedSetData> =
         sessions.completedSetDataForExercise(exerciseId)

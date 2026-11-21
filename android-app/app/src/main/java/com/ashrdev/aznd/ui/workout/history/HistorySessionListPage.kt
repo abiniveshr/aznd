@@ -34,7 +34,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -62,6 +61,7 @@ import com.ashrdev.aznd.ui.common.rememberDateRangeState
 import com.ashrdev.aznd.ui.components.Button
 import com.ashrdev.aznd.ui.components.Card
 import com.ashrdev.aznd.ui.components.OutlinedButton
+import com.ashrdev.aznd.ui.components.OutlinedTextField
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.workout.formatTimestamp
 import com.ashrdev.aznd.ui.theme.Space
@@ -69,20 +69,25 @@ import com.ashrdev.aznd.ui.theme.Space
 // The popup never changes size: whichever filter category is open scrolls inside the space left.
 private val FilterDialogHeight = 480.dp
 
+private const val EXERCISE_SEPARATOR = "\u001F"
+
 /**
  * The non-date filters of the session list. Muscle group is a [BodyRegion] (a session matches when
  * any exercise's primary muscle is in a chosen region). Picture filters are two boxes: tick one to
  * keep only sessions with / without a photo; ticking both or neither means no picture filter.
+ * [exercises] holds lowercased exercise names (a session matches when it logged any of them).
  */
 @Stable
 internal class HistoryFilters(
     regions: Set<BodyRegion> = emptySet(),
     withPhotos: Boolean = false,
-    withoutPhotos: Boolean = false
+    withoutPhotos: Boolean = false,
+    exercises: Set<String> = emptySet()
 ) {
     var regions by mutableStateOf(regions)
     var withPhotos by mutableStateOf(withPhotos)
     var withoutPhotos by mutableStateOf(withoutPhotos)
+    var exercises by mutableStateOf(exercises)
 
     val pictureFilterActive: Boolean get() = withPhotos != withoutPhotos
 
@@ -90,17 +95,27 @@ internal class HistoryFilters(
         regions = emptySet()
         withPhotos = false
         withoutPhotos = false
+        exercises = emptySet()
     }
 
     companion object {
         val Saver: Saver<HistoryFilters, Any> = listSaver<HistoryFilters, Any>(
-            save = { listOf(it.regions.joinToString(",") { r -> r.name }, it.withPhotos, it.withoutPhotos) },
+            save = {
+                listOf(
+                    it.regions.joinToString(",") { r -> r.name },
+                    it.withPhotos,
+                    it.withoutPhotos,
+                    // Names may contain commas, so they are joined with the unit separator instead.
+                    it.exercises.joinToString(EXERCISE_SEPARATOR)
+                )
+            },
             restore = {
                 val names = (it[0] as String).split(",")
                 HistoryFilters(
                     regions = BodyRegion.entries.filter { r -> r.name in names }.toSet(),
                     withPhotos = it[1] as Boolean,
-                    withoutPhotos = it[2] as Boolean
+                    withoutPhotos = it[2] as Boolean,
+                    exercises = (it.getOrNull(3) as? String ?: "").split(EXERCISE_SEPARATOR).filter { n -> n.isNotEmpty() }.toSet()
                 )
             }
         )
@@ -120,27 +135,47 @@ internal fun filterSessions(
         val muscleOk = filters.regions.isEmpty() || item.sets.any { set ->
             primaryMuscleByName[set.exerciseName.lowercase()]?.let { it in allowedMuscles } == true
         }
-        inRange && photoOk && muscleOk
+        val exerciseOk = filters.exercises.isEmpty() ||
+            item.sets.any { it.exerciseName.lowercase() in filters.exercises }
+        inRange && photoOk && muscleOk && exerciseOk
     }
 }
 
-/** Right page: every logged session, newest first, with a Filters button. */
+/**
+ * A list of logged sessions, newest first, with a Filters button. The flags choose which filter
+ * sections exist and how a card reads: [showWorkoutName] false titles the card with its date (for a
+ * list that is all one workout), [showExerciseNames] adds a line with the session's exercises.
+ */
 @Composable
 internal fun HistorySessionListPage(
     sessions: List<SessionWithSets>,
     catalog: List<Exercise>,
     bottomPadding: Dp,
     onOpenSession: (Long) -> Unit,
-    onDeleteSession: (Long) -> Unit
+    onDeleteSession: (Long) -> Unit,
+    showMuscleFilter: Boolean = true,
+    showExerciseFilter: Boolean = false,
+    showWorkoutName: Boolean = true,
+    showExerciseNames: Boolean = false
 ) {
     val filters = rememberSaveable(saver = HistoryFilters.Saver) { HistoryFilters() }
     val dates = rememberDateRangeState()
     var filterOpen by rememberSaveable { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<SessionWithSets?>(null) }
 
+    val sessionDays = remember(sessions) { sessions.map { dayKeyOf(it.session.startedAt) }.toSet() }
     val muscleByName = remember(catalog) { catalog.associate { it.name.lowercase() to it.primaryMuscle } }
     val shown = filterSessions(sessions, filters, dates.range, muscleByName)
+    // Every exercise ever logged here (not just in the filtered list), newest session's casing, A-Z.
+    val exerciseOptions = remember(sessions) {
+        val byKey = LinkedHashMap<String, String>()
+        sessions.sortedByDescending { it.session.startedAt }.forEach { item ->
+            item.sets.forEach { byKey.putIfAbsent(it.exerciseName.lowercase(), it.exerciseName) }
+        }
+        byKey.values.sortedBy { it.lowercase() }
+    }
     val activeCount = (if (filters.regions.isNotEmpty()) 1 else 0) +
+        (if (filters.exercises.isNotEmpty()) 1 else 0) +
         (if (dates.kind != DateRangeKind.ALL) 1 else 0) +
         (if (filters.pictureFilterActive) 1 else 0)
 
@@ -169,6 +204,10 @@ internal fun HistorySessionListPage(
             filters = filters,
             dates = dates,
             matchCount = shown.size,
+            showMuscleFilter = showMuscleFilter,
+            showExerciseFilter = showExerciseFilter,
+            exerciseOptions = exerciseOptions,
+            sessionDays = sessionDays,
             onDismiss = { filterOpen = false }
         )
     }
@@ -201,6 +240,8 @@ internal fun HistorySessionListPage(
                 items(shown, key = { it.session.id }) { item ->
                     SessionListCard(
                         item = item,
+                        showWorkoutName = showWorkoutName,
+                        showExerciseNames = showExerciseNames,
                         onClick = { onOpenSession(item.session.id) },
                         onDelete = { toDelete = item }
                     )
@@ -222,7 +263,13 @@ private fun EmptyNote(text: String) {
 }
 
 @Composable
-private fun SessionListCard(item: SessionWithSets, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun SessionListCard(
+    item: SessionWithSets,
+    showWorkoutName: Boolean,
+    showExerciseNames: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
     val elapsed = ((item.session.finishedAt - item.session.startedAt) / 1000L).toInt()
     val exerciseCount = item.sets.map { it.exerciseName }.distinct().size
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -232,12 +279,22 @@ private fun SessionListCard(item: SessionWithSets, onClick: () -> Unit, onDelete
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    item.session.workoutName,
+                    if (showWorkoutName) item.session.workoutName else formatTimestamp(item.session.startedAt),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(formatTimestamp(item.session.startedAt), style = MaterialTheme.typography.bodySmall)
+                if (showWorkoutName) {
+                    Text(formatTimestamp(item.session.startedAt), style = MaterialTheme.typography.bodySmall)
+                }
+                if (showExerciseNames) {
+                    Text(
+                        item.sets.map { it.exerciseName }.distinct().joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
                     "$exerciseCount exercises · ${item.sets.size} sets · ${formatDuration(elapsed)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -268,18 +325,26 @@ private val DatePresets = listOf(
 )
 
 /**
- * Fixed-size popup: one drop-down section per filter category (muscle group, date range,
- * pictures), each opening onto checkboxes. Only one section is open at a time and its checkboxes
- * scroll inside the popup, so the popup itself never grows or shrinks. Changes apply live.
+ * Fixed-size popup: one drop-down section per filter category (exercise and muscle group when
+ * enabled, then date range and pictures), each opening onto checkboxes. Only one section is open
+ * at a time and its checkboxes scroll inside the popup, so the popup itself never grows or shrinks.
+ * Changes apply live.
  */
 @Composable
 private fun HistoryFilterDialog(
     filters: HistoryFilters,
     dates: DateRangeState,
     matchCount: Int,
+    showMuscleFilter: Boolean,
+    showExerciseFilter: Boolean,
+    exerciseOptions: List<String>,
+    sessionDays: Set<String>,
     onDismiss: () -> Unit
 ) {
-    var open by remember { mutableIntStateOf(0) }
+    // The open section by key ("" = none); starts on the first one shown.
+    var open by remember {
+        mutableStateOf(if (showExerciseFilter) "exercise" else if (showMuscleFilter) "muscle" else "date")
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
@@ -293,29 +358,71 @@ private fun HistoryFilterDialog(
                 Spacer(modifier = Modifier.height(Space.sm))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    FilterSection(
-                        title = "Muscle group",
-                        summary = when (filters.regions.size) {
-                            0 -> "Any"
-                            1 -> filters.regions.first().label
-                            else -> "${filters.regions.size} selected"
-                        },
-                        expanded = open == 0,
-                        onToggle = { open = if (open == 0) -1 else 0 }
-                    ) {
-                        BodyRegion.entries.forEach { region ->
-                            CheckRow(region.label, region in filters.regions) {
-                                filters.regions =
-                                    if (region in filters.regions) filters.regions - region
-                                    else filters.regions + region
+                    if (showExerciseFilter) {
+                        FilterSection(
+                            title = "Exercise",
+                            summary = when (filters.exercises.size) {
+                                0 -> "Any"
+                                1 -> exerciseOptions.firstOrNull { it.lowercase() in filters.exercises }
+                                    ?: filters.exercises.first()
+                                else -> "${filters.exercises.size} selected"
+                            },
+                            expanded = open == "exercise",
+                            onToggle = { open = if (open == "exercise") "" else "exercise" }
+                        ) {
+                            var query by rememberSaveable { mutableStateOf("") }
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                singleLine = true,
+                                label = { Text("Search exercises") },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = Space.sm)
+                            )
+                            val needle = query.trim().lowercase()
+                            val (chosen, rest) = exerciseOptions.partition { it.lowercase() in filters.exercises }
+                            val visible = chosen + rest.filter { needle.isEmpty() || it.lowercase().contains(needle) }
+                            if (visible.isEmpty()) {
+                                Text(
+                                    "No exercises match.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            visible.forEach { name ->
+                                val key = name.lowercase()
+                                CheckRow(name, key in filters.exercises) {
+                                    filters.exercises =
+                                        if (key in filters.exercises) filters.exercises - key
+                                        else filters.exercises + key
+                                }
+                            }
+                        }
+                    }
+                    if (showMuscleFilter) {
+                        FilterSection(
+                            title = "Muscle group",
+                            summary = when (filters.regions.size) {
+                                0 -> "Any"
+                                1 -> filters.regions.first().label
+                                else -> "${filters.regions.size} selected"
+                            },
+                            expanded = open == "muscle",
+                            onToggle = { open = if (open == "muscle") "" else "muscle" }
+                        ) {
+                            BodyRegion.entries.forEach { region ->
+                                CheckRow(region.label, region in filters.regions) {
+                                    filters.regions =
+                                        if (region in filters.regions) filters.regions - region
+                                        else filters.regions + region
+                                }
                             }
                         }
                     }
                     FilterSection(
                         title = "Date range",
                         summary = DatePresets.first { it.first == dates.kind }.second,
-                        expanded = open == 1,
-                        onToggle = { open = if (open == 1) -1 else 1 }
+                        expanded = open == "date",
+                        onToggle = { open = if (open == "date") "" else "date" }
                     ) {
                         DatePresets.forEach { (kind, label) ->
                             CheckRow(label, dates.kind == kind) {
@@ -324,7 +431,7 @@ private fun HistoryFilterDialog(
                             }
                             if (kind == DateRangeKind.CUSTOM && dates.kind == DateRangeKind.CUSTOM) {
                                 Box(modifier = Modifier.padding(start = 40.dp, bottom = Space.sm)) {
-                                    CustomRangeRow(dates, stacked = true)
+                                    CustomRangeRow(dates, stacked = true, pickableDays = sessionDays)
                                 }
                             }
                         }
@@ -336,8 +443,8 @@ private fun HistoryFilterDialog(
                             filters.withPhotos -> "With pictures"
                             else -> "Without pictures"
                         },
-                        expanded = open == 2,
-                        onToggle = { open = if (open == 2) -1 else 2 }
+                        expanded = open == "pictures",
+                        onToggle = { open = if (open == "pictures") "" else "pictures" }
                     ) {
                         CheckRow("Has pictures", filters.withPhotos) { filters.withPhotos = !filters.withPhotos }
                         CheckRow("No pictures", filters.withoutPhotos) { filters.withoutPhotos = !filters.withoutPhotos }
@@ -361,7 +468,7 @@ private fun HistoryFilterDialog(
 }
 
 @Composable
-private fun ColumnScope.FilterSection(
+internal fun ColumnScope.FilterSection(
     title: String,
     summary: String,
     expanded: Boolean,
@@ -398,7 +505,7 @@ private fun ColumnScope.FilterSection(
 }
 
 @Composable
-private fun CheckRow(label: String, checked: Boolean, onToggle: () -> Unit) {
+internal fun CheckRow(label: String, checked: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

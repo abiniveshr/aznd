@@ -15,3 +15,16 @@
 - dashboard defaults
 - widgets
 - rename to flex
+- change in flex; preset and menu presets: move the menu presets to the presets tab and add a menu flag that identifies and allows to filter and use/modify menu filters and replace menu filters page with formats which has terminal (linux terminal theme), html, regular
+- right now images are prioritised too much, leading to loss in other module data. reduce the priority given to images, making it only 20% bigger than other modules if compression exists. otherwise, if modules occupy maximum space than image can try to get rest of the space.
+- stats screen in post workout that compares current workout with previous workout stats, along with projected growth as main stats screen, move current compare with screen to swipe down from there. swipe right as share page. automatically remember last config and next share should use same theme, format, preset and hitting reset would reset the preset to default.
+- strength rank system based on %ile of lift
+- run tracker with similar percentile system
+- BIG: fatigue consideration from previous sets (primary and secondary) for e1RM, intensity and progress calculation
+- the fucking weight and bodyfat entry screen
+- fix the calendar floaty popup on hover
+- replace generic date selector with custom one *already made just connect it*
+- the graph in macros screen - display multiple values with a legend. lets say 100g protein, 50g fat and 300g carbs are taken. highes bar should be carbs with its own color, then impose protein on 1/3rd of the bar then comes fat for 1/6th that way we are showing 3 readings using same scale. this is the macroes view with toggleable protien, fat and carbs. add similar view for micros and another for calories which have similar split up as macroes, with calories from each macro being added on eachother, stacking instead of imposing and always add in order of carbs protein and fats, carbs on the bottom.
+- change the macros page to say nutrition and add micro nutrient fuctionality. shrink the macro guage in the main page and make the view swappable between macro, calories, micros.
+- migrate costly internals to rust
+- what the fuck is going on with the streaks screen

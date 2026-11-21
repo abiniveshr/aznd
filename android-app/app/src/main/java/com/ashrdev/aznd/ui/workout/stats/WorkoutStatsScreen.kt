@@ -97,7 +97,7 @@ private fun StatsPage(
 
 /** Which of the stacked pages is showing: a dot per page, the highlight sliding with the swipe. */
 @Composable
-private fun PageDots(count: Int, position: () -> Float, modifier: Modifier = Modifier) {
+internal fun PageDots(count: Int, position: () -> Float, modifier: Modifier = Modifier) {
     val on = MaterialTheme.colorScheme.primary
     val off = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
     Canvas(modifier.size(DotSize, DotSize * count + DotGap * (count - 1))) {

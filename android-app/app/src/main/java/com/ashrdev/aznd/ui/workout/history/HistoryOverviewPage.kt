@@ -12,9 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Photo
 import com.ashrdev.aznd.ui.components.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,18 +55,18 @@ import com.ashrdev.aznd.ui.workout.formatClock
 import com.ashrdev.aznd.ui.workout.formatDuration
 import com.ashrdev.aznd.ui.theme.Space
 
-private val SidePadding: Dp get() = Space.lg
+internal val HistorySidePadding: Dp get() = Space.lg
 
 // The stat tiles have a fixed height so the page's total height is known up front: the month
 // calendar is then sized to exactly the space left, and nothing needs scrolling.
-private val TileHeight = 88.dp
-private val TileGap: Dp get() = Space.md
-private val StatsHeight: Dp get() = TileHeight * 2 + TileGap
+internal val HistoryTileHeight = 88.dp
+internal val HistoryTileGap: Dp get() = Space.md
+internal val HistoryStatsHeight: Dp get() = HistoryTileHeight * 2 + HistoryTileGap
 
 // Gap between the calendar and the tiles.
-private val SectionGap: Dp get() = Space.lg
+internal val HistorySectionGap: Dp get() = Space.lg
 
-private val CalendarHeaderHeight = 48.dp
+internal val HistoryCalendarHeaderHeight = 48.dp
 
 /**
  * Centre page: a calendar with every workout day highlighted (touch a day for a tooltip, double
@@ -90,15 +93,15 @@ internal fun HistoryOverviewPage(
     var graphOpen by rememberSaveable { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val gridBudget = (maxHeight - Space.sm - bottomPadding - StatsHeight - SectionGap - CalendarHeaderHeight)
+        val gridBudget = (maxHeight - Space.sm - bottomPadding - HistoryStatsHeight - HistorySectionGap - HistoryCalendarHeaderHeight)
             .coerceAtLeast(160.dp)
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = SidePadding, end = SidePadding, top = Space.sm, bottom = bottomPadding),
-            verticalArrangement = Arrangement.spacedBy(SectionGap)
+                .padding(start = HistorySidePadding, end = HistorySidePadding, top = Space.sm, bottom = bottomPadding),
+            verticalArrangement = Arrangement.spacedBy(HistorySectionGap)
         ) {
             ZoomCalendar(
                 decorate = { dayKey ->
@@ -140,15 +143,31 @@ private fun daySummary(sessions: List<SessionWithSets>): String {
 }
 
 @Composable
-private fun DayPopup(
+internal fun DayPopup(
     dayKey: String,
     sessions: List<SessionWithSets>,
     onOpenSession: (Long) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(formatDayLong(dayKey)) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(formatDayLong(dayKey), modifier = Modifier.weight(1f))
+                if (onToggleFavorite != null) {
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Unfavourite day" else "Favourite day",
+                            tint = if (isFavorite) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
         text = {
             if (sessions.isEmpty()) {
                 Text(
@@ -207,39 +226,66 @@ private fun DaySessionCard(item: SessionWithSets, onClick: () -> Unit) {
 
 @Composable
 private fun StatsGrid(stats: HistoryStats, onOpenWeeklyGraph: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(TileGap)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TileGap)
-        ) {
+    HistoryTileGrid(
+        topLeft = { tile ->
             StatTile(
                 label = "Total sessions",
                 value = stats.totalSessions.toString(),
-                modifier = Modifier.weight(1f).height(TileHeight)
+                modifier = tile
             )
+        },
+        topRight = { tile ->
             StatTile(
                 label = "Sessions per week",
                 value = GraphWindow.formatValue(stats.sessionsPerWeek),
                 supporting = "tap for graph",
-                modifier = Modifier.weight(1f).height(TileHeight).clickable(onClick = onOpenWeeklyGraph)
+                modifier = tile.clickable(onClick = onOpenWeeklyGraph)
             )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TileGap)
-        ) {
+        },
+        bottomLeft = { tile ->
             StatTile(
                 label = "Most done workout",
                 value = stats.topWorkout?.name ?: "—",
                 supporting = stats.topWorkout?.let { "${it.count} sessions" },
-                modifier = Modifier.weight(1f).height(TileHeight)
+                modifier = tile
             )
+        },
+        bottomRight = { tile ->
             StatTile(
                 label = "Most done exercise",
                 value = stats.topExercise?.name ?: "—",
                 supporting = stats.topExercise?.let { "in ${it.count} sessions" },
-                modifier = Modifier.weight(1f).height(TileHeight)
+                modifier = tile
             )
+        }
+    )
+}
+
+/**
+ * The 2x2 grid of fixed-height stat tiles shared by the history pages. Each slot receives the
+ * modifier that sizes its tile (equal width, [HistoryTileHeight]); apply it to a StatTile.
+ */
+@Composable
+internal fun HistoryTileGrid(
+    topLeft: @Composable (Modifier) -> Unit,
+    topRight: @Composable (Modifier) -> Unit,
+    bottomLeft: @Composable (Modifier) -> Unit,
+    bottomRight: @Composable (Modifier) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(HistoryTileGap)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(HistoryTileGap)
+        ) {
+            topLeft(Modifier.weight(1f).height(HistoryTileHeight))
+            topRight(Modifier.weight(1f).height(HistoryTileHeight))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(HistoryTileGap)
+        ) {
+            bottomLeft(Modifier.weight(1f).height(HistoryTileHeight))
+            bottomRight(Modifier.weight(1f).height(HistoryTileHeight))
         }
     }
 }
@@ -249,7 +295,7 @@ private fun StatsGrid(stats: HistoryStats, onOpenWeeklyGraph: () -> Unit) {
  * day". Its time-range menu is the app-wide graph range, so it behaves like every other graph.
  */
 @Composable
-private fun FrequencyGraphDialog(sessions: List<SessionWithSets>, onDismiss: () -> Unit) {
+internal fun FrequencyGraphDialog(sessions: List<SessionWithSets>, onDismiss: () -> Unit) {
     val mode = remember(sessions) {
         GraphMode(
             id = "workouts_per_7_days",

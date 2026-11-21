@@ -360,14 +360,20 @@ class MainActivity : ComponentActivity() {
                             arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
                         ) { backStackEntry ->
                             val workoutId = backStackEntry.arguments?.getLong("workoutId") ?: -1L
+                            // Freestyle has no workout-level graphs, so it gets no graph model.
+                            val graphVm: WorkoutGraphViewModel? = if (workoutId == EMPTY_WORKOUT_ID) null else viewModel<WorkoutGraphViewModel>(
+                                viewModelStoreOwner = backStackEntry,
+                                factory = WorkoutGraphViewModel.factory(
+                                    trainingRepository, workoutId, workoutSettings.settings.value.trackRpe
+                                )
+                            )
                             WorkoutHistoryScreen(
                                 workoutId = workoutId,
                                 viewModel = workoutViewModel,
+                                graphViewModel = graphVm,
+                                useTargets = workoutSettings.settings.value.targetReps,
                                 onOpenSession = { id ->
                                     navigateTo(Destination.SessionDetail.createRoute(id))
-                                },
-                                onOpenStats = { id ->
-                                    navigateTo(Destination.WorkoutDetail.createRoute(id, WorkoutDetailPage.STATS))
                                 },
                                 onBack = goBack,
                                 onHome = goHome,
